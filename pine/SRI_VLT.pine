@@ -44,7 +44,7 @@ f_compute_stage_1() =>
 
 float stage_track_tf_1 = request.security(syminfo.tickerid, tf_fast, f_compute_stage_1())
 color stage_color_1 = stage_track_tf_1 > nz(stage_track_tf_1[1]) ? color.green : stage_track_tf_1 < nz(stage_track_tf_1[1]) ? color.red : color.orange
-plot(stage_track_tf_1, color=stage_color_1, linewidth=4, title="VLT Fast Trackline", style=plot.style_dotted)
+plot(stage_track_tf_1, color=stage_color_1, linewidth=4, title="VLT Fast Trackline", style=plot.style_circles)
 
 // ─── SLOW TRACKLINE (2 Weeks) ───
 string tf_slow = "2W"
