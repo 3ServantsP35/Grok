@@ -1,0 +1,97 @@
+// SRIBI — Very Short Timeframe (VST)
+// Purpose: Precision Trade Entry/Exit — Exhaustion & momentum leading indicator
+// Settings: Reversal Band: 8 Hours, Fast Trackline: 2 Hours, Slow Trackline: 1 Day
+// © RizenShine — Fixed timeframe variant by CIO
+
+//@version=6
+indicator(title="SRIBI VST (Very Short)", shorttitle="SRIBI VST", overlay=false, max_bars_back=500)
+
+// ─── FIXED TIMEFRAMES ───
+string tf_rb = "480"    // Reversal Band: 8 Hours
+string tf_fast = "120"  // Fast Trackline: 2 Hours
+string tf_slow = "D"    // Slow Trackline: 1 Day
+
+// ─── PARAMETERS ───
+int length = input.int(50, title="Regression Length")
+float multiplier = input.float(1.0, title="Deviation Multiplier")
+int rsiLength = input.int(14, title="RSI Length for Bear Condition")
+float at_coeff_1 = input.float(1.0, "Fast Trackline Coeff")
+int at_period_1 = input.int(14, "Fast Trackline Period")
+float at_coeff_2 = input.float(1.0, "Slow Trackline Coeff")
+int at_period_2 = input.int(14, "Slow Trackline Period")
+
+// ─── REVERSAL BAND (8 Hours) ───
+f_compute_af() =>
+    robustFit = ta.linreg(close, length, 0)
+    dev = multiplier * ta.stdev(close, length)
+    support = robustFit - dev
+    resistance = robustFit + dev
+    rsiVal = ta.rsi(close, rsiLength)
+    if rsiVal < 50
+        resistance := robustFit
+    [support, robustFit, resistance]
+
+[support_tf, robustFit_tf, resistance_tf] = request.security(syminfo.tickerid, tf_rb, f_compute_af())
+
+// ─── TRACKLINES ───
+f_compute_stage_1() =>
+    atr = ta.rma(ta.tr(true), at_period_1)
+    upT = low - atr * at_coeff_1
+    downT = high + atr * at_coeff_1
+    cond = ta.rsi(close, at_period_1) >= 50
+    var float stage_track = 0.0
+    stage_track := cond ? math.max(upT, nz(stage_track[1])) : math.min(downT, nz(stage_track[1]))
+    stage_track
+
+f_compute_stage_2() =>
+    atr = ta.rma(ta.tr(true), at_period_2)
+    upT = low - atr * at_coeff_2
+    downT = high + atr * at_coeff_2
+    cond = ta.rsi(close, at_period_2) >= 50
+    var float stage_track = 0.0
+    stage_track := cond ? math.max(upT, nz(stage_track[1])) : math.min(downT, nz(stage_track[1]))
+    stage_track
+
+float stage_track_tf_1 = request.security(syminfo.tickerid, tf_fast, f_compute_stage_1())
+float stage_track_tf_2 = request.security(syminfo.tickerid, tf_slow, f_compute_stage_2())
+
+// ─── BIAS SCORE COMPONENTS ───
+color stage_color_1 = stage_track_tf_1 > nz(stage_track_tf_1[1]) ? color.green : stage_track_tf_1 < nz(stage_track_tf_1[1]) ? color.red : color.orange
+color stage_color_2 = stage_track_tf_2 > nz(stage_track_tf_2[1]) ? color.green : stage_track_tf_2 < nz(stage_track_tf_2[1]) ? color.red : color.orange
+
+float slow_slope = (stage_track_tf_2 - stage_track_tf_2[5]) / 5.0
+float fast_slope = (stage_track_tf_1 - stage_track_tf_1[5]) / 5.0
+
+bool fast_slow_crossover = ta.crossover(stage_track_tf_1, stage_track_tf_2)
+bool fast_slow_crossunder = ta.crossunder(stage_track_tf_1, stage_track_tf_2)
+
+bool price_bounce_support = ta.crossover(close, support_tf) and close[1] < support_tf
+bool price_reject_resistance = ta.crossunder(close, resistance_tf) and close[1] > resistance_tf
+
+var int below_support_count = 0
+below_support_count := close < support_tf ? below_support_count + 1 : 0
+bool not_below_support_long = below_support_count <= 2
+
+var int above_resistance_count = 0
+above_resistance_count := close > resistance_tf ? above_resistance_count + 1 : 0
+bool not_above_resistance_long = above_resistance_count <= 3
+
+bool bands_curving_up = (support_tf > support_tf[1]) and (robustFit_tf > robustFit_tf[1]) and (resistance_tf > resistance_tf[1])
+bool bands_curving_down = (support_tf < support_tf[1]) and (robustFit_tf < robustFit_tf[1]) and (resistance_tf < resistance_tf[1])
+
+// ─── BIAS SCORE ───
+float color_score = (stage_color_1 == color.green ? 15.0 : stage_color_1 == color.red ? -15.0 : 0.0) + (stage_color_2 == color.green ? 15.0 : stage_color_2 == color.red ? -15.0 : 0.0)
+float slope_score = (slow_slope > 0.5 ? 25.0 : slow_slope < -0.5 ? -25.0 : 0.0) + (fast_slope > 0.5 and fast_slope > slow_slope ? 10.0 : fast_slope < -0.5 and fast_slope < slow_slope ? -10.0 : 0.0)
+float cross_score = (fast_slow_crossover ? 20.0 : fast_slow_crossunder ? -20.0 : 0.0) + (price_bounce_support ? 10.0 : price_reject_resistance ? -10.0 : 0.0)
+float band_pos_score = (close > robustFit_tf ? 10.0 : close < robustFit_tf ? -10.0 : 0.0) + (bands_curving_up ? 5.0 : bands_curving_down ? -5.0 : 0.0)
+float linger_score = (not_below_support_long ? 5.0 : 0.0) + (not_above_resistance_long ? -5.0 : 0.0)
+
+float bias_score = color_score + slope_score + cross_score + band_pos_score + linger_score
+
+// ─── PLOT ───
+color hist_color = bias_score > 50 ? color.new(color.red, 0) : (bias_score > 0 ? color.new(color.red, 50) : (bias_score < -50 ? color.new(color.green, 0) : (bias_score < 0 ? color.new(color.green, 50) : color.gray)))
+
+plot(bias_score, "VST SRI Bias Histogram", color=hist_color, style=plot.style_columns, linewidth=4)
+hline(50, "VST Strong Bull", color=color.red, linestyle=hline.style_dotted)
+hline(-50, "VST Strong Bear", color=color.green, linestyle=hline.style_dotted)
+hline(0, "VST Neutral", color=color.gray, linestyle=hline.style_solid)
