@@ -1,0 +1,114 @@
+// SRI — Long Timeframe (LT)
+// Purpose: Early Stage Designation, Primary Trend
+// Settings: Reversal Band: 1 Day, Fast Trackline: 4 Hours, Slow Trackline: 1 Week
+// © RizenShine — Fixed timeframe variant by CIO
+
+//@version=6
+indicator(title="SRI LT (Long)", shorttitle="SRI LT", overlay=true)
+
+// ─── REVERSAL BAND (1 Day) ───
+string tf_rb = "D"
+int length = input.int(50, title="Regression Length")
+float multiplier = input.float(1.0, title="Deviation Multiplier")
+int rsiLength = input.int(14, title="RSI Length for Bear Condition")
+
+f_compute_af() =>
+    robustFit = ta.linreg(close, length, 0)
+    dev = multiplier * ta.stdev(close, length)
+    support = robustFit - dev
+    resistance = robustFit + dev
+    rsiVal = ta.rsi(close, rsiLength)
+    if rsiVal < 50
+        resistance := robustFit
+    [support, robustFit, resistance]
+
+[support_tf, robustFit_tf, resistance_tf] = request.security(syminfo.tickerid, tf_rb, f_compute_af())
+
+plot(support_tf, color=color.red, title="LT Reversal Support", linewidth=3)
+plot(robustFit_tf, color=color.blue, title="LT Reversal Robust Fit", linewidth=3)
+plot(resistance_tf, color=color.new(color.green, 0), title="LT Reversal Resistance", linewidth=3, style=plot.style_line)
+
+// ─── FAST TRACKLINE (4 Hours) ───
+string tf_fast = "240"
+float at_coeff_1 = input.float(1.0, "Fast Trackline Coeff")
+int at_period_1 = input.int(14, "Fast Trackline Period")
+
+f_compute_stage_1() =>
+    atr = ta.rma(ta.tr(true), at_period_1)
+    upT = low - atr * at_coeff_1
+    downT = high + atr * at_coeff_1
+    cond = ta.rsi(close, at_period_1) >= 50
+    var float stage_track = 0.0
+    stage_track := cond ? math.max(upT, nz(stage_track[1])) : math.min(downT, nz(stage_track[1]))
+    stage_track
+
+float stage_track_tf_1 = request.security(syminfo.tickerid, tf_fast, f_compute_stage_1())
+color stage_color_1 = stage_track_tf_1 > nz(stage_track_tf_1[1]) ? color.green : stage_track_tf_1 < nz(stage_track_tf_1[1]) ? color.red : color.orange
+plot(stage_track_tf_1, color=stage_color_1, linewidth=3, title="LT Fast Trackline", style=plot.style_dotted)
+
+// ─── SLOW TRACKLINE (1 Week) ───
+string tf_slow = "W"
+float at_coeff_2 = input.float(1.0, "Slow Trackline Coeff")
+int at_period_2 = input.int(14, "Slow Trackline Period")
+
+f_compute_stage_2() =>
+    atr = ta.rma(ta.tr(true), at_period_2)
+    upT = low - atr * at_coeff_2
+    downT = high + atr * at_coeff_2
+    cond = ta.rsi(close, at_period_2) >= 50
+    var float stage_track = 0.0
+    stage_track := cond ? math.max(upT, nz(stage_track[1])) : math.min(downT, nz(stage_track[1]))
+    stage_track
+
+float stage_track_tf_2 = request.security(syminfo.tickerid, tf_slow, f_compute_stage_2())
+color stage_color_2 = stage_track_tf_2 > nz(stage_track_tf_2[1]) ? color.green : stage_track_tf_2 < nz(stage_track_tf_2[1]) ? color.red : color.orange
+plot(stage_track_tf_2, color=stage_color_2, linewidth=3, title="LT Slow Trackline")
+
+// ─── STAGE TRANSITION DETECTION ───
+int stoch_length = 14
+float stochK = ta.stoch(close, high, low, stoch_length)
+float stochD = ta.sma(stochK, 3)
+float mtf_rsi = request.security(syminfo.tickerid, tf_slow, ta.rsi(close, 14))
+
+float slow_slope = (stage_track_tf_2 - stage_track_tf_2[5]) / 5.0
+bool slow_up = slow_slope > 0.5
+bool slow_down = slow_slope < -0.5
+bool slow_sideways = math.abs(slow_slope) <= 0.5
+
+bool fast_slow_crossover = ta.crossover(stage_track_tf_1, stage_track_tf_2)
+bool stochK_D_crossover = ta.crossover(stochK, stochD)
+bool close_resistance_crossover = ta.crossover(close, resistance_tf)
+float mtf_rsi_change = ta.change(mtf_rsi)
+bool fast_slow_crossunder = ta.crossunder(stage_track_tf_1, stage_track_tf_2)
+bool stochD_K_crossunder = ta.crossunder(stochD, stochK)
+bool close_support_crossunder = ta.crossunder(close, support_tf)
+
+bool price_bounce_support = ta.crossover(close, support_tf) and close[1] < support_tf
+bool price_reject_resistance = ta.crossunder(close, resistance_tf) and close[1] > resistance_tf
+
+var int below_support_count = 0
+below_support_count := close < support_tf ? below_support_count + 1 : 0
+bool not_below_support_long = below_support_count <= 2
+
+var int above_resistance_count = 0
+above_resistance_count := close > resistance_tf ? above_resistance_count + 1 : 0
+bool not_above_resistance_long = above_resistance_count <= 3
+
+bool stage4_to1 = (slow_sideways or slow_down) and fast_slow_crossover and stochK_D_crossover and (support_tf > robustFit_tf) and price_bounce_support and not_below_support_long and mtf_rsi < 30
+bool stage1_to2 = slow_sideways and (stage_track_tf_1 > stage_track_tf_2) and (stochK > 80) and (robustFit_tf > stage_track_tf_2) and (support_tf > stage_track_tf_2) and close_resistance_crossover and not_above_resistance_long and mtf_rsi > 30 and mtf_rsi_change > 0
+bool stage2_to3 = ((slow_up and slow_slope < slow_slope[1]) or slow_sideways) and fast_slow_crossunder and stochD_K_crossunder and (resistance_tf < robustFit_tf) and price_reject_resistance and not_above_resistance_long and mtf_rsi > 70
+bool stage3_to4 = slow_sideways and (stage_track_tf_1 < stage_track_tf_2) and (stochD < 20) and (resistance_tf < stage_track_tf_2) and (robustFit_tf < stage_track_tf_2) and close_support_crossunder and (mtf_rsi_change < 0) and mtf_rsi < 70
+
+plotshape(stage4_to1, title="LT Stage 4 to 1", location=location.belowbar, color=color.green, style=shape.labelup, text="LT 4→1", textcolor=color.white, size=size.normal)
+plotshape(stage1_to2, title="LT Stage 1 to 2", location=location.belowbar, color=color.lime, style=shape.labelup, text="LT 1→2", textcolor=color.black, size=size.normal)
+plotshape(stage2_to3, title="LT Stage 2 to 3", location=location.abovebar, color=color.orange, style=shape.labeldown, text="LT 2→3", textcolor=color.white, size=size.normal)
+plotshape(stage3_to4, title="LT Stage 3 to 4", location=location.abovebar, color=color.red, style=shape.labeldown, text="LT 3→4", textcolor=color.white, size=size.normal)
+
+if stage4_to1
+    alert("LT Stage 4→1 (Bottoming): Early stage designation. Stage 1 beginning.", alert.freq_once_per_bar_close)
+if stage1_to2
+    alert("LT Stage 1→2 (Bull): Stage designation confirmed. Markup phase.", alert.freq_once_per_bar_close)
+if stage2_to3
+    alert("LT Stage 2→3 (Topping): Stage designation. Distribution beginning.", alert.freq_once_per_bar_close)
+if stage3_to4
+    alert("LT Stage 3→4 (Bear): Stage designation confirmed. Markdown phase.", alert.freq_once_per_bar_close)
