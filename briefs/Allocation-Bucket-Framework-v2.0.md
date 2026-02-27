@@ -1,7 +1,7 @@
 # Allocation Bucket Framework v2.0 — Multi-Asset Rotation
 **Date:** February 27, 2026  
 **Authors:** Gavin (framework lead) + CIO  
-**Status:** DRAFT — awaiting Gavin + Greg review  
+**Status:** APPROVED by Gavin — awaiting Greg review  
 **Supersedes:** Four-Bucket Framework v1.2.1  
 **Architecture Reference:** MSTR Engine Architecture v1.0
 
@@ -42,9 +42,9 @@ v1.x treated AB1-3 as MSTR/IBIT buckets with alternatives confined to AB4. Backt
 - Default: IBIT (better risk-adjusted at 60d historically)
 - Switch to MSTR calls when: MSTR/IBIT ratio VST AND ST are bullish (premium expanding)
 
-**Regime gate:** AB1 requires RP2+ (quality SRIBI > +10). In RP1, AB1 = 0% regardless of CT.
+**Regime gate:** AB1 requires RP2+ for risk assets (BTC, MSTR, TSLA). Quality assets (SPY, QQQ, GLD) may enter AB1 in RP1 if at CT3+ — their structural win rates (62-70%) justify deployment without regime confirmation.
 
-**Current state:** AB1 = 0% (RP1, no risk assets at CT4). GLD is CT4 but RP1 gate blocks AB1 deployment. *Question for Gavin: Should quality assets bypass the RP gate? GLD at CT4 in RP1 historically delivers +1.81% at 20d, 62% win.*
+**Current state:** GLD is CT4 (+41 SRIBI) — eligible for AB1 as a quality asset even in RP1. TLT is CT4 but AB4-only (negative directional EV).
 
 ### AB2 — Spreads (Income + Defined Risk)
 
@@ -183,23 +183,23 @@ Allocations now reflect multi-asset rotation. "AB1 15%" means 15% to the best-si
 
 1. **Every asset competes for every bucket.** Best CT signal wins the allocation.
 2. **Two-tier CT gates:** Quality assets (SPY, QQQ, GLD) enter at CT3+. Risk assets (BTC, MSTR, TSLA) enter at CT4.
-3. **AB1 requires RP2+** — no directional in RP1 regardless of CT. *(Under review for quality assets)*
+3. **AB1 regime gate is tiered:** Risk assets (BTC, MSTR, TSLA) require RP2+. Quality assets (SPY, QQQ, GLD) can enter AB1 in any RP at CT3+.
 4. **MSTR AB2 is always on** — mean-reversion is structural, any CT state.
 5. **BT3 Capitulation overrides all bear signals** — when all SRIBI negative, it's a buy.
-6. **STRC is the cash default.** Every trade must clear 0.83%/month.
+6. **STRC is the cash default.** Every trade must clear the **2%/month yield objective.** STRC at 0.83%/month is the floor, not the target.
 7. **TLT is AB4 only** — negative directional EV despite CT signals.
 8. **MSTR/IBIT vehicle selection** by ratio VST/ST: bullish ratio → MSTR, bearish → IBIT.
 
 ---
 
-## Open Questions
+## Decisions (Closed — Feb 27, 2026)
 
-1. **RP1 gate for quality assets:** Should GLD at CT4 in RP1 be eligible for AB1? It delivers +1.81%/20d at 62% win. The RP gate was designed for BTC/MSTR risk — quality assets may not need it.
+1. **RP1 gate for quality assets:** ✅ APPROVED. GLD (and SPY, QQQ) at CT3+ are eligible for AB1 in any RP, including RP1. The RP gate only applies to risk assets (BTC, MSTR, TSLA).
 
-2. **Position sizing across assets:** Equal risk per position ($50K max)? Or should quality assets get larger sizing (higher win rate, lower vol) and risk assets get smaller sizing (lower win rate, higher vol)?
+2. **Position sizing:** The objective is **highest annual return while meeting a minimum 2% monthly yield threshold.** This is the codified investment objective. Position sizing should optimize for this target, not equal-weight. The 2% threshold may be revised. *(Note: replaces the prior STRC hurdle of 0.83%/month — the bar is now higher.)*
 
-3. **Correlation management:** Multiple assets at CT3+ simultaneously may be correlated (SPY+QQQ often move together). Should we cap exposure to correlated pairs?
+3. **Correlation management:** Guideline (not rule): **no single investment should represent more than 5% of total portfolio.** Acknowledged this may not always be achievable, but it's the design target.
 
-4. **AB2 bear spread frequency:** The BT-Trap signal fires 84 times in 1,400 days (~6x/year). Is that enough to build a systematic bear spread program?
+4. **AB2 bear spread program:** ✅ APPROVED. ~6x/year is sufficient given STRC as the parking lot between signals. Cash earns the hurdle rate while waiting.
 
-5. **Sector ETF expansion:** When do we add XLY, XLK, XLF, etc.? More assets = more rotation opportunities but more complexity. Gavin descoped these earlier — revisit when?
+5. **Sector ETF expansion:** **NOT NOW.** Prove this setup works with the current 7-asset pool first. Expansion is a future consideration, not a priority.
