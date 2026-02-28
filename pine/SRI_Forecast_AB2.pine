@@ -1,6 +1,6 @@
-// SRI Forecast AB2 — Spread Guidance + Historical Analog Projection
-// LT SRI backbone with STL colored by spread opportunity zone
-// GREEN=overweight, LIGHT GREEN=standard, YELLOW=conservative, GRAY=STRC, RED=avoid
+// SRI Forecast AB2 — Spread Guidance + Historical Analog Projection (v2)
+// ATR-scaled zones, Bear Call/IC disabled on momentum assets
+// Bull Put requires triple filter: near STL + bullish structure + LOI<0
 // Backtest: BTC 2021-2026, 79% breach prediction accuracy
 // © RizenShine — Forecast engine by CIO
 
@@ -11,36 +11,29 @@ indicator(title="SRI Forecast AB2", shorttitle="SRI AB2", overlay=true, max_line
 // INPUTS
 // ═══════════════════════════════════════════════════════════════
 string grp_mode   = "Asset Mode"
-string asset_mode = input.string("Auto-Detect", "Asset Behavior", options=["Auto-Detect", "Momentum", "Mean-Reverting"], group=grp_mode, tooltip="Auto-Detect: uses symbol to classify\nMomentum: BTC, MSTR, TSLA — wider zones, bull puts primary\nMean-Reverting: SPY, QQQ, TLT — tighter zones, symmetric spreads")
+string asset_mode = input.string("Auto-Detect", "Asset Behavior", options=["Auto-Detect", "Momentum", "Mean-Reverting"], group=grp_mode)
 
 f_is_momentum() =>
     string t = str.upper(syminfo.ticker)
-    bool is_crypto = syminfo.type == "crypto" or str.contains(t, "BTC") or str.contains(t, "ETH") or str.contains(t, "SOL") or str.contains(t, "XRP")
-    bool is_mstr = str.contains(t, "MSTR")
-    bool is_tsla = str.contains(t, "TSLA")
-    bool is_ibit = str.contains(t, "IBIT") or str.contains(t, "GBTC") or str.contains(t, "BITO")
-    is_crypto or is_mstr or is_tsla or is_ibit
+    syminfo.type == "crypto" or str.contains(t, "BTC") or str.contains(t, "ETH") or str.contains(t, "SOL") or str.contains(t, "XRP") or str.contains(t, "MSTR") or str.contains(t, "TSLA") or str.contains(t, "IBIT") or str.contains(t, "GBTC") or str.contains(t, "BITO")
 
 string resolved_mode = asset_mode == "Auto-Detect" ? (f_is_momentum() ? "Momentum" : "Mean-Reverting") : asset_mode
 bool is_mr = resolved_mode == "Mean-Reverting"
+bool is_momentum = not is_mr
 
 string grp_core   = "Core Settings"
 int at_period     = input.int(14, "Trackline ATR Period", group=grp_core)
 float at_coeff    = input.float(1.0, "Trackline ATR Coefficient", group=grp_core)
-float near_input  = input.float(3.0, "Near STL %", group=grp_core, tooltip="Momentum: 3% | Mean-Revert: 2% (auto-adjusted)")
-float mid_input   = input.float(8.0, "Mid STL %", group=grp_core, tooltip="Momentum: 8% | Mean-Revert: 6% (auto-adjusted)")
-float near_pct    = is_mr ? 2.0 : near_input
-float mid_pct     = is_mr ? 6.0 : mid_input
 
 string grp_disp   = "Display"
-bool show_ribbon        = input.bool(true, "Show Forecast Ribbon", group=grp_disp)
-bool show_table         = input.bool(true, "Show Info Table", group=grp_disp)
-bool show_legend        = input.bool(true, "Show Legend", group=grp_disp)
-bool show_ab2_markers   = input.bool(true, "Show AB2 Spread Markers", group=grp_disp)
-bool show_stage_bg      = input.bool(true, "Show LT Stage Background", group=grp_disp)
+bool show_ribbon  = input.bool(true, "Show Forecast Ribbon", group=grp_disp)
+bool show_table   = input.bool(true, "Show Info Table", group=grp_disp)
+bool show_legend  = input.bool(true, "Show Legend", group=grp_disp)
+bool show_markers = input.bool(true, "Show AB2 Markers", group=grp_disp)
+bool show_stage_bg = input.bool(true, "Show LT Stage Background", group=grp_disp)
 
 // ═══════════════════════════════════════════════════════════════
-// TRACKLINE FUNCTION
+// TRACKLINE + SRIBI
 // ═══════════════════════════════════════════════════════════════
 
 f_trackline(int period, float coeff) =>
@@ -51,10 +44,6 @@ f_trackline(int period, float coeff) =>
     var float track = 0.0
     track := cond ? math.max(upT, nz(track[1])) : math.min(downT, nz(track[1]))
     track
-
-// ═══════════════════════════════════════════════════════════════
-// SRIBI — All 4 Timeframes
-// ═══════════════════════════════════════════════════════════════
 
 float vst_ftl = request.security(syminfo.tickerid, "120", f_trackline(at_period, at_coeff))
 float vst_stl = request.security(syminfo.tickerid, "D",   f_trackline(at_period, at_coeff))
@@ -78,15 +67,28 @@ color zone_color = zone == 1 ? color.new(color.red, 0) : zone == 2 ? color.new(c
 color ribbon_fill = zone == 1 ? color.new(color.red, 80) : zone == 2 ? color.new(color.orange, 80) : zone == 3 ? color.new(color.gray, 85) : zone == 4 ? color.new(color.teal, 80) : color.new(color.green, 80)
 
 // ═══════════════════════════════════════════════════════════════
-// LT BACKBONE
+// LOI (inline for regime)
+// ═══════════════════════════════════════════════════════════════
+
+float vlt_norm = math.max(-100, math.min(100, vlt_sribi / 80 * 100))
+float lt_norm  = math.max(-100, math.min(100, lt_sribi / 80 * 100))
+float conc_norm = (bull_count - 2.0) / 2.0 * 100
+float vlt_roc_raw = vlt_sribi - nz(vlt_sribi[10])
+float roc_norm = math.max(-100, math.min(100, vlt_roc_raw / 40 * 100))
+float loi = (vlt_norm * 40 + roc_norm * 30 + lt_norm * 15 + conc_norm * 15) / 100
+
+// ═══════════════════════════════════════════════════════════════
+// ATR-SCALED ZONES (v2)
 // ═══════════════════════════════════════════════════════════════
 
 bool lt_bullish = lt_ftl > lt_stl
 bool lt_ftl_rising = lt_ftl > nz(lt_ftl[1])
+float lt_atr = ta.atr(14)
 
-// ═══════════════════════════════════════════════════════════════
-// STL SPREAD OPPORTUNITY ZONES
-// ═══════════════════════════════════════════════════════════════
+// Dynamic zone thresholds scaled by ATR
+float atr_pct = lt_stl != 0 ? (lt_atr / lt_stl) * 100 : 3.0
+float near_pct = math.min(atr_pct * 1.0, is_mr ? 3.0 : 8.0)  // 1x ATR, capped
+float mid_pct  = math.min(atr_pct * 2.0, is_mr ? 8.0 : 15.0)  // 2x ATR, capped
 
 float pct_from_stl = lt_stl != 0 ? (close - lt_stl) / lt_stl * 100 : 0
 float abs_pct_from_stl = math.abs(pct_from_stl)
@@ -98,6 +100,7 @@ bool is_near = abs_pct_from_stl < near_pct
 bool is_mid  = abs_pct_from_stl >= near_pct and abs_pct_from_stl < mid_pct
 bool is_far  = abs_pct_from_stl >= mid_pct
 
+// Breach risk scoring
 float breach_risk = 0.0
 if is_near
     if is_support_test
@@ -139,38 +142,43 @@ color stl_color = switch spread_zone
 color ftl_color = lt_ftl_rising ? color.new(color.teal, 30) : color.new(color.maroon, 30)
 plot(lt_ftl, "LT Fast Trackline", color=ftl_color, linewidth=2, style=plot.style_circles)
 plot(lt_stl, "LT Slow Trackline", color=stl_color, linewidth=3)
-
-bgcolor(show_stage_bg ? (lt_bullish ? color.new(color.green, 93) : color.new(color.red, 93)) : na, title="LT Stage Background")
+bgcolor(show_stage_bg ? (lt_bullish ? color.new(color.green, 93) : color.new(color.red, 93)) : na)
 
 // ═══════════════════════════════════════════════════════════════
-// AB2 SPREAD DETECTION — FIXED MARKER POSITIONS
-// Bull put = below (bullish, expect price to stay above)
-// Bear call = above (bearish, expect price to stay below)
-// Iron condor = below (neutral)
+// AB2 v2 — REGIME-AWARE SPREAD DETECTION
+//
+// Bull Put: near STL + bullish structure + LOI < 0 + bull_count >= 2
+// Bear Call: MR ONLY + extended above FTL + bearish SRIBI
+// Iron Condor: MR ONLY + neutral zone + tight range
+// Conservative: mid zone + low breach risk + bull_count >= 2
 // ═══════════════════════════════════════════════════════════════
 
 float p75_20d = zone == 1 ? 8.74 : zone == 2 ? 6.71 : zone == 3 ? 6.77 : zone == 4 ? 8.95 : 10.96
 float p25_20d = zone == 1 ? -5.81 : zone == 2 ? -8.28 : zone == 3 ? -6.19 : zone == 4 ? -5.86 : -4.61
 float ribbon_width = p75_20d - p25_20d
 
-bool ab2_bull_put = is_near and is_support_test and (spread_zone >= 2) and (spread_zone <= 3) and (zone <= 2)
-bool ab2_bear_call = pct_from_ftl > 5.0 and (zone >= 4) and (p75_20d < 12.0) and (spread_zone != 4)
-bool ab2_iron_condor = (zone == 3) and (ribbon_width < 14.0) and (spread_zone != 4)
-bool ab2_conservative = is_mid and (spread_zone == 1)
+// Bull Put: Triple filter (works on all assets)
+bool ab2_bull_put = is_near and is_support_test and (spread_zone >= 2) and (spread_zone <= 3) and lt_bullish and loi < 0 and bull_count >= 2
+
+// Bear Call: MR assets ONLY (100% breach on momentum — disabled)
+bool ab2_bear_call = is_mr and pct_from_ftl > 5.0 and (zone >= 4) and sribi_avg > 15 and not lt_ftl_rising
+
+// Iron Condor: MR assets ONLY (100% breach on momentum — disabled)
+bool ab2_iron_condor = is_mr and (zone == 3) and (ribbon_width < 14.0) and (spread_zone != 4) and bull_count >= 1 and bull_count <= 3
+
+// Conservative: Tighter filter — require bull_count >= 2 and negative breach risk
+bool ab2_conservative = is_mid and (spread_zone == 1) and bull_count >= 2 and breach_risk < 0
 
 string ab2_signal = ab2_bull_put ? "Bull Put ▲" : ab2_bear_call ? "Bear Call ▼" : ab2_iron_condor ? "Iron Condor ↔" : ab2_conservative ? "Conservative" : "None"
 
-// Bull put → below candle (green diamond)
-plotshape(show_ab2_markers and ab2_bull_put and not ab2_bull_put[1], title="AB2 Bull Put", location=location.belowbar, style=shape.diamond, color=color.green, size=size.small)
-// Bear call → above candle (red diamond)
-plotshape(show_ab2_markers and ab2_bear_call and not ab2_bear_call[1], title="AB2 Bear Call", location=location.abovebar, style=shape.diamond, color=color.red, size=size.small)
-// Iron condor → below candle (purple circle)
-plotshape(show_ab2_markers and ab2_iron_condor and not ab2_iron_condor[1], title="AB2 Iron Condor", location=location.belowbar, style=shape.circle, color=color.purple, size=size.tiny)
-// Conservative → below candle (yellow circle)
-plotshape(show_ab2_markers and ab2_conservative and not ab2_conservative[1], title="AB2 Conservative", location=location.belowbar, style=shape.circle, color=color.yellow, size=size.tiny)
+// Markers: Bull Put below, Bear Call above, IC below, Conservative below
+plotshape(show_markers and ab2_bull_put and not ab2_bull_put[1], title="AB2 Bull Put", location=location.belowbar, style=shape.diamond, color=color.green, size=size.small)
+plotshape(show_markers and ab2_bear_call and not ab2_bear_call[1], title="AB2 Bear Call", location=location.abovebar, style=shape.diamond, color=color.red, size=size.small)
+plotshape(show_markers and ab2_iron_condor and not ab2_iron_condor[1], title="AB2 Iron Condor", location=location.belowbar, style=shape.circle, color=color.purple, size=size.tiny)
+plotshape(show_markers and ab2_conservative and not ab2_conservative[1], title="AB2 Conservative", location=location.belowbar, style=shape.circle, color=color.yellow, size=size.tiny)
 
 // ═══════════════════════════════════════════════════════════════
-// FORECAST PERCENTILE LOOKUP
+// FORECAST RIBBON (unchanged)
 // ═══════════════════════════════════════════════════════════════
 
 f_get_pct(int z, int day_idx, int pct) =>
@@ -212,19 +220,13 @@ f_get_pct(int z, int day_idx, int pct) =>
             result := day_idx == 0 ? 3.73 : day_idx == 1 ? 6.19 : day_idx == 2 ? 8.98 : 10.96
     result
 
-// ═══════════════════════════════════════════════════════════════
-// FORECAST RIBBON
-// ═══════════════════════════════════════════════════════════════
-
 if barstate.islast and show_ribbon
     float base_price = close
     int[] offsets = array.from(0, 5, 10, 15, 20)
-
     var line[] bull_lines = array.new<line>()
     var line[] base_lines = array.new<line>()
     var line[] bear_lines = array.new<line>()
     var linefill[] fills  = array.new<linefill>()
-
     if array.size(bull_lines) > 0
         for i = 0 to array.size(bull_lines) - 1
             line.delete(array.get(bull_lines, i))
@@ -241,33 +243,28 @@ if barstate.islast and show_ribbon
         for i = 0 to array.size(fills) - 1
             linefill.delete(array.get(fills, i))
         array.clear(fills)
-
     for seg = 0 to 3
         int bar_start = bar_index + array.get(offsets, seg)
         int bar_end   = bar_index + array.get(offsets, seg + 1)
-
         float p25_s = seg == 0 ? 0.0 : f_get_pct(zone, seg - 1, 0)
         float p50_s = seg == 0 ? 0.0 : f_get_pct(zone, seg - 1, 1)
         float p75_s = seg == 0 ? 0.0 : f_get_pct(zone, seg - 1, 2)
         float p25_e = f_get_pct(zone, seg, 0)
         float p50_e = f_get_pct(zone, seg, 1)
         float p75_e = f_get_pct(zone, seg, 2)
-
         line bl = line.new(bar_start, base_price * (1 + p75_s / 100), bar_end, base_price * (1 + p75_e / 100), color=color.new(zone_color, 50), width=1, style=line.style_dashed)
         line ml = line.new(bar_start, base_price * (1 + p50_s / 100), bar_end, base_price * (1 + p50_e / 100), color=zone_color, width=2)
         line sl = line.new(bar_start, base_price * (1 + p25_s / 100), bar_end, base_price * (1 + p25_e / 100), color=color.new(zone_color, 50), width=1, style=line.style_dashed)
-
         array.push(bull_lines, bl)
         array.push(base_lines, ml)
         array.push(bear_lines, sl)
-        linefill lf = linefill.new(bl, sl, ribbon_fill)
-        array.push(fills, lf)
+        array.push(fills, linefill.new(bl, sl, ribbon_fill))
 
 // ═══════════════════════════════════════════════════════════════
 // INFO TABLE
 // ═══════════════════════════════════════════════════════════════
 
-var table info_tbl = table.new(position.bottom_right, 2, 10, bgcolor=color.new(color.black, 30), border_width=1, border_color=color.new(color.gray, 60), frame_width=1, frame_color=color.new(color.gray, 40))
+var table info_tbl = table.new(position.bottom_right, 2, 11, bgcolor=color.new(color.black, 30), border_width=1, border_color=color.new(color.gray, 60))
 
 if barstate.islast and show_table
     string mode_tag = is_mr ? "MR" : "TR"
@@ -275,12 +272,11 @@ if barstate.islast and show_table
     table.cell(info_tbl, 0, 0, str.format("AB2 [{0}]{1}", mode_tag, auto_tag), text_color=color.white, text_size=size.small, bgcolor=zone_color)
     table.cell(info_tbl, 1, 0, zone_name, text_color=color.white, text_size=size.small, bgcolor=zone_color)
 
-    table.cell(info_tbl, 0, 1, "Concordance", text_color=color.gray, text_size=size.tiny)
+    table.cell(info_tbl, 0, 1, "CT", text_color=color.gray, text_size=size.tiny)
     table.cell(info_tbl, 1, 1, str.format("CT{0} ({1}/4)", bull_count, bull_count), text_color=color.white, text_size=size.tiny)
 
-    color sribi_clr = sribi_avg > 5 ? color.teal : sribi_avg < -5 ? color.red : color.gray
     table.cell(info_tbl, 0, 2, "SRIBI Avg", text_color=color.gray, text_size=size.tiny)
-    table.cell(info_tbl, 1, 2, str.tostring(sribi_avg, "#.#"), text_color=sribi_clr, text_size=size.tiny)
+    table.cell(info_tbl, 1, 2, str.tostring(sribi_avg, "#.#"), text_color=sribi_avg > 5 ? color.teal : sribi_avg < -5 ? color.red : color.gray, text_size=size.tiny)
 
     float[] sribi_vals = array.from(vst_sribi, st_sribi, lt_sribi, vlt_sribi)
     string[] sribi_names = array.from("  VST", "  ST", "  LT", "  VLT")
@@ -291,10 +287,8 @@ if barstate.islast and show_table
         table.cell(info_tbl, 0, 3 + i, array.get(sribi_names, i), text_color=color.gray, text_size=size.tiny)
         table.cell(info_tbl, 1, 3 + i, str.format("{0} {1}", dot, str.tostring(val, "#.#")), text_color=val_clr, text_size=size.tiny)
 
-    float med_20 = zone == 1 ? 1.29 : zone == 2 ? -0.58 : zone == 3 ? -1.21 : zone == 4 ? 0.10 : 2.78
-    color med_clr = med_20 > 0 ? color.teal : med_20 < 0 ? color.red : color.gray
-    table.cell(info_tbl, 0, 7, "20d Median", text_color=color.gray, text_size=size.tiny)
-    table.cell(info_tbl, 1, 7, str.format("{0}%", str.tostring(med_20, "#.##")), text_color=med_clr, text_size=size.tiny)
+    table.cell(info_tbl, 0, 7, "ATR Zone", text_color=color.gray, text_size=size.tiny)
+    table.cell(info_tbl, 1, 7, str.format("Near {0}% / Mid {1}%", str.tostring(near_pct, "#.#"), str.tostring(mid_pct, "#.#")), text_color=color.gray, text_size=size.tiny)
 
     color sz_clr = switch spread_zone
         0 => color.gray
@@ -306,15 +300,18 @@ if barstate.islast and show_table
     table.cell(info_tbl, 0, 8, "Spread", text_color=color.gray, text_size=size.tiny)
     table.cell(info_tbl, 1, 8, spread_action, text_color=sz_clr, text_size=size.tiny)
 
+    table.cell(info_tbl, 0, 9, "LOI", text_color=color.gray, text_size=size.tiny)
+    table.cell(info_tbl, 1, 9, str.tostring(loi, "#.#"), text_color=loi < -20 ? color.green : loi > 40 ? color.red : color.gray, text_size=size.tiny)
+
     color ab2_clr = ab2_bull_put ? color.green : ab2_bear_call ? color.red : ab2_iron_condor ? color.purple : ab2_conservative ? color.yellow : color.gray
-    table.cell(info_tbl, 0, 9, "AB2", text_color=color.gray, text_size=size.tiny)
-    table.cell(info_tbl, 1, 9, ab2_signal, text_color=ab2_clr, text_size=size.tiny)
+    table.cell(info_tbl, 0, 10, "AB2", text_color=color.gray, text_size=size.tiny)
+    table.cell(info_tbl, 1, 10, ab2_signal, text_color=ab2_clr, text_size=size.tiny)
 
 // ═══════════════════════════════════════════════════════════════
 // LEGEND
 // ═══════════════════════════════════════════════════════════════
 
-var table legend_tbl = table.new(position.bottom_left, 2, 9, bgcolor=color.new(color.black, 20), border_width=1, border_color=color.new(color.gray, 70), frame_width=1, frame_color=color.new(color.gray, 50))
+var table legend_tbl = table.new(position.bottom_left, 2, 9, bgcolor=color.new(color.black, 20), border_width=1, border_color=color.new(color.gray, 70))
 
 if barstate.islast and show_legend
     table.cell(legend_tbl, 0, 0, "AB2 Legend", text_color=color.white, text_size=size.tiny, bgcolor=color.new(color.gray, 50))
@@ -322,35 +319,30 @@ if barstate.islast and show_legend
     table.cell(legend_tbl, 0, 1, "◆ below", text_color=color.green, text_size=size.tiny)
     table.cell(legend_tbl, 1, 1, "Bull put spread", text_color=color.white, text_size=size.tiny)
     table.cell(legend_tbl, 0, 2, "◆ above", text_color=color.red, text_size=size.tiny)
-    table.cell(legend_tbl, 1, 2, "Bear call spread", text_color=color.white, text_size=size.tiny)
-    table.cell(legend_tbl, 0, 3, "○ below", text_color=color.purple, text_size=size.tiny)
-    table.cell(legend_tbl, 1, 3, "Iron condor", text_color=color.white, text_size=size.tiny)
-    table.cell(legend_tbl, 0, 4, "○ below", text_color=color.yellow, text_size=size.tiny)
+    table.cell(legend_tbl, 1, 2, "Bear call (MR only)", text_color=color.white, text_size=size.tiny)
+    table.cell(legend_tbl, 0, 3, "○ purple", text_color=color.purple, text_size=size.tiny)
+    table.cell(legend_tbl, 1, 3, "Iron condor (MR only)", text_color=color.white, text_size=size.tiny)
+    table.cell(legend_tbl, 0, 4, "○ yellow", text_color=color.yellow, text_size=size.tiny)
     table.cell(legend_tbl, 1, 4, "Conservative spread", text_color=color.gray, text_size=size.tiny)
     table.cell(legend_tbl, 0, 5, "STL Colors:", text_color=color.gray, text_size=size.tiny)
     table.cell(legend_tbl, 1, 5, "", text_size=size.tiny)
     table.cell(legend_tbl, 0, 6, "█ Green", text_color=color.green, text_size=size.tiny)
-    table.cell(legend_tbl, 1, 6, "Overweight (81% hold)", text_color=color.white, text_size=size.tiny)
-    table.cell(legend_tbl, 0, 7, "█ Lt Grn / Yel / Gray", text_color=color.new(#90EE90, 0), text_size=size.tiny)
-    table.cell(legend_tbl, 1, 7, "Std(84%) / Cons(74%) / STRC", text_color=color.gray, text_size=size.tiny)
+    table.cell(legend_tbl, 1, 6, "Overweight (81%)", text_color=color.white, text_size=size.tiny)
+    table.cell(legend_tbl, 0, 7, "█ LtGrn/Yel/Gray", text_color=color.new(#90EE90, 0), text_size=size.tiny)
+    table.cell(legend_tbl, 1, 7, "Std/Cons/STRC", text_color=color.gray, text_size=size.tiny)
     table.cell(legend_tbl, 0, 8, "█ Red", text_color=color.red, text_size=size.tiny)
-    table.cell(legend_tbl, 1, 8, "Avoid (27% hold)", text_color=color.white, text_size=size.tiny)
+    table.cell(legend_tbl, 1, 8, "Avoid (27%)", text_color=color.white, text_size=size.tiny)
 
 // ═══════════════════════════════════════════════════════════════
 // ALERTS
 // ═══════════════════════════════════════════════════════════════
 
-alertcondition(ta.cross(sribi_avg, 25.0), title="SRIBI Very Bullish", message="SRI AB2: SRIBI avg crossed +25 — Very Bullish zone")
-alertcondition(ta.cross(-25.0, sribi_avg), title="SRIBI Very Bearish", message="SRI AB2: SRIBI avg crossed -25 — Very Bearish (contrarian bullish)")
-alertcondition(ta.crossover(float(bull_count), 3.5), title="CT4 Full Concordance", message="SRI AB2: All 4 TFs bullish — CT4")
-alertcondition(ta.crossunder(float(bull_count), 0.5), title="CT0 Full Bearish", message="SRI AB2: All 4 TFs bearish — CT0")
-
-alertcondition(spread_zone == 3 and spread_zone[1] != 3, title="STL GREEN — Overweight Spreads", message="SRI AB2: GREEN — near STL, low breach risk, 81% hold. Overweight.")
-alertcondition(spread_zone == 2 and spread_zone[1] != 2, title="STL LIGHT GREEN — Standard Spreads", message="SRI AB2: LIGHT GREEN — near STL, 84% hold. Standard size.")
-alertcondition(spread_zone == 1 and spread_zone[1] != 1, title="STL YELLOW — Conservative Spreads", message="SRI AB2: YELLOW — 3-8% from STL, 74% hold. Conservative.")
-alertcondition(spread_zone == 4 and spread_zone[1] != 4, title="STL RED — Avoid Spreads", message="SRI AB2: RED — 73% breach rate. Avoid new spreads.")
-alertcondition(spread_zone == 0 and spread_zone[1] != 0, title="STL GRAY — STRC", message="SRI AB2: GRAY — >8% from STL. Capital better in STRC.")
-
-alertcondition(ab2_bull_put and not ab2_bull_put[1], title="AB2 Bull Put Spread", message="SRI AB2: Bull Put — near STL support, green zone. Strike at STL.")
-alertcondition(ab2_bear_call and not ab2_bear_call[1], title="AB2 Bear Call Spread", message="SRI AB2: Bear Call — extended above FTL, bullish zone.")
-alertcondition(ab2_iron_condor and not ab2_iron_condor[1], title="AB2 Iron Condor", message="SRI AB2: Iron Condor — neutral zone, narrow range.")
+alertcondition(ta.cross(sribi_avg, 25.0), title="SRIBI Very Bullish", message="SRI AB2: SRIBI avg crossed +25")
+alertcondition(ta.cross(-25.0, sribi_avg), title="SRIBI Very Bearish", message="SRI AB2: SRIBI avg crossed -25")
+alertcondition(ta.crossover(float(bull_count), 3.5), title="CT4", message="SRI AB2: CT4 — all 4 TFs bullish")
+alertcondition(ta.crossunder(float(bull_count), 0.5), title="CT0", message="SRI AB2: CT0 — all 4 TFs bearish")
+alertcondition(spread_zone == 3 and spread_zone[1] != 3, title="STL GREEN", message="SRI AB2: GREEN — Overweight spreads")
+alertcondition(spread_zone == 4 and spread_zone[1] != 4, title="STL RED", message="SRI AB2: RED — Avoid spreads")
+alertcondition(ab2_bull_put and not ab2_bull_put[1], title="AB2 Bull Put", message="SRI AB2: Bull Put — near STL, bullish structure, LOI<0")
+alertcondition(ab2_bear_call and not ab2_bear_call[1], title="AB2 Bear Call", message="SRI AB2: Bear Call — MR asset, extended, bearish SRIBI")
+alertcondition(ab2_iron_condor and not ab2_iron_condor[1], title="AB2 Iron Condor", message="SRI AB2: Iron Condor — MR asset, neutral zone")
