@@ -1,7 +1,7 @@
-// SRI Forecast v3 — Historical Analog Projection + Breach Risk + AB2 Spread Alerts
-// Simplified LT SRI backbone + 20-day forward projection ribbon
-// STL colored by breach risk: GREEN=safe for spreads, YELLOW=uncertain, RED=breach likely
-// Backtest: BTC 2021-2026, 79% accuracy on classified events (n=28)
+// SRI Forecast v4 — Historical Analog Projection + Breach Risk + AB2 Spread Guidance
+// LT SRI backbone with STL colored by spread opportunity zone
+// GREEN=overweight, LIGHT GREEN=standard, YELLOW=conservative, GRAY=STRC, RED=avoid
+// Backtest: BTC 2021-2026, 79% breach prediction accuracy
 // © RizenShine — Forecast engine by CIO
 
 //@version=6
@@ -13,7 +13,8 @@ indicator(title="SRI Forecast", shorttitle="SRI Forecast", overlay=true, max_lin
 string grp_core   = "Core Settings"
 int at_period     = input.int(14, "Trackline ATR Period", group=grp_core)
 float at_coeff    = input.float(1.0, "Trackline ATR Coefficient", group=grp_core)
-float stl_proximity = input.float(3.0, "STL Proximity %", group=grp_core, tooltip="How close price must be to STL to trigger breach risk assessment")
+float near_pct    = input.float(3.0, "Near STL %", group=grp_core, tooltip="0-3%: breach risk assessed (green/light green/red)")
+float mid_pct     = input.float(8.0, "Mid STL %", group=grp_core, tooltip="3-8%: yellow conservative zone")
 
 string grp_disp   = "Display"
 bool show_ribbon        = input.bool(true, "Show Forecast Ribbon", group=grp_disp)
@@ -43,8 +44,8 @@ float vst_ftl = request.security(syminfo.tickerid, "120", f_trackline(at_period,
 float vst_stl = request.security(syminfo.tickerid, "D",   f_trackline(at_period, at_coeff))
 float vst_sribi = vst_stl != 0 ? (vst_ftl - vst_stl) / vst_stl * 100 : 0
 
-// ST (FTL=2H, STL=1D)
-float st_sribi = vst_sribi  // Same FTL/STL pair
+// ST (same FTL/STL pair as VST)
+float st_sribi = vst_sribi
 
 // LT (FTL=4H, STL=1W)
 float lt_ftl = request.security(syminfo.tickerid, "240", f_trackline(at_period, at_coeff))
@@ -60,75 +61,86 @@ float vlt_sribi = vlt_stl != 0 ? (vlt_ftl - vlt_stl) / vlt_stl * 100 : 0
 float sribi_avg = (vst_sribi + st_sribi + lt_sribi + vlt_sribi) / 4.0
 int bull_count = (vst_sribi > 0 ? 1 : 0) + (st_sribi > 0 ? 1 : 0) + (lt_sribi > 0 ? 1 : 0) + (vlt_sribi > 0 ? 1 : 0)
 
-// Zone classification
+// Forecast zone
 int zone = sribi_avg < -25 ? 1 : sribi_avg < -5 ? 2 : sribi_avg < 5 ? 3 : sribi_avg < 25 ? 4 : 5
 string zone_name = zone == 1 ? "Very Bearish" : zone == 2 ? "Bearish" : zone == 3 ? "Neutral" : zone == 4 ? "Bullish" : "Very Bullish"
-
 color zone_color = zone == 1 ? color.new(color.red, 0) : zone == 2 ? color.new(color.orange, 0) : zone == 3 ? color.new(color.gray, 0) : zone == 4 ? color.new(color.teal, 0) : color.new(color.green, 0)
 color ribbon_fill = zone == 1 ? color.new(color.red, 80) : zone == 2 ? color.new(color.orange, 80) : zone == 3 ? color.new(color.gray, 85) : zone == 4 ? color.new(color.teal, 80) : color.new(color.green, 80)
 
 // ═══════════════════════════════════════════════════════════════
-// LT BACKBONE — FTL + STL
+// LT BACKBONE
 // ═══════════════════════════════════════════════════════════════
 
 bool lt_bullish = lt_ftl > lt_stl
 bool lt_ftl_rising = lt_ftl > nz(lt_ftl[1])
 
 // ═══════════════════════════════════════════════════════════════
-// STL BREACH RISK SCORE
-// Backtested on BTC 2021-2026: 79% accuracy, 68% coverage
+// STL SPREAD OPPORTUNITY ZONES
 //
-// Factors (from backtest):
-//   1. FTL vs STL structure alignment (strongest predictor)
-//   2. SRIBI concordance (counterintuitive: all-bearish at support = 90% HOLD)
-//   3. 5-day momentum direction vs approach direction
-//
-// Score < -2 = LOW risk (green)  → 83% hold rate, safe for spreads
-// Score -2 to +1 = MEDIUM (yellow) → 56% hold rate, uncertain
-// Score > +1 = HIGH risk (red)   → 71% breach rate, avoid spreads
+// Backtest results (BTC 2021-2026):
+//   GREEN  (0-3%, LOW risk):    81% hold — overweight, juicy premiums
+//   LTGREEN(0-3%, MED risk):    84% hold — standard size
+//   YELLOW (3-8% from STL):     74% hold — conservative, tighter strikes
+//   GRAY   (>8% from STL):      93% safe but thin premium — STRC beats
+//   RED    (0-3%, HIGH risk):    27% hold — avoid, 73% breach rate
 // ═══════════════════════════════════════════════════════════════
 
 float pct_from_stl = lt_stl != 0 ? (close - lt_stl) / lt_stl * 100 : 0
+float abs_pct_from_stl = math.abs(pct_from_stl)
 float pct_from_ftl = lt_ftl != 0 ? (close - lt_ftl) / lt_ftl * 100 : 0
-bool near_stl = math.abs(pct_from_stl) < stl_proximity
-bool is_support_test = close > lt_stl  // Price above STL = testing as support
-float roc_5 = (close - close[5]) / close[5] * 100
-float ftl_stl_spread = lt_stl != 0 ? (lt_ftl - lt_stl) / lt_stl * 100 : 0
+bool is_support_test = close > lt_stl
+float roc_5 = close[5] != 0 ? (close - close[5]) / close[5] * 100 : 0
 
-// Compute breach risk score
+// Distance zones
+bool is_near = abs_pct_from_stl < near_pct       // 0-3%
+bool is_mid  = abs_pct_from_stl >= near_pct and abs_pct_from_stl < mid_pct  // 3-8%
+bool is_far  = abs_pct_from_stl >= mid_pct        // >8%
+
+// Breach risk score (only computed when near STL)
 float breach_risk = 0.0
-
-if near_stl
+if is_near
     if is_support_test
-        // Support test: FTL below STL = bearish structure = breach risk
         breach_risk += lt_ftl < lt_stl ? 3.0 : -2.0
-        // All bearish SRIBI at support = capitulation bounce = SAFE
         breach_risk += bull_count == 0 ? -3.0 : 0.0
-        // Bullish SRIBI but testing support = divergence = DANGER
         breach_risk += sribi_avg > 0 ? 2.0 : 0.0
-        // Sharp drop = bounce likely; slow grind = breach likely
         breach_risk += roc_5 < -5 ? -1.0 : roc_5 > -2 ? 1.0 : 0.0
     else
-        // Resistance test: FTL above STL = bullish = breach risk (upward)
         breach_risk += lt_ftl > lt_stl ? 3.0 : -2.0
-        // All bearish = resistance holds
         breach_risk += bull_count == 0 ? -2.0 : 0.0
-        // Bullish SRIBI at resistance = likely to break up
         breach_risk += sribi_avg > 0 ? 2.0 : 0.0
-        // Momentum
         breach_risk += roc_5 < -5 ? 1.0 : roc_5 > -2 ? -1.0 : 0.0
 
-// Risk zone: LOW (<=−2), MEDIUM (−1 to +1), HIGH (>=+2)
-int risk_zone = breach_risk <= -2 ? 0 : breach_risk >= 2 ? 2 : 1  // 0=low, 1=med, 2=high
-string risk_name = not near_stl ? "—" : risk_zone == 0 ? "LOW" : risk_zone == 1 ? "MEDIUM" : "HIGH"
+// Risk classification: 0=LOW, 1=MEDIUM, 2=HIGH
+int risk_class = breach_risk <= -2 ? 0 : breach_risk >= 2 ? 2 : 1
 
 // ═══════════════════════════════════════════════════════════════
-// STL COLOR — Breach risk when near, zone color when distant
+// STL COLOR — Five-zone spread guidance
 // ═══════════════════════════════════════════════════════════════
 
-color stl_color = color.new(color.gray, 20)  // Default: not near STL
-if near_stl
-    stl_color := risk_zone == 0 ? color.new(color.green, 0) : risk_zone == 1 ? color.new(color.yellow, 0) : color.new(color.red, 0)
+// Spread zone enum: 0=GRAY, 1=YELLOW, 2=LTGREEN, 3=GREEN, 4=RED
+int spread_zone = 0
+if is_far
+    spread_zone := 0   // Gray — STRC is better risk-adjusted bet
+else if is_mid
+    spread_zone := 1   // Yellow — conservative spreads
+else if is_near
+    if risk_class == 2
+        spread_zone := 4   // Red — avoid
+    else if risk_class == 0
+        spread_zone := 3   // Green — overweight
+    else
+        spread_zone := 2   // Light green — standard size
+
+string spread_action = spread_zone == 0 ? "STRC" : spread_zone == 1 ? "Conservative" : spread_zone == 2 ? "Standard" : spread_zone == 3 ? "Overweight" : "Avoid"
+
+// STL color
+color stl_color = switch spread_zone
+    0 => color.new(color.gray, 20)           // Gray — capital in STRC
+    1 => color.new(color.yellow, 0)          // Yellow — conservative
+    2 => color.new(#90EE90, 0)               // Light green — standard
+    3 => color.new(color.green, 0)           // Green — overweight
+    4 => color.new(color.red, 0)             // Red — avoid
+    => color.new(color.gray, 20)
 
 // FTL: teal when rising, maroon when falling
 color ftl_color = lt_ftl_rising ? color.new(color.teal, 30) : color.new(color.maroon, 30)
@@ -139,29 +151,33 @@ plot(lt_stl, "LT Slow Trackline", color=stl_color, linewidth=3)
 bgcolor(show_stage_bg ? (lt_bullish ? color.new(color.green, 93) : color.new(color.red, 93)) : na, title="LT Stage Background")
 
 // ═══════════════════════════════════════════════════════════════
-// AB2 SPREAD DETECTION (updated with breach risk)
+// AB2 SPREAD DETECTION (gated by spread zone)
 // ═══════════════════════════════════════════════════════════════
 
 float p75_20d = zone == 1 ? 8.74 : zone == 2 ? 6.71 : zone == 3 ? 6.77 : zone == 4 ? 8.95 : 10.96
 float p25_20d = zone == 1 ? -5.81 : zone == 2 ? -8.28 : zone == 3 ? -6.19 : zone == 4 ? -5.86 : -4.61
 float ribbon_width = p75_20d - p25_20d
 
-// Bull Put: near STL support + LOW breach risk + bearish zone (contrarian)
-bool ab2_bull_put = near_stl and is_support_test and (risk_zone == 0) and (zone <= 2)
+// Bull Put: near STL support + green/light green zone + bearish forecast (contrarian)
+bool ab2_bull_put = is_near and is_support_test and (spread_zone >= 2) and (spread_zone <= 3) and (zone <= 2)
 
-// Bear Call: price extended above FTL + bullish zone + limited upside
-bool ab2_bear_call = pct_from_ftl > 5.0 and (zone >= 4) and (p75_20d < 12.0)
+// Bear Call: price extended above FTL + bullish zone
+bool ab2_bear_call = pct_from_ftl > 5.0 and (zone >= 4) and (p75_20d < 12.0) and (spread_zone != 4)
 
-// Iron Condor: neutral zone + narrow ribbon + not near STL (or LOW risk if near)
-bool ab2_iron_condor = (zone == 3) and (ribbon_width < 14.0) and (not near_stl or risk_zone == 0)
+// Iron Condor: neutral zone + narrow ribbon + not in red zone
+bool ab2_iron_condor = (zone == 3) and (ribbon_width < 14.0) and (spread_zone != 4)
 
-string ab2_signal = ab2_bull_put ? "Bull Put" : ab2_bear_call ? "Bear Call" : ab2_iron_condor ? "Iron Condor" : "None"
-bool ab2_active = ab2_bull_put or ab2_bear_call or ab2_iron_condor
+// Conservative spread: yellow zone, use forecast direction
+bool ab2_conservative = is_mid and (spread_zone == 1)
 
-// AB2 markers (tiny diamonds, only on first bar of condition)
-plotshape(show_ab2_markers and ab2_bull_put and not ab2_bull_put[1], title="AB2 Bull Put", location=location.belowbar, style=shape.diamond, color=color.green, size=size.tiny)
-plotshape(show_ab2_markers and ab2_bear_call and not ab2_bear_call[1], title="AB2 Bear Call", location=location.abovebar, style=shape.diamond, color=color.red, size=size.tiny)
+string ab2_signal = ab2_bull_put ? "Bull Put ▲" : ab2_bear_call ? "Bear Call ▼" : ab2_iron_condor ? "Iron Condor ↔" : ab2_conservative ? "Conservative" : "None"
+bool ab2_active = ab2_bull_put or ab2_bear_call or ab2_iron_condor or ab2_conservative
+
+// AB2 markers (only on first bar of condition)
+plotshape(show_ab2_markers and ab2_bull_put and not ab2_bull_put[1], title="AB2 Bull Put", location=location.belowbar, style=shape.diamond, color=color.green, size=size.small)
+plotshape(show_ab2_markers and ab2_bear_call and not ab2_bear_call[1], title="AB2 Bear Call", location=location.abovebar, style=shape.diamond, color=color.red, size=size.small)
 plotshape(show_ab2_markers and ab2_iron_condor and not ab2_iron_condor[1], title="AB2 Iron Condor", location=location.belowbar, style=shape.diamond, color=color.purple, size=size.tiny)
+plotshape(show_ab2_markers and ab2_conservative and not ab2_conservative[1], title="AB2 Conservative", location=location.belowbar, style=shape.circle, color=color.yellow, size=size.tiny)
 
 // ═══════════════════════════════════════════════════════════════
 // FORECAST PERCENTILE LOOKUP
@@ -207,7 +223,7 @@ f_get_pct(int z, int day_idx, int pct) =>
     result
 
 // ═══════════════════════════════════════════════════════════════
-// FORECAST RIBBON — 20 days forward from last bar
+// FORECAST RIBBON
 // ═══════════════════════════════════════════════════════════════
 
 if barstate.islast and show_ribbon
@@ -270,7 +286,7 @@ if barstate.islast and show_table
 
     // Row 1: Concordance
     table.cell(info_tbl, 0, 1, "Concordance", text_color=color.gray, text_size=size.tiny)
-    table.cell(info_tbl, 1, 1, str.format("CT{0} ({1}/4 bull)", bull_count, bull_count), text_color=color.white, text_size=size.tiny)
+    table.cell(info_tbl, 1, 1, str.format("CT{0} ({1}/4)", bull_count, bull_count), text_color=color.white, text_size=size.tiny)
 
     // Row 2: SRIBI Average
     table.cell(info_tbl, 0, 2, "SRIBI Avg", text_color=color.gray, text_size=size.tiny)
@@ -293,31 +309,40 @@ if barstate.islast and show_table
     table.cell(info_tbl, 0, 7, "20d Median", text_color=color.gray, text_size=size.tiny)
     table.cell(info_tbl, 1, 7, str.format("{0}%", str.tostring(med_20, "#.##")), text_color=med_clr, text_size=size.tiny)
 
-    // Row 8: Breach Risk
-    color risk_clr = not near_stl ? color.gray : risk_zone == 0 ? color.green : risk_zone == 1 ? color.yellow : color.red
-    table.cell(info_tbl, 0, 8, "STL Breach", text_color=color.gray, text_size=size.tiny)
-    table.cell(info_tbl, 1, 8, risk_name, text_color=risk_clr, text_size=size.tiny)
+    // Row 8: Spread Zone
+    color sz_clr = switch spread_zone
+        0 => color.gray
+        1 => color.yellow
+        2 => color.new(#90EE90, 0)
+        3 => color.green
+        4 => color.red
+        => color.gray
+    table.cell(info_tbl, 0, 8, "Spread", text_color=color.gray, text_size=size.tiny)
+    table.cell(info_tbl, 1, 8, spread_action, text_color=sz_clr, text_size=size.tiny)
 
     // Row 9: AB2 Signal
-    color ab2_tbl_clr = ab2_active ? (ab2_bull_put ? color.green : ab2_bear_call ? color.red : color.purple) : color.gray
-    table.cell(info_tbl, 0, 9, "AB2 Signal", text_color=color.gray, text_size=size.tiny)
-    table.cell(info_tbl, 1, 9, ab2_signal, text_color=ab2_tbl_clr, text_size=size.tiny)
+    color ab2_clr = ab2_bull_put ? color.green : ab2_bear_call ? color.red : ab2_iron_condor ? color.purple : ab2_conservative ? color.yellow : color.gray
+    table.cell(info_tbl, 0, 9, "AB2", text_color=color.gray, text_size=size.tiny)
+    table.cell(info_tbl, 1, 9, ab2_signal, text_color=ab2_clr, text_size=size.tiny)
 
 // ═══════════════════════════════════════════════════════════════
 // ALERTS
 // ═══════════════════════════════════════════════════════════════
 
-// Zone alerts
-alertcondition(ta.cross(sribi_avg, 25.0), title="SRIBI Enters Very Bullish", message="SRI Forecast: SRIBI average crossed above +25 — Very Bullish zone")
-alertcondition(ta.cross(-25.0, sribi_avg), title="SRIBI Enters Very Bearish", message="SRI Forecast: SRIBI average crossed below -25 — Very Bearish zone (contrarian bullish)")
-alertcondition(ta.crossover(float(bull_count), 3.5), title="CT4 — Full Concordance", message="SRI Forecast: All 4 timeframes bullish — CT4 full concordance")
-alertcondition(ta.crossunder(float(bull_count), 0.5), title="CT0 — Full Bearish", message="SRI Forecast: All 4 timeframes bearish — CT0 (watch for capitulation)")
+// Forecast zone alerts
+alertcondition(ta.cross(sribi_avg, 25.0), title="SRIBI Very Bullish", message="SRI Forecast: SRIBI avg crossed +25 — Very Bullish zone")
+alertcondition(ta.cross(-25.0, sribi_avg), title="SRIBI Very Bearish", message="SRI Forecast: SRIBI avg crossed -25 — Very Bearish (contrarian bullish)")
+alertcondition(ta.crossover(float(bull_count), 3.5), title="CT4 Full Concordance", message="SRI Forecast: All 4 TFs bullish — CT4")
+alertcondition(ta.crossunder(float(bull_count), 0.5), title="CT0 Full Bearish", message="SRI Forecast: All 4 TFs bearish — CT0")
 
-// Breach risk alerts
-alertcondition(near_stl and risk_zone == 0 and (not near_stl[1] or risk_zone[1] != 0), title="STL Breach Risk LOW — Spread Safe", message="SRI Forecast: Price near STL with LOW breach risk (83% hold rate). Safe for credit spreads.")
-alertcondition(near_stl and risk_zone == 2 and (not near_stl[1] or risk_zone[1] != 2), title="STL Breach Risk HIGH — Avoid Spreads", message="SRI Forecast: Price near STL with HIGH breach risk (71% breach rate). Avoid new spreads.")
+// Spread zone alerts
+alertcondition(spread_zone == 3 and spread_zone[1] != 3, title="STL GREEN — Overweight Spreads", message="SRI Forecast: GREEN zone — near STL, low breach risk, 81% hold. Overweight spreads, juicy premiums.")
+alertcondition(spread_zone == 2 and spread_zone[1] != 2, title="STL LIGHT GREEN — Standard Spreads", message="SRI Forecast: LIGHT GREEN zone — near STL, moderate risk, 84% hold. Standard size spreads.")
+alertcondition(spread_zone == 1 and spread_zone[1] != 1, title="STL YELLOW — Conservative Spreads", message="SRI Forecast: YELLOW zone — 3-8% from STL, 74% hold. Conservative spreads, tight strikes.")
+alertcondition(spread_zone == 4 and spread_zone[1] != 4, title="STL RED — Avoid Spreads", message="SRI Forecast: RED zone — near STL, HIGH breach risk, 73% breach rate. Avoid new spreads. Consider closing.")
+alertcondition(spread_zone == 0 and spread_zone[1] != 0, title="STL GRAY — STRC", message="SRI Forecast: GRAY zone — >8% from STL. Thin premiums. Capital better in STRC (~10% annual).")
 
 // AB2 alerts
-alertcondition(ab2_bull_put and not ab2_bull_put[1], title="AB2 Bull Put Spread", message="SRI Forecast: Bull Put Spread — price near STL support, LOW breach risk, bearish zone. Strike at STL level.")
-alertcondition(ab2_bear_call and not ab2_bear_call[1], title="AB2 Bear Call Spread", message="SRI Forecast: Bear Call Spread — price extended above FTL, bullish zone. Strike above current level.")
-alertcondition(ab2_iron_condor and not ab2_iron_condor[1], title="AB2 Iron Condor", message="SRI Forecast: Iron Condor — neutral zone, narrow expected range. Strikes at p25/p75 levels.")
+alertcondition(ab2_bull_put and not ab2_bull_put[1], title="AB2 Bull Put Spread", message="SRI Forecast: Bull Put — near STL support, green zone, bearish forecast. Strike at STL.")
+alertcondition(ab2_bear_call and not ab2_bear_call[1], title="AB2 Bear Call Spread", message="SRI Forecast: Bear Call — extended above FTL, bullish zone. Strike above current.")
+alertcondition(ab2_iron_condor and not ab2_iron_condor[1], title="AB2 Iron Condor", message="SRI Forecast: Iron Condor — neutral zone, narrow range. Strikes at p25/p75.")
