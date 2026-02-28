@@ -10,6 +10,20 @@ indicator(title="SRI Forecast AB1", shorttitle="SRI AB1", overlay=true, max_labe
 // ═══════════════════════════════════════════════════════════════
 // INPUTS
 // ═══════════════════════════════════════════════════════════════
+string grp_mode   = "Asset Mode"
+string asset_mode = input.string("Auto-Detect", "Asset Behavior", options=["Auto-Detect", "Momentum", "Mean-Reverting"], group=grp_mode, tooltip="Auto-Detect: uses symbol to classify\nMomentum: BTC, MSTR, TSLA — bearish signals OFF (no edge)\nMean-Reverting: SPY, QQQ, TLT — bearish signals ON (extremes revert)")
+
+f_is_momentum() =>
+    string t = str.upper(syminfo.ticker)
+    bool is_crypto = syminfo.type == "crypto" or str.contains(t, "BTC") or str.contains(t, "ETH") or str.contains(t, "SOL") or str.contains(t, "XRP")
+    bool is_mstr = str.contains(t, "MSTR")
+    bool is_tsla = str.contains(t, "TSLA")
+    bool is_ibit = str.contains(t, "IBIT") or str.contains(t, "GBTC") or str.contains(t, "BITO")
+    is_crypto or is_mstr or is_tsla or is_ibit
+
+string resolved_mode = asset_mode == "Auto-Detect" ? (f_is_momentum() ? "Momentum" : "Mean-Reverting") : asset_mode
+bool is_mr = resolved_mode == "Mean-Reverting"
+
 string grp_core   = "Core Settings"
 int at_period     = input.int(14, "Trackline ATR Period", group=grp_core)
 float at_coeff    = input.float(1.0, "Trackline ATR Coefficient", group=grp_core)
@@ -17,7 +31,8 @@ float mid_pct     = input.float(8.0, "Mid STL %", group=grp_core, tooltip="Pullb
 
 string grp_signals = "Signals"
 bool enable_bull  = input.bool(true, "Enable Bullish Signals", group=grp_signals, tooltip="FTL cross + CT3+ pullback. BTC: 67-74% win rate.")
-bool enable_bear  = input.bool(false, "Enable Bearish Signals", group=grp_signals, tooltip="OFF for BTC (no edge). Enable for SPY/other mean-reverting assets after backtesting.")
+bool bear_override = input.bool(false, "Force Bearish Signals", group=grp_signals, tooltip="Manual override. In Auto-Detect mode, bearish signals auto-enable on MR assets.")
+bool enable_bear  = bear_override or is_mr
 
 string grp_disp   = "Display"
 bool show_table         = input.bool(true, "Show Info Table", group=grp_disp)
@@ -127,8 +142,10 @@ var table info_tbl = table.new(position.bottom_right, 2, 6, bgcolor=color.new(co
 
 if barstate.islast and show_table
     // Header
+    string mode_tag = is_mr ? "MR" : "TR"
+    string auto_tag = asset_mode == "Auto-Detect" ? "⚡" : ""
     color hdr_clr = ab1_bull ? fluorescent_green : ab1_bear ? fluorescent_pink : color.gray
-    table.cell(info_tbl, 0, 0, "SRI AB1", text_color=color.white, text_size=size.small, bgcolor=hdr_clr)
+    table.cell(info_tbl, 0, 0, str.format("AB1 [{0}]{1}", mode_tag, auto_tag), text_color=color.white, text_size=size.small, bgcolor=hdr_clr)
     table.cell(info_tbl, 1, 0, ab1_signal, text_color=color.white, text_size=size.small, bgcolor=hdr_clr)
 
     // Structure
