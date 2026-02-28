@@ -208,12 +208,8 @@ float total_pnl = has_qty ? contract_pnl * leap_qty : 0
 plot(loi, "LOI", color=loi_color, linewidth=2)
 hline(0, "Zero", color=color.new(color.gray, 60), linestyle=hline.style_dotted)
 
-// Reference levels — thin dashed lines, high transparency (not circles)
-plot(trim1_level, "Trim 1", color=color.new(color.orange, 80), linewidth=1, style=plot.style_line)
-plot(trim2_level, "Trim 2", color=color.new(color.orange, 70), linewidth=1, style=plot.style_line)
-plot(trim3_level, "Trim 3", color=color.new(color.red, 70), linewidth=1, style=plot.style_line)
-plot(acc_level, "Accumulation", color=color.new(color.green, 70), linewidth=1, style=plot.style_line)
-plot(deep_acc_level, "Deep Accumulation", color=color.new(#00FF00, 70), linewidth=1, style=plot.style_line)
+// Reference levels removed — zone backgrounds communicate thresholds
+// Threshold values shown in info table and legend instead
 
 bgcolor(show_zones ? zone_bg : na, title="LOI Zone Background")
 
