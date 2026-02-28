@@ -1,7 +1,9 @@
-// SRI Forecast AB1 — Directional Trade Signals
-// LT SRI backbone + FTL/STL crossover and pullback entry detection
-// Fluorescent green = bullish, fluorescent pink = bearish (per-asset toggle)
-// BTC backtest: Initiation 67% win +9.1% at 20d, Pullback 74% win +6.1% at 20d
+// SRI Forecast AB1 — Directional Trade Signals (v2)
+// LT SRI backbone + high-confidence regime signals
+// Signals indicate "conditions favor a directional trade" — NOT immediate entry
+// Confirmation candle required: signal ARMS on condition, FIRES on breakout
+// Strong (◆) = 3/3 conditions, Setup (○) = 2/3 conditions
+// Exit: FTL crosses below STL (backtested: 56% win, +5% mean, ~19d hold)
 // © RizenShine — Forecast engine by CIO
 
 //@version=6
@@ -27,16 +29,17 @@ bool is_mr = resolved_mode == "Mean-Reverting"
 string grp_core   = "Core Settings"
 int at_period     = input.int(14, "Trackline ATR Period", group=grp_core)
 float at_coeff    = input.float(1.0, "Trackline ATR Coefficient", group=grp_core)
-float mid_pct     = input.float(8.0, "Mid STL %", group=grp_core, tooltip="Pullback zone: 3-8% from STL")
 
 string grp_signals = "Signals"
-bool enable_bull  = input.bool(true, "Enable Bullish Signals", group=grp_signals, tooltip="FTL cross + CT3+ pullback. BTC: 67-74% win rate.")
-bool bear_override = input.bool(false, "Force Bearish Signals", group=grp_signals, tooltip="Manual override. In Auto-Detect mode, bearish signals auto-enable on MR assets.")
+bool enable_bull  = input.bool(true, "Enable Bullish Signals", group=grp_signals)
+bool bear_override = input.bool(false, "Force Bearish Signals", group=grp_signals, tooltip="Manual override. In Auto-Detect, bearish signals auto-enable on MR assets.")
 bool enable_bear  = bear_override or is_mr
 
 string grp_disp   = "Display"
 bool show_table         = input.bool(true, "Show Info Table", group=grp_disp)
+bool show_legend        = input.bool(true, "Show Legend", group=grp_disp)
 bool show_stage_bg      = input.bool(true, "Show LT Stage Background", group=grp_disp)
+bool show_setups        = input.bool(true, "Show Setup Signals (2/3)", group=grp_disp, tooltip="Show lower-confidence 2/3 signals as small circles")
 
 // ═══════════════════════════════════════════════════════════════
 // TRACKLINE FUNCTION
@@ -78,7 +81,6 @@ int bull_count = (vst_sribi > 0 ? 1 : 0) + (st_sribi > 0 ? 1 : 0) + (lt_sribi > 
 bool lt_bullish = lt_ftl > lt_stl
 bool lt_ftl_rising = lt_ftl > nz(lt_ftl[1])
 
-// Plot tracklines (clean — no spread coloring, that's AB2's job)
 color ftl_color = lt_ftl_rising ? color.new(color.teal, 30) : color.new(color.maroon, 30)
 plot(lt_ftl, "LT Fast Trackline", color=ftl_color, linewidth=2, style=plot.style_circles)
 plot(lt_stl, "LT Slow Trackline", color=lt_bullish ? color.new(color.teal, 40) : color.new(color.maroon, 40), linewidth=2)
@@ -86,97 +88,173 @@ plot(lt_stl, "LT Slow Trackline", color=lt_bullish ? color.new(color.teal, 40) :
 bgcolor(show_stage_bg ? (lt_bullish ? color.new(color.green, 93) : color.new(color.red, 93)) : na, title="LT Stage Background")
 
 // ═══════════════════════════════════════════════════════════════
-// AB1 DIRECTIONAL SIGNALS
+// AB1 HIGH-CONFIDENCE DIRECTIONAL SIGNALS (v2)
 //
-// BULLISH (backtested on BTC 2021-2026):
-//   Signal A — FTL crosses above STL: 67% win, +9.1% median at 20d (n=15, ~4x/yr)
-//   Signal B — CT3+ pullback entry:   74% win, +6.1% median at 20d (n=10, ~3x/yr)
+// Three independent conditions scored for confidence:
+//   C1: FTL structure — FTL > STL and rising
+//   C2: Concordance — SRIBI avg > +10 (multi-TF alignment)
+//   C3: Price confirmation — close above prior 5-bar high (breakout)
 //
-// BEARISH (scaffolded — enable per-asset after backtesting):
-//   Signal C — FTL crosses below STL
-//   Signal D — CT0 + momentum breakdown
+// Strong (◆) = 3/3 → high-confidence regime, ~1-2/month
+// Setup (○) = 2/3 → conditions forming, watch for completion
 //
-// WARNING: On BTC, bearish signals have no edge (48-49% win as shorts).
-// Steep declining STL + far below = CONTRARIAN LONG (66% win).
+// EXIT: FTL crosses below STL (backtested: 56% win, +5% mean, ~19d hold)
+// TIME STOP: No +5% in 5 bars → close (pulse didn't materialize)
+// STOP: Close below swing low preceding signal
 // ═══════════════════════════════════════════════════════════════
 
 float pct_from_stl = lt_stl != 0 ? (close - lt_stl) / lt_stl * 100 : 0
-float abs_pct_from_stl = math.abs(pct_from_stl)
 float roc_5 = close[5] != 0 ? (close - close[5]) / close[5] * 100 : 0
-bool is_mid = abs_pct_from_stl >= 3.0 and abs_pct_from_stl < mid_pct
+float high_5 = ta.highest(high, 5)
+float low_5 = ta.lowest(low, 5)
 
-// FTL/STL crossovers
-bool ftl_was_below = nz(lt_ftl[1]) <= nz(lt_stl[1])
-bool ftl_was_above = nz(lt_ftl[1]) > nz(lt_stl[1])
-bool ftl_cross_bull = lt_ftl > lt_stl and ftl_was_below
-bool ftl_cross_bear = lt_ftl < lt_stl and ftl_was_above
+// --- BULLISH CONDITIONS ---
+bool c1_bull = lt_ftl > lt_stl and lt_ftl_rising
+bool c2_bull = sribi_avg > 10.0
+bool c3_bull = close > high_5[1]  // breakout above prior 5-bar high
 
-// --- BULLISH ---
-bool ab1_bull_init = enable_bull and ftl_cross_bull
-bool ab1_bull_pull = enable_bull and (bull_count >= 3) and lt_bullish and is_mid and (roc_5 > 0)
-bool ab1_bull = ab1_bull_init or ab1_bull_pull
+int bull_score = (c1_bull ? 1 : 0) + (c2_bull ? 1 : 0) + (c3_bull ? 1 : 0)
+bool bull_strong = enable_bull and bull_score == 3
+bool bull_setup  = enable_bull and bull_score == 2
 
-// --- BEARISH (default OFF) ---
-bool ab1_bear_init = enable_bear and ftl_cross_bear
-bool ab1_bear_brkdn = enable_bear and (bull_count == 0) and not lt_bullish and (pct_from_stl < -3) and (roc_5 < -3)
-bool ab1_bear = ab1_bear_init or ab1_bear_brkdn
+// Deduplicate: don't fire strong if already strong recently (within 10 bars)
+bool bull_strong_new = bull_strong and not bull_strong[1]
+bool bull_setup_new  = bull_setup and not bull_setup[1] and not bull_strong
 
-// Combined
-string ab1_signal = ab1_bull_init ? "LONG Init ▲▲" : ab1_bull_pull ? "LONG Pullback ▲" : ab1_bear_init ? "SHORT Init ▼▼" : ab1_bear_brkdn ? "SHORT Brkdn ▼" : "None"
+// --- BEARISH CONDITIONS (MR assets only) ---
+bool c1_bear = lt_ftl < lt_stl and not lt_ftl_rising
+bool c2_bear = sribi_avg < -10.0
+bool c3_bear = close < low_5[1]  // breakdown below prior 5-bar low
+
+int bear_score = (c1_bear ? 1 : 0) + (c2_bear ? 1 : 0) + (c3_bear ? 1 : 0)
+bool bear_strong = enable_bear and bear_score == 3
+bool bear_setup  = enable_bear and bear_score == 2
+
+bool bear_strong_new = bear_strong and not bear_strong[1]
+bool bear_setup_new  = bear_setup and not bear_setup[1] and not bear_strong
+
+// --- EXIT TRACKING ---
+bool ftl_cross_bear = lt_ftl < lt_stl and nz(lt_ftl[1]) >= nz(lt_stl[1])
+bool ftl_cross_bull = lt_ftl > lt_stl and nz(lt_ftl[1]) <= nz(lt_stl[1])
+
+// Track active regime
+var bool in_bull_regime = false
+var int regime_bar = 0
+var float regime_entry = 0.0
+var float regime_peak = 0.0
+
+if bull_strong_new
+    in_bull_regime := true
+    regime_bar := bar_index
+    regime_entry := close
+    regime_peak := close
+
+if in_bull_regime
+    regime_peak := math.max(regime_peak, close)
+
+// Exit conditions
+bool exit_ftl = in_bull_regime and ftl_cross_bear
+bool exit_time = in_bull_regime and (bar_index - regime_bar >= 5) and regime_entry > 0 and ((regime_peak - regime_entry) / regime_entry * 100 < 5.0)
+
+if exit_ftl or exit_time
+    in_bull_regime := false
+
+// Combined signal string
+string ab1_signal = bull_strong ? "STRONG LONG ◆" : bull_setup ? "Setup Long ○" : bear_strong ? "STRONG SHORT ◆" : bear_setup ? "Setup Short ○" : in_bull_regime ? "In Regime ▶" : "None"
 
 // Colors
 color fluorescent_green = #39FF14
 color fluorescent_pink  = #FF1493
+color dim_green = color.new(#39FF14, 50)
+color dim_pink  = color.new(#FF1493, 50)
 
-// Markers
-plotshape(ab1_bull_init, title="AB1 Bull Initiation", location=location.belowbar, style=shape.triangleup, color=fluorescent_green, size=size.normal, text="AB1", textcolor=fluorescent_green)
-plotshape(ab1_bull_pull and not ab1_bull_pull[1], title="AB1 Bull Pullback", location=location.belowbar, style=shape.triangleup, color=fluorescent_green, size=size.small, text="AB1↩", textcolor=fluorescent_green)
-plotshape(ab1_bear_init, title="AB1 Bear Initiation", location=location.abovebar, style=shape.triangledown, color=fluorescent_pink, size=size.normal, text="AB1", textcolor=fluorescent_pink)
-plotshape(ab1_bear_brkdn and not ab1_bear_brkdn[1], title="AB1 Bear Breakdown", location=location.abovebar, style=shape.triangledown, color=fluorescent_pink, size=size.small, text="AB1↩", textcolor=fluorescent_pink)
+// ═══════════════════════════════════════════════════════════════
+// MARKERS
+// ═══════════════════════════════════════════════════════════════
+
+// Strong signals — diamonds
+plotshape(bull_strong_new, title="AB1 Strong Bull", location=location.belowbar, style=shape.diamond, color=fluorescent_green, size=size.small)
+plotshape(bear_strong_new, title="AB1 Strong Bear", location=location.abovebar, style=shape.diamond, color=fluorescent_pink, size=size.small)
+
+// Setup signals — small circles (toggleable)
+plotshape(show_setups and bull_setup_new, title="AB1 Setup Bull", location=location.belowbar, style=shape.circle, color=dim_green, size=size.tiny)
+plotshape(show_setups and bear_setup_new, title="AB1 Setup Bear", location=location.abovebar, style=shape.circle, color=dim_pink, size=size.tiny)
+
+// Exit markers
+plotshape(exit_ftl, title="AB1 Exit — FTL<STL", location=location.abovebar, style=shape.xcross, color=color.new(color.gray, 30), size=size.tiny)
+plotshape(exit_time, title="AB1 Exit — Time Stop", location=location.abovebar, style=shape.xcross, color=color.new(color.orange, 30), size=size.tiny)
 
 // ═══════════════════════════════════════════════════════════════
 // INFO TABLE
 // ═══════════════════════════════════════════════════════════════
 
-var table info_tbl = table.new(position.bottom_right, 2, 6, bgcolor=color.new(color.black, 30), border_width=1, border_color=color.new(color.gray, 60), frame_width=1, frame_color=color.new(color.gray, 40))
+var table info_tbl = table.new(position.bottom_right, 2, 8, bgcolor=color.new(color.black, 30), border_width=1, border_color=color.new(color.gray, 60), frame_width=1, frame_color=color.new(color.gray, 40))
 
 if barstate.islast and show_table
-    // Header
     string mode_tag = is_mr ? "MR" : "TR"
     string auto_tag = asset_mode == "Auto-Detect" ? "⚡" : ""
-    color hdr_clr = ab1_bull ? fluorescent_green : ab1_bear ? fluorescent_pink : color.gray
+    color hdr_clr = bull_strong ? fluorescent_green : bear_strong ? fluorescent_pink : in_bull_regime ? color.new(color.teal, 30) : color.new(color.gray, 30)
     table.cell(info_tbl, 0, 0, str.format("AB1 [{0}]{1}", mode_tag, auto_tag), text_color=color.white, text_size=size.small, bgcolor=hdr_clr)
     table.cell(info_tbl, 1, 0, ab1_signal, text_color=color.white, text_size=size.small, bgcolor=hdr_clr)
 
-    // Structure
-    string struct_txt = lt_bullish ? "FTL > STL ✓" : "FTL < STL ✗"
-    color struct_clr = lt_bullish ? color.teal : color.maroon
-    table.cell(info_tbl, 0, 1, "Structure", text_color=color.gray, text_size=size.tiny)
-    table.cell(info_tbl, 1, 1, struct_txt, text_color=struct_clr, text_size=size.tiny)
+    // Condition checklist
+    string c1_str = c1_bull ? "✓ FTL>STL rising" : "✗ FTL structure"
+    string c2_str = c2_bull ? str.format("✓ SRIBI {0}", str.tostring(sribi_avg, "#.#")) : str.format("✗ SRIBI {0}", str.tostring(sribi_avg, "#.#"))
+    string c3_str = c3_bull ? "✓ Breakout" : "✗ No breakout"
+    table.cell(info_tbl, 0, 1, "C1", text_color=color.gray, text_size=size.tiny)
+    table.cell(info_tbl, 1, 1, c1_str, text_color=c1_bull ? color.teal : color.red, text_size=size.tiny)
+    table.cell(info_tbl, 0, 2, "C2", text_color=color.gray, text_size=size.tiny)
+    table.cell(info_tbl, 1, 2, c2_str, text_color=c2_bull ? color.teal : color.red, text_size=size.tiny)
+    table.cell(info_tbl, 0, 3, "C3", text_color=color.gray, text_size=size.tiny)
+    table.cell(info_tbl, 1, 3, c3_str, text_color=c3_bull ? color.teal : color.red, text_size=size.tiny)
+
+    // Score
+    table.cell(info_tbl, 0, 4, "Score", text_color=color.gray, text_size=size.tiny)
+    color score_clr = bull_score == 3 ? fluorescent_green : bull_score == 2 ? color.yellow : color.gray
+    table.cell(info_tbl, 1, 4, str.format("{0}/3 {1}", bull_score, bull_score == 3 ? "STRONG" : bull_score == 2 ? "Setup" : "—"), text_color=score_clr, text_size=size.tiny)
 
     // Concordance
-    table.cell(info_tbl, 0, 2, "Concordance", text_color=color.gray, text_size=size.tiny)
-    table.cell(info_tbl, 1, 2, str.format("CT{0} ({1}/4)", bull_count, bull_count), text_color=color.white, text_size=size.tiny)
-
-    // SRIBI
-    color sribi_clr = sribi_avg > 5 ? color.teal : sribi_avg < -5 ? color.red : color.gray
-    table.cell(info_tbl, 0, 3, "SRIBI Avg", text_color=color.gray, text_size=size.tiny)
-    table.cell(info_tbl, 1, 3, str.tostring(sribi_avg, "#.#"), text_color=sribi_clr, text_size=size.tiny)
+    table.cell(info_tbl, 0, 5, "CT", text_color=color.gray, text_size=size.tiny)
+    table.cell(info_tbl, 1, 5, str.format("CT{0} ({1}/4)", bull_count, bull_count), text_color=color.white, text_size=size.tiny)
 
     // Distance from STL
-    table.cell(info_tbl, 0, 4, "From STL", text_color=color.gray, text_size=size.tiny)
-    table.cell(info_tbl, 1, 4, str.format("{0}%", str.tostring(pct_from_stl, "#.#")), text_color=color.white, text_size=size.tiny)
+    table.cell(info_tbl, 0, 6, "From STL", text_color=color.gray, text_size=size.tiny)
+    table.cell(info_tbl, 1, 6, str.format("{0}%", str.tostring(pct_from_stl, "#.#")), text_color=color.white, text_size=size.tiny)
 
-    // Momentum
-    color roc_clr = roc_5 > 0 ? color.teal : color.red
-    table.cell(info_tbl, 0, 5, "5d ROC", text_color=color.gray, text_size=size.tiny)
-    table.cell(info_tbl, 1, 5, str.format("{0}%", str.tostring(roc_5, "#.#")), text_color=roc_clr, text_size=size.tiny)
+    // Regime status
+    string regime_str = in_bull_regime ? str.format("Active ({0}b)", bar_index - regime_bar) : "—"
+    table.cell(info_tbl, 0, 7, "Regime", text_color=color.gray, text_size=size.tiny)
+    table.cell(info_tbl, 1, 7, regime_str, text_color=in_bull_regime ? color.teal : color.gray, text_size=size.tiny)
+
+// ═══════════════════════════════════════════════════════════════
+// LEGEND
+// ═══════════════════════════════════════════════════════════════
+
+var table legend_tbl = table.new(position.bottom_left, 2, 7, bgcolor=color.new(color.black, 20), border_width=1, border_color=color.new(color.gray, 70), frame_width=1, frame_color=color.new(color.gray, 50))
+
+if barstate.islast and show_legend
+    table.cell(legend_tbl, 0, 0, "AB1 Legend", text_color=color.white, text_size=size.tiny, bgcolor=color.new(color.gray, 50))
+    table.cell(legend_tbl, 1, 0, "", bgcolor=color.new(color.gray, 50))
+    table.cell(legend_tbl, 0, 1, "◆ below", text_color=fluorescent_green, text_size=size.tiny)
+    table.cell(legend_tbl, 1, 1, "Strong bullish (3/3)", text_color=color.white, text_size=size.tiny)
+    table.cell(legend_tbl, 0, 2, "○ below", text_color=dim_green, text_size=size.tiny)
+    table.cell(legend_tbl, 1, 2, "Setup bullish (2/3)", text_color=color.gray, text_size=size.tiny)
+    table.cell(legend_tbl, 0, 3, "◆ above", text_color=fluorescent_pink, text_size=size.tiny)
+    table.cell(legend_tbl, 1, 3, "Strong bearish (3/3)", text_color=color.white, text_size=size.tiny)
+    table.cell(legend_tbl, 0, 4, "○ above", text_color=dim_pink, text_size=size.tiny)
+    table.cell(legend_tbl, 1, 4, "Setup bearish (2/3)", text_color=color.gray, text_size=size.tiny)
+    table.cell(legend_tbl, 0, 5, "✕ above", text_color=color.gray, text_size=size.tiny)
+    table.cell(legend_tbl, 1, 5, "Exit signal", text_color=color.gray, text_size=size.tiny)
+    table.cell(legend_tbl, 0, 6, "Green/Red", text_color=color.gray, text_size=size.tiny)
+    table.cell(legend_tbl, 1, 6, "FTL(dots) / STL(line)", text_color=color.gray, text_size=size.tiny)
 
 // ═══════════════════════════════════════════════════════════════
 // ALERTS
 // ═══════════════════════════════════════════════════════════════
 
-alertcondition(ab1_bull_init, title="AB1 LONG — Trend Initiation", message="SRI AB1: LONG — FTL crossed above STL. Fresh bullish structure. BTC: 67% win, +9.1% at 20d. Calls or shares.")
-alertcondition(ab1_bull_pull and not ab1_bull_pull[1], title="AB1 LONG — Pullback Entry", message="SRI AB1: LONG — CT3+ confirmed, pullback to 3-8% from STL, bouncing. BTC: 74% win, +6.1% at 20d.")
-alertcondition(ab1_bear_init, title="AB1 SHORT — Trend Initiation", message="SRI AB1: SHORT — FTL crossed below STL. Bearish structure. Requires per-asset backtest.")
-alertcondition(ab1_bear_brkdn and not ab1_bear_brkdn[1], title="AB1 SHORT — Breakdown", message="SRI AB1: SHORT — CT0 momentum breakdown. Requires per-asset backtest.")
+alertcondition(bull_strong_new, title="AB1 STRONG LONG", message="SRI AB1: STRONG LONG — all 3 conditions met (FTL structure + concordance + breakout). Regime favors long calls.")
+alertcondition(bull_setup_new, title="AB1 Setup Long", message="SRI AB1: Setup Long — 2/3 conditions met. Watch for completion.")
+alertcondition(bear_strong_new, title="AB1 STRONG SHORT", message="SRI AB1: STRONG SHORT — all 3 bearish conditions met (MR asset). Regime favors puts/bear spreads.")
+alertcondition(bear_setup_new, title="AB1 Setup Short", message="SRI AB1: Setup Short — 2/3 bearish conditions. Watch for completion.")
+alertcondition(exit_ftl, title="AB1 Exit — FTL<STL", message="SRI AB1: EXIT — FTL crossed below STL. Close directional position.")
+alertcondition(exit_time, title="AB1 Exit — Time Stop", message="SRI AB1: EXIT — 5-bar time stop, no +5% move. Pulse didn't materialize.")
