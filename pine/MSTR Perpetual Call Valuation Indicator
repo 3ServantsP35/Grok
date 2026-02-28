@@ -1,0 +1,55 @@
+// This Pine Script® code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © RizenShine
+
+//@version=6
+indicator("MSTR Perp Call Val", shorttitle="MSTR PC Val", overlay=true)
+
+// Inputs
+btc_per_share = input.float(0.002466, "BTC per Share")
+software_per_share = input.float(5.18, "Software Value per Share")
+debt_per_share = input.float(28.41, "Debt per Share")
+vol = input.float(0.75, "Bitcoin Volatility (Annual)")
+rf = input.float(0.045, "Risk-Free Rate")
+q_yield = input.float(0.015, "Dividend Yield")
+T = 10.0 // Approx perpetuity with long expiry
+bottom_threshold = input.float(0.8, "Bottom Threshold (x Fair Value)")
+top_threshold = input.float(1.5, "Top Threshold (x Fair Value)")
+
+// Fetch BTC price (use your preferred symbol if different)
+btc_price = request.security("CRYPTO:BTCUSD", "D", close)
+
+// Asset value per share
+S = btc_per_share * btc_price + software_per_share
+
+// Black-Scholes d1 and d2
+ln_sk = math.log(S / debt_per_share)
+d1 = (ln_sk + (rf - q_yield + 0.5 * math.pow(vol, 2)) * T) / (vol * math.sqrt(T))
+d2 = d1 - vol * math.sqrt(T)
+
+// Norm CDF approximation function (Abramowitz & Stegun, error < 0.0001)
+norm_cdf(x) => 
+    t = 1.0 / (1.0 + 0.2316419 * math.abs(x))
+    a1 = 0.319381530
+    a2 = -0.356563782
+    a3 = 1.781477937
+    a4 = -1.821255978
+    a5 = 1.330274429
+    poly = t * (a1 + t * (a2 + t * (a3 + t * (a4 + t * a5))))
+    res = 1.0 / math.sqrt(2.0 * 3.141592653589793) * math.exp(-0.5 * math.pow(x, 2)) * poly
+    x >= 0 ? 1.0 - res : res
+
+// Fair value per share (BS call)
+exp_qt = math.exp(-q_yield * T)
+exp_rt = math.exp(-rf * T)
+fair_value = S * exp_qt * norm_cdf(d1) - debt_per_share * exp_rt * norm_cdf(d2)
+
+// Plots
+plot(fair_value, "Fair Value", color=color.blue, linewidth=2)
+plot(fair_value * bottom_threshold, "Bottom Band", color=color.green, style=plot.style_line, linestyle=plot.linestyle_dashed)
+plot(fair_value * top_threshold, "Top Band", color=color.red, style=plot.style_line, linestyle=plot.linestyle_dashed)
+
+// Signals
+bottom_signal = close < fair_value * bottom_threshold
+top_signal = close > fair_value * top_threshold
+plotshape(bottom_signal ? close : na, "Likely Bottom", shape.labelup, location.belowbar, color=color.green, text="Bottom")
+plotshape(top_signal ? close : na, "Likely Top", shape.labeldown, location.abovebar, color=color.red, text="Top")
