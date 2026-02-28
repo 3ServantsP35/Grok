@@ -1,4 +1,4 @@
-// SRI Forecast — Historical Analog Projection
+// SRI Forecast v2 — Historical Analog Projection + AB2 Spread Alerts
 // Simplified LT SRI backbone + 20-day forward projection ribbon
 // Based on SRIBI concordance across VST/ST/LT/VLT timeframes
 // Percentile tables derived from BTC backtests (2021-2026, n=1,709 daily)
@@ -10,167 +10,159 @@ indicator(title="SRI Forecast", shorttitle="SRI Forecast", overlay=true, max_lin
 // ═══════════════════════════════════════════════════════════════
 // INPUTS
 // ═══════════════════════════════════════════════════════════════
-int at_period     = input.int(14, "Trackline ATR Period")
-float at_coeff    = input.float(1.0, "Trackline ATR Coefficient")
-int rsi_len       = input.int(14, "RSI Length")
-int reg_len       = input.int(50, "LT Regression Length")
-float reg_mult    = input.float(1.0, "LT Regression Deviation")
-bool show_ribbon        = input.bool(true, "Show Forecast Ribbon")
-bool show_forecast_lbl  = input.bool(false, "Show Forecast End Label")
-bool show_concordance   = input.bool(false, "Show Concordance Label")
+string grp_core   = "Core Settings"
+int at_period     = input.int(14, "Trackline ATR Period", group=grp_core)
+float at_coeff    = input.float(1.0, "Trackline ATR Coefficient", group=grp_core)
+
+string grp_disp   = "Display"
+bool show_ribbon        = input.bool(true, "Show Forecast Ribbon", group=grp_disp)
+bool show_table         = input.bool(true, "Show Info Table", group=grp_disp)
+bool show_ab2_markers   = input.bool(true, "Show AB2 Spread Markers", group=grp_disp)
+bool show_stage_bg      = input.bool(true, "Show LT Stage Background", group=grp_disp)
 
 // ═══════════════════════════════════════════════════════════════
-// LT SRI BACKBONE — Simplified (FTL + STL + Stage Background)
-// Settings: RB=1D, FTL=4H, STL=1W
+// TRACKLINE FUNCTIONS
 // ═══════════════════════════════════════════════════════════════
 
-// --- LT Fast Trackline (4H) ---
-string tf_lt_fast = "240"
-
-f_trackline_fast() =>
-    atr = ta.rma(ta.tr(true), at_period)
-    upT = low - atr * at_coeff
-    downT = high + atr * at_coeff
-    cond = ta.rsi(close, at_period) >= 50
+f_trackline(int period, float coeff) =>
+    atr = ta.rma(ta.tr(true), period)
+    upT = low - atr * coeff
+    downT = high + atr * coeff
+    cond = ta.rsi(close, period) >= 50
     var float track = 0.0
     track := cond ? math.max(upT, nz(track[1])) : math.min(downT, nz(track[1]))
     track
 
-float lt_ftl = request.security(syminfo.tickerid, tf_lt_fast, f_trackline_fast())
-bool lt_ftl_rising = lt_ftl > nz(lt_ftl[1])
-
-// --- LT Slow Trackline (1W) ---
-string tf_lt_slow = "W"
-
-f_trackline_slow() =>
-    atr = ta.rma(ta.tr(true), at_period)
-    upT = low - atr * at_coeff
-    downT = high + atr * at_coeff
-    cond = ta.rsi(close, at_period) >= 50
-    var float track = 0.0
-    track := cond ? math.max(upT, nz(track[1])) : math.min(downT, nz(track[1]))
-    track
-
-float lt_stl = request.security(syminfo.tickerid, tf_lt_slow, f_trackline_slow())
-
-// --- LT Stage (FTL vs STL) ---
-bool lt_bullish = lt_ftl > lt_stl
-
-// --- Plot LT Backbone ---
-color ftl_color = lt_ftl_rising ? color.new(color.teal, 30) : color.new(color.maroon, 30)
-plot(lt_ftl, "LT Fast Trackline", color=ftl_color, linewidth=2, style=plot.style_circles)
-plot(lt_stl, "LT Slow Trackline", color=color.new(color.gray, 20), linewidth=2)
-
-// Stage background
-bgcolor(lt_bullish ? color.new(color.green, 92) : color.new(color.red, 92), title="LT Stage Background")
-
 // ═══════════════════════════════════════════════════════════════
-// SRIBI — All 4 Timeframes via request.security
-// VST: RB=2H, FTL=2H, STL=1D
-// ST:  RB=4H, FTL=2H, STL=1D
-// LT:  RB=1D, FTL=4H, STL=1W
-// VLT: RB=2D, FTL=8H, STL=2W
+// SRIBI — All 4 Timeframes
+// VST: FTL=2H, STL=1D | ST: FTL=2H, STL=1D
+// LT:  FTL=4H, STL=1W | VLT: FTL=8H, STL=2W
 // ═══════════════════════════════════════════════════════════════
-
-// SRIBI = normalized distance between FTL and STL
-// Positive = bullish (FTL > STL), Negative = bearish
-
-// We compute a simplified SRIBI proxy: (FTL - STL) / STL * 100
-// For each timeframe, we need FTL and STL
 
 // --- VST (FTL=2H, STL=1D) ---
-float vst_ftl = request.security(syminfo.tickerid, "120", f_trackline_fast())
-float vst_stl = request.security(syminfo.tickerid, "D", f_trackline_slow())
+float vst_ftl = request.security(syminfo.tickerid, "120", f_trackline(at_period, at_coeff))
+float vst_stl = request.security(syminfo.tickerid, "D",   f_trackline(at_period, at_coeff))
 float vst_sribi = vst_stl != 0 ? (vst_ftl - vst_stl) / vst_stl * 100 : 0
 
-// --- ST (FTL=2H, STL=1D) — same as VST for tracklines ---
-// ST uses different RB (4H) but FTL/STL same as VST
-// The SRIBI histogram in TradingView uses the RB relationship too
-// For forecast purposes, we approximate with FTL/STL spread
-float st_ftl = request.security(syminfo.tickerid, "120", f_trackline_fast())
-float st_stl = request.security(syminfo.tickerid, "D", f_trackline_slow())
+// --- ST (FTL=2H, STL=1D) ---
+float st_ftl = vst_ftl  // Same TF pair as VST
+float st_stl = vst_stl
 float st_sribi = st_stl != 0 ? (st_ftl - st_stl) / st_stl * 100 : 0
 
 // --- LT (FTL=4H, STL=1W) ---
+float lt_ftl = request.security(syminfo.tickerid, "240", f_trackline(at_period, at_coeff))
+float lt_stl = request.security(syminfo.tickerid, "W",   f_trackline(at_period, at_coeff))
 float lt_sribi = lt_stl != 0 ? (lt_ftl - lt_stl) / lt_stl * 100 : 0
 
 // --- VLT (FTL=8H, STL=2W) ---
-float vlt_ftl = request.security(syminfo.tickerid, "480", f_trackline_fast())
-float vlt_stl = request.security(syminfo.tickerid, "2W", f_trackline_slow())
+float vlt_ftl = request.security(syminfo.tickerid, "480", f_trackline(at_period, at_coeff))
+float vlt_stl = request.security(syminfo.tickerid, "2W",  f_trackline(at_period, at_coeff))
 float vlt_sribi = vlt_stl != 0 ? (vlt_ftl - vlt_stl) / vlt_stl * 100 : 0
 
 // --- Concordance ---
 float sribi_avg = (vst_sribi + st_sribi + lt_sribi + vlt_sribi) / 4.0
 int bull_count = (vst_sribi > 0 ? 1 : 0) + (st_sribi > 0 ? 1 : 0) + (lt_sribi > 0 ? 1 : 0) + (vlt_sribi > 0 ? 1 : 0)
 
-// ═══════════════════════════════════════════════════════════════
-// FORECAST PERCENTILE TABLES
-// Derived from BTC daily backtests, SRIBI average quintiles
-// Columns: [5d, 10d, 15d, 20d] as percentage returns
-// ═══════════════════════════════════════════════════════════════
-
-// Zone 1: Very Bearish (SRIBI avg < -25) — Contrarian bullish
-// p25: [-2.91, -3.66, -4.92, -5.81]
-// p50: [+0.81, +0.43, +0.70, +1.29]
-// p75: [+4.21, +5.72, +6.93, +8.74]
-
-// Zone 2: Bearish (-25 to -5)
-// p25: [-3.30, -4.80, -5.83, -8.28]
-// p50: [-0.24, -0.30, -0.15, -0.58]
-// p75: [+2.72, +4.41, +5.18, +6.71]
-
-// Zone 3: Neutral (-5 to +5)
-// p25: [-3.00, -4.95, -5.81, -6.19]
-// p50: [-0.15, -0.12, -1.03, -1.21]
-// p75: [+3.21, +4.46, +5.36, +6.77]
-
-// Zone 4: Bullish (+5 to +25)
-// p25: [-2.67, -4.07, -4.61, -5.86]
-// p50: [+0.29, +0.85, +0.86, +0.10]
-// p75: [+3.72, +6.10, +7.19, +8.95]
-
-// Zone 5: Very Bullish (SRIBI avg > +25)
-// p25: [-2.76, -4.45, -4.79, -4.61]
-// p50: [+0.08, +1.01, +1.42, +2.78]
-// p75: [+3.73, +6.19, +8.98, +10.96]
-
-// Determine current zone
+// --- Zone Classification ---
 int zone = sribi_avg < -25 ? 1 : sribi_avg < -5 ? 2 : sribi_avg < 5 ? 3 : sribi_avg < 25 ? 4 : 5
+string zone_name = zone == 1 ? "Very Bearish" : zone == 2 ? "Bearish" : zone == 3 ? "Neutral" : zone == 4 ? "Bullish" : "Very Bullish"
 
-// Lookup tables (p25, p50, p75 for each zone at days 5, 10, 15, 20)
+// Zone colors
+color zone_color = zone == 1 ? color.new(color.red, 0) : zone == 2 ? color.new(color.orange, 0) : zone == 3 ? color.new(color.gray, 0) : zone == 4 ? color.new(color.teal, 0) : color.new(color.green, 0)
+color zone_color_light = zone == 1 ? color.new(color.red, 60) : zone == 2 ? color.new(color.orange, 60) : zone == 3 ? color.new(color.gray, 60) : zone == 4 ? color.new(color.teal, 60) : color.new(color.green, 60)
+color ribbon_fill = zone == 1 ? color.new(color.red, 80) : zone == 2 ? color.new(color.orange, 80) : zone == 3 ? color.new(color.gray, 85) : zone == 4 ? color.new(color.teal, 80) : color.new(color.green, 80)
+
+// ═══════════════════════════════════════════════════════════════
+// LT SRI BACKBONE — FTL (4H) + STL (1W colored by zone)
+// ═══════════════════════════════════════════════════════════════
+
+bool lt_bullish = lt_ftl > lt_stl
+bool lt_ftl_rising = lt_ftl > nz(lt_ftl[1])
+
+// FTL: teal when rising, maroon when falling
+color ftl_color = lt_ftl_rising ? color.new(color.teal, 30) : color.new(color.maroon, 30)
+plot(lt_ftl, "LT Fast Trackline", color=ftl_color, linewidth=2, style=plot.style_circles)
+
+// STL: colored by SRIBI zone — shows structural trend + concordance state in one line
+plot(lt_stl, "LT Slow Trackline", color=zone_color, linewidth=3)
+
+// Stage background
+bgcolor(show_stage_bg ? (lt_bullish ? color.new(color.green, 93) : color.new(color.red, 93)) : na, title="LT Stage Background")
+
+// ═══════════════════════════════════════════════════════════════
+// AB2 SPREAD DETECTION
+// ═══════════════════════════════════════════════════════════════
+
+// Price distance from tracklines (normalized)
+float pct_from_stl = lt_stl != 0 ? (close - lt_stl) / lt_stl * 100 : 0
+float pct_from_ftl = lt_ftl != 0 ? (close - lt_ftl) / lt_ftl * 100 : 0
+
+// Ribbon width = expected range (p75 - p25 at 20d)
+float p75_20d = zone == 1 ? 8.74 : zone == 2 ? 6.71 : zone == 3 ? 6.77 : zone == 4 ? 8.95 : 10.96
+float p25_20d = zone == 1 ? -5.81 : zone == 2 ? -8.28 : zone == 3 ? -6.19 : zone == 4 ? -5.86 : -4.61
+float ribbon_width = p75_20d - p25_20d
+
+// --- Bull Put Spread Zone ---
+// Price near or below LT STL + bearish zone (contrarian support) + limited downside
+bool near_stl_support = pct_from_stl < 2.0 and pct_from_stl > -8.0
+bool ab2_bull_put = near_stl_support and (zone <= 2) and (p25_20d > -9.0)
+
+// --- Bear Call Spread Zone ---
+// Price well above FTL + bullish zone (resistance) + limited further upside
+bool above_ftl_extended = pct_from_ftl > 5.0
+bool ab2_bear_call = above_ftl_extended and (zone >= 4) and (p75_20d < 12.0)
+
+// --- Iron Condor Zone ---
+// Neutral zone + narrow ribbon = range-bound expectation
+bool ab2_iron_condor = (zone == 3) and (ribbon_width < 14.0)
+
+// Combined AB2 signal
+string ab2_signal = ab2_bull_put ? "Bull Put" : ab2_bear_call ? "Bear Call" : ab2_iron_condor ? "Iron Condor" : "None"
+bool ab2_active = ab2_bull_put or ab2_bear_call or ab2_iron_condor
+
+// AB2 visual markers (small, non-blocking)
+color ab2_color = ab2_bull_put ? color.new(color.green, 20) : ab2_bear_call ? color.new(color.red, 20) : color.new(color.purple, 20)
+plotshape(show_ab2_markers and ab2_bull_put and not ab2_bull_put[1], title="AB2 Bull Put", location=location.belowbar, style=shape.diamond, color=color.green, size=size.tiny)
+plotshape(show_ab2_markers and ab2_bear_call and not ab2_bear_call[1], title="AB2 Bear Call", location=location.abovebar, style=shape.diamond, color=color.red, size=size.tiny)
+plotshape(show_ab2_markers and ab2_iron_condor and not ab2_iron_condor[1], title="AB2 Iron Condor", location=location.belowbar, style=shape.diamond, color=color.purple, size=size.tiny)
+
+// ═══════════════════════════════════════════════════════════════
+// FORECAST PERCENTILE LOOKUP
+// ═══════════════════════════════════════════════════════════════
+
 f_get_pct(int z, int day_idx, int pct) =>
     // day_idx: 0=5d, 1=10d, 2=15d, 3=20d
     // pct: 0=p25, 1=p50, 2=p75
     float result = 0.0
-    if z == 1  // Very Bearish
+    if z == 1
         if pct == 0
             result := day_idx == 0 ? -2.91 : day_idx == 1 ? -3.66 : day_idx == 2 ? -4.92 : -5.81
         else if pct == 1
             result := day_idx == 0 ? 0.81 : day_idx == 1 ? 0.43 : day_idx == 2 ? 0.70 : 1.29
         else
             result := day_idx == 0 ? 4.21 : day_idx == 1 ? 5.72 : day_idx == 2 ? 6.93 : 8.74
-    else if z == 2  // Bearish
+    else if z == 2
         if pct == 0
             result := day_idx == 0 ? -3.30 : day_idx == 1 ? -4.80 : day_idx == 2 ? -5.83 : -8.28
         else if pct == 1
             result := day_idx == 0 ? -0.24 : day_idx == 1 ? -0.30 : day_idx == 2 ? -0.15 : -0.58
         else
             result := day_idx == 0 ? 2.72 : day_idx == 1 ? 4.41 : day_idx == 2 ? 5.18 : 6.71
-    else if z == 3  // Neutral
+    else if z == 3
         if pct == 0
             result := day_idx == 0 ? -3.00 : day_idx == 1 ? -4.95 : day_idx == 2 ? -5.81 : -6.19
         else if pct == 1
             result := day_idx == 0 ? -0.15 : day_idx == 1 ? -0.12 : day_idx == 2 ? -1.03 : -1.21
         else
             result := day_idx == 0 ? 3.21 : day_idx == 1 ? 4.46 : day_idx == 2 ? 5.36 : 6.77
-    else if z == 4  // Bullish
+    else if z == 4
         if pct == 0
             result := day_idx == 0 ? -2.67 : day_idx == 1 ? -4.07 : day_idx == 2 ? -4.61 : -5.86
         else if pct == 1
             result := day_idx == 0 ? 0.29 : day_idx == 1 ? 0.85 : day_idx == 2 ? 0.86 : 0.10
         else
             result := day_idx == 0 ? 3.72 : day_idx == 1 ? 6.10 : day_idx == 2 ? 7.19 : 8.95
-    else  // Very Bullish
+    else
         if pct == 0
             result := day_idx == 0 ? -2.76 : day_idx == 1 ? -4.45 : day_idx == 2 ? -4.79 : -4.61
         else if pct == 1
@@ -180,24 +172,13 @@ f_get_pct(int z, int day_idx, int pct) =>
     result
 
 // ═══════════════════════════════════════════════════════════════
-// FORECAST RIBBON — Projected 20 days forward from current bar
-// Only draws on the last bar to keep chart clean
+// FORECAST RIBBON — 20 days forward from last bar
 // ═══════════════════════════════════════════════════════════════
-
-// Zone colors
-color zone_color = zone == 1 ? color.new(color.red, 0) : zone == 2 ? color.new(color.orange, 0) : zone == 3 ? color.new(color.gray, 0) : zone == 4 ? color.new(color.teal, 0) : color.new(color.green, 0)
-color ribbon_fill = zone == 1 ? color.new(color.red, 80) : zone == 2 ? color.new(color.orange, 80) : zone == 3 ? color.new(color.gray, 85) : zone == 4 ? color.new(color.teal, 80) : color.new(color.green, 80)
-
-string zone_name = zone == 1 ? "Very Bearish" : zone == 2 ? "Bearish" : zone == 3 ? "Neutral" : zone == 4 ? "Bullish" : "Very Bullish"
 
 if barstate.islast and show_ribbon
     float base_price = close
-
-    // Draw projection lines at 5d, 10d, 15d, 20d intervals
-    // Interpolate between points for smooth lines
     int[] offsets = array.from(0, 5, 10, 15, 20)
 
-    // Build projected price arrays
     var line[] bull_lines = array.new<line>()
     var line[] base_lines = array.new<line>()
     var line[] bear_lines = array.new<line>()
@@ -221,12 +202,10 @@ if barstate.islast and show_ribbon
             linefill.delete(array.get(fills, i))
         array.clear(fills)
 
-    // Draw segments between each point pair
     for seg = 0 to 3
         int bar_start = bar_index + array.get(offsets, seg)
         int bar_end   = bar_index + array.get(offsets, seg + 1)
 
-        // Returns at start and end of segment
         float p25_start = seg == 0 ? 0.0 : f_get_pct(zone, seg - 1, 0)
         float p50_start = seg == 0 ? 0.0 : f_get_pct(zone, seg - 1, 1)
         float p75_start = seg == 0 ? 0.0 : f_get_pct(zone, seg - 1, 2)
@@ -234,54 +213,56 @@ if barstate.islast and show_ribbon
         float p50_end = f_get_pct(zone, seg, 1)
         float p75_end = f_get_pct(zone, seg, 2)
 
-        float bull_y1 = base_price * (1 + p75_start / 100)
-        float bull_y2 = base_price * (1 + p75_end / 100)
-        float base_y1 = base_price * (1 + p50_start / 100)
-        float base_y2 = base_price * (1 + p50_end / 100)
-        float bear_y1 = base_price * (1 + p25_start / 100)
-        float bear_y2 = base_price * (1 + p25_end / 100)
-
-        line bl = line.new(bar_start, bull_y1, bar_end, bull_y2, color=color.new(zone_color, 50), width=1, style=line.style_dashed)
-        line ml = line.new(bar_start, base_y1, bar_end, base_y2, color=zone_color, width=2)
-        line sl = line.new(bar_start, bear_y1, bar_end, bear_y2, color=color.new(zone_color, 50), width=1, style=line.style_dashed)
+        line bl = line.new(bar_start, base_price * (1 + p75_start / 100), bar_end, base_price * (1 + p75_end / 100), color=color.new(zone_color, 50), width=1, style=line.style_dashed)
+        line ml = line.new(bar_start, base_price * (1 + p50_start / 100), bar_end, base_price * (1 + p50_end / 100), color=zone_color, width=2)
+        line sl = line.new(bar_start, base_price * (1 + p25_start / 100), bar_end, base_price * (1 + p25_end / 100), color=color.new(zone_color, 50), width=1, style=line.style_dashed)
 
         array.push(bull_lines, bl)
         array.push(base_lines, ml)
         array.push(bear_lines, sl)
-
-        // Fill between bull and bear
         linefill lf = linefill.new(bl, sl, ribbon_fill)
         array.push(fills, lf)
 
-    // End-of-ribbon label
-    if show_forecast_lbl
-        float end_p50 = f_get_pct(zone, 3, 1)
-        float end_p75 = f_get_pct(zone, 3, 2)
-        float end_p25 = f_get_pct(zone, 3, 0)
-        label.new(bar_index + 22, base_price * (1 + end_p50 / 100),
-             text=str.format("{0}\nMedian: {1}%\nRange: {2}% to {3}%\nSRIBI Avg: {4}", 
-                  zone_name, 
-                  str.tostring(end_p50, "#.##"),
-                  str.tostring(end_p25, "#.##"),
-                  str.tostring(end_p75, "#.##"),
-                  str.tostring(sribi_avg, "#.#")),
-             color=zone_color, textcolor=color.white, style=label.style_label_left, size=size.small)
-
 // ═══════════════════════════════════════════════════════════════
-// CONCORDANCE INFO LABEL (current bar)
+// INFO TABLE — Bottom-right corner (replaces all floating labels)
 // ═══════════════════════════════════════════════════════════════
 
-if barstate.islast and show_concordance
-    string ct_text = str.format("CT{0} | SRIBI Avg: {1}\nVST:{2} ST:{3} LT:{4} VLT:{5}", 
-         bull_count,
-         str.tostring(sribi_avg, "#.#"),
-         str.tostring(vst_sribi, "#.#"),
-         str.tostring(st_sribi, "#.#"),
-         str.tostring(lt_sribi, "#.#"),
-         str.tostring(vlt_sribi, "#.#"))
-    label.new(bar_index, low * 0.995, text=ct_text, 
-         color=zone_color, textcolor=color.white, 
-         style=label.style_label_up, size=size.small)
+var table info_tbl = table.new(position.bottom_right, 2, 9, bgcolor=color.new(color.black, 30), border_width=1, border_color=color.new(color.gray, 60), frame_width=1, frame_color=color.new(color.gray, 40))
+
+if barstate.islast and show_table
+    // Row 0: Header
+    table.cell(info_tbl, 0, 0, "SRI Forecast", text_color=color.white, text_size=size.small, bgcolor=zone_color)
+    table.cell(info_tbl, 1, 0, zone_name, text_color=color.white, text_size=size.small, bgcolor=zone_color)
+
+    // Row 1: Concordance
+    table.cell(info_tbl, 0, 1, "Concordance", text_color=color.gray, text_size=size.tiny)
+    table.cell(info_tbl, 1, 1, str.format("CT{0} ({1}/4 bull)", bull_count, bull_count), text_color=color.white, text_size=size.tiny)
+
+    // Row 2: SRIBI Average
+    table.cell(info_tbl, 0, 2, "SRIBI Avg", text_color=color.gray, text_size=size.tiny)
+    color sribi_clr = sribi_avg > 5 ? color.teal : sribi_avg < -5 ? color.red : color.gray
+    table.cell(info_tbl, 1, 2, str.tostring(sribi_avg, "#.#"), text_color=sribi_clr, text_size=size.tiny)
+
+    // Rows 3-6: Per-TF SRIBI
+    float[] sribi_vals = array.from(vst_sribi, st_sribi, lt_sribi, vlt_sribi)
+    string[] sribi_names = array.from("  VST", "  ST", "  LT", "  VLT")
+    for i = 0 to 3
+        float val = array.get(sribi_vals, i)
+        color val_clr = val > 0 ? color.teal : color.red
+        string dot = val > 0 ? "●" : "○"
+        table.cell(info_tbl, 0, 3 + i, array.get(sribi_names, i), text_color=color.gray, text_size=size.tiny)
+        table.cell(info_tbl, 1, 3 + i, str.format("{0} {1}", dot, str.tostring(val, "#.#")), text_color=val_clr, text_size=size.tiny)
+
+    // Row 7: 20d Forecast
+    float med_20 = zone == 1 ? 1.29 : zone == 2 ? -0.58 : zone == 3 ? -1.21 : zone == 4 ? 0.10 : 2.78
+    color med_clr = med_20 > 0 ? color.teal : med_20 < 0 ? color.red : color.gray
+    table.cell(info_tbl, 0, 7, "20d Median", text_color=color.gray, text_size=size.tiny)
+    table.cell(info_tbl, 1, 7, str.format("{0}%", str.tostring(med_20, "#.##")), text_color=med_clr, text_size=size.tiny)
+
+    // Row 8: AB2 Signal
+    color ab2_tbl_clr = ab2_active ? (ab2_bull_put ? color.green : ab2_bear_call ? color.red : color.purple) : color.gray
+    table.cell(info_tbl, 0, 8, "AB2 Signal", text_color=color.gray, text_size=size.tiny)
+    table.cell(info_tbl, 1, 8, ab2_signal, text_color=ab2_tbl_clr, text_size=size.tiny)
 
 // ═══════════════════════════════════════════════════════════════
 // ALERTS
@@ -291,3 +272,8 @@ alertcondition(ta.cross(sribi_avg, 25.0), title="SRIBI Enters Very Bullish", mes
 alertcondition(ta.cross(-25.0, sribi_avg), title="SRIBI Enters Very Bearish", message="SRI Forecast: SRIBI average crossed below -25 — Very Bearish zone (contrarian bullish)")
 alertcondition(ta.crossover(float(bull_count), 3.5), title="CT4 — Full Concordance", message="SRI Forecast: All 4 timeframes bullish — CT4 full concordance")
 alertcondition(ta.crossunder(float(bull_count), 0.5), title="CT0 — Full Bearish", message="SRI Forecast: All 4 timeframes bearish — CT0 (watch for capitulation)")
+
+// AB2 Spread Alerts
+alertcondition(ab2_bull_put and not ab2_bull_put[1], title="AB2 Bull Put Spread Zone", message="SRI Forecast: Bull Put Spread conditions — price near STL support in bearish zone. Check strikes at STL level.")
+alertcondition(ab2_bear_call and not ab2_bear_call[1], title="AB2 Bear Call Spread Zone", message="SRI Forecast: Bear Call Spread conditions — price extended above FTL in bullish zone. Check strikes above current level.")
+alertcondition(ab2_iron_condor and not ab2_iron_condor[1], title="AB2 Iron Condor Zone", message="SRI Forecast: Iron Condor conditions — neutral zone with narrow expected range. Check strikes at p25/p75 levels.")
