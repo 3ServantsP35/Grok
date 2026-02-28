@@ -213,18 +213,20 @@ hline(0, "Zero", color=color.new(color.gray, 60), linestyle=hline.style_dotted)
 
 bgcolor(show_zones ? zone_bg : na, title="LOI Zone Background")
 
-// Accumulation markers — circles and diamonds below LOI line
+// Accumulation markers — plot at LOI value using location.absolute with explicit price
 bool acc_entry = loi < acc_level and nz(loi[1]) >= acc_level
 bool deep_acc_entry = loi < deep_acc_level and nz(loi[1]) >= deep_acc_level
 
-plotshape(show_acc and deep_acc_entry, title="Deep Accumulate", style=shape.diamond, location=location.absolute, color=#00FF00, size=size.small)
-plotshape(show_acc and acc_entry and not deep_acc_entry, title="Accumulate", style=shape.circle, location=location.absolute, color=color.green, size=size.tiny)
+// Use plot + plotchar approach: plot NaN except on signal bars
+// This avoids the location.absolute y=0 bug on non-signal bars
+plot(show_acc and deep_acc_entry ? loi : na, title="Deep Accumulate", style=plot.style_circles, color=#00FF00, linewidth=4)
+plot(show_acc and acc_entry and not deep_acc_entry ? loi : na, title="Accumulate", style=plot.style_circles, color=color.green, linewidth=3)
 
-// Trim markers — circles and diamonds above LOI line
-plotshape(show_trims and trim1_cross, title="Trim 25%", style=shape.circle, location=location.absolute, color=color.orange, size=size.tiny)
-plotshape(show_trims and trim2_cross, title="Trim 50%", style=shape.circle, location=location.absolute, color=color.new(color.red, 30), size=size.tiny)
-plotshape(show_trims and trim3_cross, title="Trim 75%", style=shape.diamond, location=location.absolute, color=color.red, size=size.small)
-plotshape(show_trims and final_trim, title="Exit 100%", style=shape.xcross, location=location.absolute, color=color.red, size=size.small)
+// Trim markers
+plot(show_trims and trim1_cross ? loi : na, title="Trim 25%", style=plot.style_cross, color=color.orange, linewidth=3)
+plot(show_trims and trim2_cross ? loi : na, title="Trim 50%", style=plot.style_cross, color=color.new(color.red, 30), linewidth=3)
+plot(show_trims and trim3_cross ? loi : na, title="Trim 75%", style=plot.style_circles, color=color.red, linewidth=4)
+plot(show_trims and final_trim ? loi : na, title="Exit 100%", style=plot.style_cross, color=color.red, linewidth=5)
 
 // ═══════════════════════════════════════════════════════════════
 // INFO TABLE
