@@ -203,18 +203,22 @@ if barstate.islast and show_ribbon
     var linefill[] fills  = array.new<linefill>()
 
     // Clean up previous drawings
-    for i = 0 to array.size(bull_lines) - 1
-        line.delete(array.get(bull_lines, i))
-    for i = 0 to array.size(base_lines) - 1
-        line.delete(array.get(base_lines, i))
-    for i = 0 to array.size(bear_lines) - 1
-        line.delete(array.get(bear_lines, i))
-    for i = 0 to array.size(fills) - 1
-        linefill.delete(array.get(fills, i))
-    array.clear(bull_lines)
-    array.clear(base_lines)
-    array.clear(bear_lines)
-    array.clear(fills)
+    if array.size(bull_lines) > 0
+        for i = 0 to array.size(bull_lines) - 1
+            line.delete(array.get(bull_lines, i))
+        array.clear(bull_lines)
+    if array.size(base_lines) > 0
+        for i = 0 to array.size(base_lines) - 1
+            line.delete(array.get(base_lines, i))
+        array.clear(base_lines)
+    if array.size(bear_lines) > 0
+        for i = 0 to array.size(bear_lines) - 1
+            line.delete(array.get(bear_lines, i))
+        array.clear(bear_lines)
+    if array.size(fills) > 0
+        for i = 0 to array.size(fills) - 1
+            linefill.delete(array.get(fills, i))
+        array.clear(fills)
 
     // Draw segments between each point pair
     for seg = 0 to 3
