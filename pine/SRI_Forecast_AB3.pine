@@ -14,7 +14,18 @@ indicator(title="SRI Forecast AB3", shorttitle="SRI AB3 LOI", overlay=false, for
 // ═══════════════════════════════════════════════════════════════
 
 string grp_mode   = "Asset Mode"
-string asset_mode = input.string("Momentum", "Asset Behavior", options=["Momentum", "Mean-Reverting"], group=grp_mode, tooltip="Momentum: BTC, MSTR, TSLA — trends persist, trim later\nMean-Reverting: SPY, QQQ, TLT — extremes revert, trim earlier")
+string asset_mode = input.string("Auto-Detect", "Asset Behavior", options=["Auto-Detect", "Momentum", "Mean-Reverting"], group=grp_mode, tooltip="Auto-Detect: uses symbol to classify\nMomentum: BTC, MSTR, TSLA — trends persist, trim later\nMean-Reverting: SPY, QQQ, TLT — extremes revert, trim earlier")
+
+// Auto-detection logic
+f_is_momentum() =>
+    string t = str.upper(syminfo.ticker)
+    bool is_crypto = syminfo.type == "crypto" or str.contains(t, "BTC") or str.contains(t, "ETH") or str.contains(t, "SOL") or str.contains(t, "XRP")
+    bool is_mstr = str.contains(t, "MSTR")
+    bool is_tsla = str.contains(t, "TSLA")
+    bool is_ibit = str.contains(t, "IBIT") or str.contains(t, "GBTC") or str.contains(t, "BITO")
+    is_crypto or is_mstr or is_tsla or is_ibit
+
+string resolved_mode = asset_mode == "Auto-Detect" ? (f_is_momentum() ? "Momentum" : "Mean-Reverting") : asset_mode
 
 string grp_core   = "Core Settings"
 int at_period     = input.int(14, "Trackline ATR Period", group=grp_core)
@@ -50,7 +61,7 @@ bool show_acc     = input.bool(true, "Show Accumulation Markers", group=grp_disp
 // MODE-DEPENDENT THRESHOLDS
 // ═══════════════════════════════════════════════════════════════
 
-bool is_mr = asset_mode == "Mean-Reverting"
+bool is_mr = resolved_mode == "Mean-Reverting"
 
 // Accumulation thresholds
 float acc_level      = is_mr ? -40.0 : -60.0    // MR: -40 (78% win SPY) | TR: -60 (70% win BTC)
@@ -232,7 +243,8 @@ if barstate.islast and show_table
     // Header with mode indicator
     color hdr_clr = loi < acc_level ? color.green : loi > trim3_level ? color.red : loi > trim2_level ? color.orange : color.new(color.gray, 30)
     string mode_tag = is_mr ? "MR" : "TR"
-    table.cell(info_tbl, 0, 0, str.format("AB3 [{0}]", mode_tag), text_color=color.white, text_size=size.small, bgcolor=hdr_clr)
+    string auto_tag = asset_mode == "Auto-Detect" ? "⚡" : ""
+    table.cell(info_tbl, 0, 0, str.format("AB3 [{0}]{1}", mode_tag, auto_tag), text_color=color.white, text_size=size.small, bgcolor=hdr_clr)
     table.cell(info_tbl, 1, 0, loi_zone, text_color=color.white, text_size=size.small, bgcolor=hdr_clr)
 
     // LOI value
@@ -241,8 +253,9 @@ if barstate.islast and show_table
     table.cell(info_tbl, 1, 1, str.tostring(loi, "#.#"), text_color=loi_val_clr, text_size=size.tiny)
 
     // Mode info
+    string mode_display = asset_mode == "Auto-Detect" ? str.format("{0} (auto)", resolved_mode) : resolved_mode
     table.cell(info_tbl, 0, 2, "Mode", text_color=color.gray, text_size=size.tiny)
-    table.cell(info_tbl, 1, 2, asset_mode, text_color=is_mr ? color.teal : color.orange, text_size=size.tiny)
+    table.cell(info_tbl, 1, 2, mode_display, text_color=is_mr ? color.teal : color.orange, text_size=size.tiny)
 
     // Components
     table.cell(info_tbl, 0, 3, "  VLT SRIBI", text_color=color.gray, text_size=size.tiny)
