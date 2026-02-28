@@ -1,7 +1,8 @@
-// SRI Forecast AB3 — LEAP Opportunity Index (LOI)
+// SRI Forecast AB3 — LEAP Opportunity Index (LOI) v2
 // Oscillator for LEAP accumulation/distribution with phased profit-taking
 // Weighting: VLT SRIBI (40%) + VLT Acceleration (30%) + LT SRIBI (15%) + Concordance (15%)
 // Two modes: Momentum (BTC/MSTR/TSLA) and Mean-Reverting (SPY/QQQ/TLT)
+// v2: Clean markers (diamonds/circles), text labels removed, legend added
 // Backtest: BTC Accum (<-60): 70% win at 60d, +12.4% median | SPY Accum (<-40): 78% win, +5.4%
 // Cross-asset validated: 6 assets, 2015-2026
 // © RizenShine — Forecast engine by CIO
@@ -16,7 +17,6 @@ indicator(title="SRI Forecast AB3", shorttitle="SRI AB3 LOI", overlay=false, for
 string grp_mode   = "Asset Mode"
 string asset_mode = input.string("Auto-Detect", "Asset Behavior", options=["Auto-Detect", "Momentum", "Mean-Reverting"], group=grp_mode, tooltip="Auto-Detect: uses symbol to classify\nMomentum: BTC, MSTR, TSLA — trends persist, trim later\nMean-Reverting: SPY, QQQ, TLT — extremes revert, trim earlier")
 
-// Auto-detection logic
 f_is_momentum() =>
     string t = str.upper(syminfo.ticker)
     bool is_crypto = syminfo.type == "crypto" or str.contains(t, "BTC") or str.contains(t, "ETH") or str.contains(t, "SOL") or str.contains(t, "XRP")
@@ -38,7 +38,6 @@ float w_lt        = input.float(15.0, "LT SRIBI Weight", group=grp_loi, minval=0
 float w_conc      = input.float(15.0, "Concordance Weight", group=grp_loi, minval=0, maxval=100, tooltip="Cross-TF breadth. Default 15%")
 
 string grp_trim   = "Trim Schedule (auto-set by mode, override here)"
-string trim_note  = input.string("", "ℹ️ Defaults change with Asset Mode", group=grp_trim, tooltip="Momentum: 20/40/60/-20 | Mean-Reverting: 10/30/50/-10\nSet to 0 to use mode defaults, or override manually")
 bool use_custom_trims = input.bool(false, "Use Custom Trim Levels", group=grp_trim, tooltip="Enable to override mode defaults with manual values below")
 float trim1_custom = input.float(20.0, "  Custom Trim 1 (25%)", group=grp_trim)
 float trim2_custom = input.float(40.0, "  Custom Trim 2 (50%)", group=grp_trim)
@@ -53,6 +52,7 @@ int leap_qty      = input.int(0, "Number of Contracts", group=grp_pos, minval=0,
 
 string grp_disp   = "Display"
 bool show_table   = input.bool(true, "Show Info Table", group=grp_disp)
+bool show_legend  = input.bool(true, "Show Legend", group=grp_disp)
 bool show_zones   = input.bool(true, "Show Zone Background", group=grp_disp)
 bool show_trims   = input.bool(true, "Show Trim Markers", group=grp_disp)
 bool show_acc     = input.bool(true, "Show Accumulation Markers", group=grp_disp)
@@ -63,11 +63,9 @@ bool show_acc     = input.bool(true, "Show Accumulation Markers", group=grp_disp
 
 bool is_mr = resolved_mode == "Mean-Reverting"
 
-// Accumulation thresholds
-float acc_level      = is_mr ? -40.0 : -60.0    // MR: -40 (78% win SPY) | TR: -60 (70% win BTC)
-float deep_acc_level = is_mr ? -60.0 : -80.0    // MR: -60 (83% win SPY) | TR: -80 (rare, generational)
+float acc_level      = is_mr ? -40.0 : -60.0
+float deep_acc_level = is_mr ? -60.0 : -80.0
 
-// Trim thresholds (mode defaults or custom override)
 float trim1_level = use_custom_trims ? trim1_custom : (is_mr ? 10.0 : 20.0)
 float trim2_level = use_custom_trims ? trim2_custom : (is_mr ? 30.0 : 40.0)
 float trim3_level = use_custom_trims ? trim3_custom : (is_mr ? 50.0 : 60.0)
@@ -123,7 +121,7 @@ float total_w = w_vlt + w_roc + w_lt + w_conc
 float loi = total_w > 0 ? (vlt_norm * w_vlt + roc_norm * w_roc + lt_norm * w_lt + conc_norm * w_conc) / total_w : 0
 
 // ═══════════════════════════════════════════════════════════════
-// ZONE CLASSIFICATION (mode-dependent)
+// ZONE CLASSIFICATION
 // ═══════════════════════════════════════════════════════════════
 
 string loi_zone = loi < deep_acc_level ? "DEEP ACCUM" : loi < acc_level ? "ACCUMULATE" : loi < (is_mr ? 0 : -20) ? "Mild Opp" : loi < (is_mr ? 10 : 20) ? "Neutral" : loi < trim2_level ? "Mild Caution" : loi < trim3_level ? "Elevated" : "DISTRIBUTE"
@@ -204,15 +202,12 @@ bool has_qty = leap_qty > 0
 float total_pnl = has_qty ? contract_pnl * leap_qty : 0
 
 // ═══════════════════════════════════════════════════════════════
-// PLOTS
+// PLOTS — Clean markers (no text labels)
 // ═══════════════════════════════════════════════════════════════
 
 plot(loi, "LOI", color=loi_color, linewidth=2)
-
 hline(0, "Zero", color=color.new(color.gray, 60), linestyle=hline.style_dotted)
 
-// Dynamic reference lines based on mode
-// Note: hline requires constants, so we plot these as horizontal lines
 plot(trim1_level, "Trim 1", color=color.new(color.orange, 70), linewidth=1, style=plot.style_circles)
 plot(trim2_level, "Trim 2", color=color.new(color.orange, 50), linewidth=1, style=plot.style_circles)
 plot(trim3_level, "Trim 3", color=color.new(color.red, 50), linewidth=1, style=plot.style_circles)
@@ -221,17 +216,18 @@ plot(deep_acc_level, "Deep Accumulation", color=color.new(#00FF00, 50), linewidt
 
 bgcolor(show_zones ? zone_bg : na, title="LOI Zone Background")
 
-// Trim markers
-plotshape(show_trims and trim1_cross, title="Trim 1 (25%)", style=shape.triangledown, location=location.absolute, color=color.orange, size=size.small, text="25%", textcolor=color.orange)
-plotshape(show_trims and trim2_cross, title="Trim 2 (50%)", style=shape.triangledown, location=location.absolute, color=color.new(color.red, 30), size=size.small, text="50%", textcolor=color.new(color.red, 30))
-plotshape(show_trims and trim3_cross, title="Trim 3 (75%)", style=shape.triangledown, location=location.absolute, color=color.red, size=size.normal, text="75%", textcolor=color.red)
-plotshape(show_trims and final_trim, title="Final Trim (100%)", style=shape.xcross, location=location.absolute, color=color.red, size=size.normal, text="EXIT", textcolor=color.red)
-
-// Accumulation markers
+// Accumulation markers — circles and diamonds below LOI line
 bool acc_entry = loi < acc_level and nz(loi[1]) >= acc_level
 bool deep_acc_entry = loi < deep_acc_level and nz(loi[1]) >= deep_acc_level
-plotshape(show_acc and acc_entry, title="Accumulation Entry", style=shape.triangleup, location=location.absolute, color=color.green, size=size.small, text="ACCUM", textcolor=color.green)
-plotshape(show_acc and deep_acc_entry, title="Deep Accumulation", style=shape.triangleup, location=location.absolute, color=#00FF00, size=size.normal, text="DEEP", textcolor=#00FF00)
+
+plotshape(show_acc and deep_acc_entry, title="Deep Accumulate", style=shape.diamond, location=location.absolute, color=#00FF00, size=size.small)
+plotshape(show_acc and acc_entry and not deep_acc_entry, title="Accumulate", style=shape.circle, location=location.absolute, color=color.green, size=size.tiny)
+
+// Trim markers — circles and diamonds above LOI line
+plotshape(show_trims and trim1_cross, title="Trim 25%", style=shape.circle, location=location.absolute, color=color.orange, size=size.tiny)
+plotshape(show_trims and trim2_cross, title="Trim 50%", style=shape.circle, location=location.absolute, color=color.new(color.red, 30), size=size.tiny)
+plotshape(show_trims and trim3_cross, title="Trim 75%", style=shape.diamond, location=location.absolute, color=color.red, size=size.small)
+plotshape(show_trims and final_trim, title="Exit 100%", style=shape.xcross, location=location.absolute, color=color.red, size=size.small)
 
 // ═══════════════════════════════════════════════════════════════
 // INFO TABLE
@@ -240,24 +236,20 @@ plotshape(show_acc and deep_acc_entry, title="Deep Accumulation", style=shape.tr
 var table info_tbl = table.new(position.bottom_right, 2, 16, bgcolor=color.new(color.black, 30), border_width=1, border_color=color.new(color.gray, 60), frame_width=1, frame_color=color.new(color.gray, 40))
 
 if barstate.islast and show_table
-    // Header with mode indicator
     color hdr_clr = loi < acc_level ? color.green : loi > trim3_level ? color.red : loi > trim2_level ? color.orange : color.new(color.gray, 30)
     string mode_tag = is_mr ? "MR" : "TR"
     string auto_tag = asset_mode == "Auto-Detect" ? "⚡" : ""
     table.cell(info_tbl, 0, 0, str.format("AB3 [{0}]{1}", mode_tag, auto_tag), text_color=color.white, text_size=size.small, bgcolor=hdr_clr)
     table.cell(info_tbl, 1, 0, loi_zone, text_color=color.white, text_size=size.small, bgcolor=hdr_clr)
 
-    // LOI value
     color loi_val_clr = loi < acc_level ? #00FF00 : loi < 0 ? color.green : loi > trim3_level ? color.red : loi > trim2_level ? color.orange : color.gray
     table.cell(info_tbl, 0, 1, "LOI", text_color=color.gray, text_size=size.tiny)
     table.cell(info_tbl, 1, 1, str.tostring(loi, "#.#"), text_color=loi_val_clr, text_size=size.tiny)
 
-    // Mode info
     string mode_display = asset_mode == "Auto-Detect" ? str.format("{0} (auto)", resolved_mode) : resolved_mode
     table.cell(info_tbl, 0, 2, "Mode", text_color=color.gray, text_size=size.tiny)
     table.cell(info_tbl, 1, 2, mode_display, text_color=is_mr ? color.teal : color.orange, text_size=size.tiny)
 
-    // Components
     table.cell(info_tbl, 0, 3, "  VLT SRIBI", text_color=color.gray, text_size=size.tiny)
     table.cell(info_tbl, 1, 3, str.tostring(vlt_sribi, "#.#"), text_color=vlt_sribi > 0 ? color.teal : color.red, text_size=size.tiny)
 
@@ -270,7 +262,6 @@ if barstate.islast and show_table
     table.cell(info_tbl, 0, 6, "  Concordance", text_color=color.gray, text_size=size.tiny)
     table.cell(info_tbl, 1, 6, str.format("{0}/4", bull_count), text_color=bull_count >= 3 ? color.teal : bull_count == 0 ? color.red : color.gray, text_size=size.tiny)
 
-    // Trim status
     color trim_clr = trim_phase == 0 ? color.gray : trim_phase == 4 ? color.red : color.orange
     table.cell(info_tbl, 0, 7, "Trim Phase", text_color=color.gray, text_size=size.tiny)
     table.cell(info_tbl, 1, 7, trim_status, text_color=trim_clr, text_size=size.tiny)
@@ -281,11 +272,9 @@ if barstate.islast and show_table
     table.cell(info_tbl, 0, 9, "Remaining", text_color=color.gray, text_size=size.tiny)
     table.cell(info_tbl, 1, 9, str.format("{0}%", str.tostring(pct_remaining, "#")), text_color=pct_remaining > 50 ? color.green : pct_remaining > 0 ? color.orange : color.red, text_size=size.tiny)
 
-    // Threshold reference
     table.cell(info_tbl, 0, 10, "Thresholds", text_color=color.gray, text_size=size.tiny)
     table.cell(info_tbl, 1, 10, str.format("{0}/{1}/{2}", str.tostring(trim1_level,"#"), str.tostring(trim2_level,"#"), str.tostring(trim3_level,"#")), text_color=color.gray, text_size=size.tiny)
 
-    // Position info
     int row = 11
     if has_strike
         color itm_clr = in_the_money ? color.green : color.red
@@ -293,25 +282,45 @@ if barstate.islast and show_table
         table.cell(info_tbl, 0, row, "Strike", text_color=color.gray, text_size=size.tiny)
         table.cell(info_tbl, 1, row, str.format("${0} ({1})", str.tostring(leap_strike, "#.##"), itm_str), text_color=itm_clr, text_size=size.tiny)
         row += 1
-
         table.cell(info_tbl, 0, row, "Intrinsic", text_color=color.gray, text_size=size.tiny)
         table.cell(info_tbl, 1, row, str.format("${0}/ct", str.tostring(intrinsic_per_contract, "#.00")), text_color=intrinsic > 0 ? color.green : color.gray, text_size=size.tiny)
         row += 1
-
         table.cell(info_tbl, 0, row, "Moneyness", text_color=color.gray, text_size=size.tiny)
         table.cell(info_tbl, 1, row, str.format("{0}%", str.tostring(moneyness_pct, "#.#")), text_color=itm_clr, text_size=size.tiny)
         row += 1
-
     if has_entry
         color pnl_clr = pnl_pct > 0 ? color.green : pnl_pct < 0 ? color.red : color.gray
         table.cell(info_tbl, 0, row, "P&L/ct", text_color=color.gray, text_size=size.tiny)
         table.cell(info_tbl, 1, row, str.format("${0} ({1}%)", str.tostring(contract_pnl, "#.00"), str.tostring(pnl_pct, "#.#")), text_color=pnl_clr, text_size=size.tiny)
         row += 1
-
     if has_qty
         color tot_clr = total_pnl > 0 ? color.green : total_pnl < 0 ? color.red : color.gray
         table.cell(info_tbl, 0, row, "Total P&L", text_color=color.gray, text_size=size.tiny)
         table.cell(info_tbl, 1, row, str.format("${0}", str.tostring(total_pnl, "#,###.00")), text_color=tot_clr, text_size=size.tiny)
+
+// ═══════════════════════════════════════════════════════════════
+// LEGEND
+// ═══════════════════════════════════════════════════════════════
+
+var table legend_tbl = table.new(position.bottom_left, 2, 8, bgcolor=color.new(color.black, 20), border_width=1, border_color=color.new(color.gray, 70), frame_width=1, frame_color=color.new(color.gray, 50))
+
+if barstate.islast and show_legend
+    table.cell(legend_tbl, 0, 0, "AB3 Legend", text_color=color.white, text_size=size.tiny, bgcolor=color.new(color.gray, 50))
+    table.cell(legend_tbl, 1, 0, "", bgcolor=color.new(color.gray, 50))
+    table.cell(legend_tbl, 0, 1, "◆ green", text_color=#00FF00, text_size=size.tiny)
+    table.cell(legend_tbl, 1, 1, "Deep accumulate (rare)", text_color=color.white, text_size=size.tiny)
+    table.cell(legend_tbl, 0, 2, "○ green", text_color=color.green, text_size=size.tiny)
+    table.cell(legend_tbl, 1, 2, "Accumulate", text_color=color.white, text_size=size.tiny)
+    table.cell(legend_tbl, 0, 3, "○ orange", text_color=color.orange, text_size=size.tiny)
+    table.cell(legend_tbl, 1, 3, "Trim 25% / 50%", text_color=color.gray, text_size=size.tiny)
+    table.cell(legend_tbl, 0, 4, "◆ red", text_color=color.red, text_size=size.tiny)
+    table.cell(legend_tbl, 1, 4, "Trim 75%", text_color=color.white, text_size=size.tiny)
+    table.cell(legend_tbl, 0, 5, "✕ red", text_color=color.red, text_size=size.tiny)
+    table.cell(legend_tbl, 1, 5, "Exit 100% (rollover)", text_color=color.white, text_size=size.tiny)
+    table.cell(legend_tbl, 0, 6, "Green bg", text_color=color.green, text_size=size.tiny)
+    table.cell(legend_tbl, 1, 6, "Accumulation zone", text_color=color.gray, text_size=size.tiny)
+    table.cell(legend_tbl, 0, 7, "Red bg", text_color=color.red, text_size=size.tiny)
+    table.cell(legend_tbl, 1, 7, "Distribution zone", text_color=color.gray, text_size=size.tiny)
 
 // ═══════════════════════════════════════════════════════════════
 // ALERTS
