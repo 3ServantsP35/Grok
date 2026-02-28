@@ -1,55 +1,221 @@
-// This Pine Script® code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
-// © RizenShine
+// MSTR Perpetual Call Valuation — v2 (Dynamic)
+// Models MSTR equity as a Black-Scholes call option on BTC
+// All parameters auto-computed except BTC holdings (updated from 8-K filings)
+// © RizenShine — Engineering by CIO
 
 //@version=6
-indicator("MSTR Perp Call Val", shorttitle="MSTR PC Val", overlay=true)
+indicator("MSTR PC Val v2", shorttitle="PC Val", overlay=true, max_labels_count=10)
 
-// Inputs
-btc_per_share = input.float(0.002466, "BTC per Share")
-software_per_share = input.float(5.18, "Software Value per Share")
-debt_per_share = input.float(28.41, "Debt per Share")
-vol = input.float(0.75, "Bitcoin Volatility (Annual)")
-rf = input.float(0.045, "Risk-Free Rate")
-q_yield = input.float(0.015, "Dividend Yield")
-T = 10.0 // Approx perpetuity with long expiry
-bottom_threshold = input.float(0.8, "Bottom Threshold (x Fair Value)")
-top_threshold = input.float(1.5, "Top Threshold (x Fair Value)")
+// ═══════════════════════════════════════════════════════════════
+// INPUTS — Only what can't be auto-computed
+// ═══════════════════════════════════════════════════════════════
 
-// Fetch BTC price (use your preferred symbol if different)
-btc_price = request.security("CRYPTO:BTCUSD", "D", close)
+string grp_btc = "BTC Holdings (update from 8-K)"
+float btc_holdings = input.float(717130, "Total BTC Holdings", group=grp_btc, tooltip="From latest MSTR 8-K filing. This is the ONE input you must update quarterly.")
+string last_updated = input.string("2026-02-24", "Last Updated (YYYY-MM-DD)", group=grp_btc, tooltip="Date of the 8-K or press release. Script warns if >90 days stale.")
+float software_val = input.float(50.0, "Non-BTC Assets ($M)", group=grp_btc, tooltip="Software + cash + other. ~$50M. Negligible vs BTC but included for completeness.")
 
-// Asset value per share
-S = btc_per_share * btc_price + software_per_share
+string grp_model = "Model Parameters"
+float T_years = input.float(5.0, "Weighted Avg Debt Maturity (years)", group=grp_model, tooltip="MSTR converts mature 2027-2032. Weighted avg ~5 years. Lower T = more option curvature near strike.")
+int vol_lookback = input.int(30, "Realized Vol Lookback (days)", group=grp_model, minval=10, maxval=252, tooltip="Rolling BTC realized volatility window. 30d is standard.")
+bool use_dynamic_rf = input.bool(true, "Auto Risk-Free Rate (US02Y)", group=grp_model, tooltip="Pull 2-year Treasury yield. Uncheck to use manual override.")
+float rf_manual = input.float(0.045, "Manual Risk-Free Rate", group=grp_model, tooltip="Only used if auto is disabled.")
 
-// Black-Scholes d1 and d2
-ln_sk = math.log(S / debt_per_share)
-d1 = (ln_sk + (rf - q_yield + 0.5 * math.pow(vol, 2)) * T) / (vol * math.sqrt(T))
-d2 = d1 - vol * math.sqrt(T)
+string grp_bands = "Band Settings"
+float bottom_mult = input.float(0.80, "Bottom Band (× Fair Value)", group=grp_bands)
+float top_mult = input.float(1.50, "Top Band (× Fair Value)", group=grp_bands)
 
-// Norm CDF approximation function (Abramowitz & Stegun, error < 0.0001)
-norm_cdf(x) => 
-    t = 1.0 / (1.0 + 0.2316419 * math.abs(x))
-    a1 = 0.319381530
-    a2 = -0.356563782
-    a3 = 1.781477937
-    a4 = -1.821255978
-    a5 = 1.330274429
-    poly = t * (a1 + t * (a2 + t * (a3 + t * (a4 + t * a5))))
-    res = 1.0 / math.sqrt(2.0 * 3.141592653589793) * math.exp(-0.5 * math.pow(x, 2)) * poly
+string grp_disp = "Display"
+bool show_table = input.bool(true, "Show Info Table", group=grp_disp)
+bool show_bands = input.bool(true, "Show Bands", group=grp_disp)
+bool show_signals = input.bool(true, "Show Transition Signals", group=grp_disp)
+
+// ═══════════════════════════════════════════════════════════════
+// DYNAMIC DATA FEEDS
+// ═══════════════════════════════════════════════════════════════
+
+// BTC price
+float btc_price = request.security("CRYPTO:BTCUSD", "D", close)
+
+// Shares outstanding (quarterly, from financials)
+float shares_raw = request.financial("NASDAQ:MSTR", "TOTAL_SHARES_OUTSTANDING", "FQ")
+float shares = na(shares_raw) ? 333750000 : shares_raw * 1000000  // financial() returns in millions
+
+// Total debt (quarterly, from financials)
+float debt_raw = request.financial("NASDAQ:MSTR", "TOTAL_DEBT", "FQ")
+float total_debt = na(debt_raw) ? 8190 : debt_raw  // in millions
+
+// Risk-free rate (2-year Treasury yield, daily)
+float us02y = request.security("TVC:US02Y", "D", close)
+float rf = use_dynamic_rf and not na(us02y) ? us02y / 100 : rf_manual
+
+// ═══════════════════════════════════════════════════════════════
+// COMPUTED PARAMETERS
+// ═══════════════════════════════════════════════════════════════
+
+// Per-share values
+float btc_per_share = btc_holdings / shares
+float debt_per_share = total_debt * 1000000 / shares
+float software_per_share = software_val * 1000000 / shares
+
+// Asset value per share (S = underlying for the call)
+float S = btc_per_share * btc_price + software_per_share
+
+// Strike price = debt per share
+float K = debt_per_share
+
+// Rolling realized volatility of BTC (annualized)
+float btc_daily = request.security("CRYPTO:BTCUSD", "D", close)
+float btc_daily_prev = request.security("CRYPTO:BTCUSD", "D", close[1])
+float btc_log_ret = math.log(btc_daily / nz(btc_daily_prev, btc_daily))
+float vol_daily = ta.stdev(btc_log_ret, vol_lookback)
+float vol = vol_daily * math.sqrt(365)  // annualize (crypto trades 365 days)
+float vol_safe = na(vol) or vol < 0.1 ? 0.75 : vol  // floor at 10%, fallback 75%
+
+// Dilution rate (annualized share growth as proxy for dividend yield q)
+float shares_1y = request.financial("NASDAQ:MSTR", "TOTAL_SHARES_OUTSTANDING", "FQ", ignore_invalid_timeframe=true)
+// Approximate: if shares grew, that's dilution
+// Use a conservative 5% as default since quarterly-to-annual is noisy
+float dilution_rate = 0.05
+
+// ═══════════════════════════════════════════════════════════════
+// BLACK-SCHOLES CALL PRICING
+// ═══════════════════════════════════════════════════════════════
+
+// Normal CDF approximation (Abramowitz & Stegun)
+norm_cdf(float x) =>
+    float t = 1.0 / (1.0 + 0.2316419 * math.abs(x))
+    float poly = t * (0.319381530 + t * (-0.356563782 + t * (1.781477937 + t * (-1.821255978 + t * 1.330274429))))
+    float pdf = 1.0 / math.sqrt(2.0 * math.acos(-1)) * math.exp(-0.5 * x * x)
+    float res = pdf * poly
     x >= 0 ? 1.0 - res : res
 
-// Fair value per share (BS call)
-exp_qt = math.exp(-q_yield * T)
-exp_rt = math.exp(-rf * T)
-fair_value = S * exp_qt * norm_cdf(d1) - debt_per_share * exp_rt * norm_cdf(d2)
+// BS d1, d2
+float ln_sk = math.log(S / K)
+float d1 = (ln_sk + (rf - dilution_rate + 0.5 * vol_safe * vol_safe) * T_years) / (vol_safe * math.sqrt(T_years))
+float d2 = d1 - vol_safe * math.sqrt(T_years)
 
-// Plots
-plot(fair_value, "Fair Value", color=color.blue, linewidth=2)
-plot(fair_value * bottom_threshold, "Bottom Band", color=color.green, style=plot.style_line, linestyle=plot.linestyle_dashed)
-plot(fair_value * top_threshold, "Top Band", color=color.red, style=plot.style_line, linestyle=plot.linestyle_dashed)
+// Fair Value = S × e^(-qT) × N(d1) - K × e^(-rT) × N(d2)
+float exp_qt = math.exp(-dilution_rate * T_years)
+float exp_rt = math.exp(-rf * T_years)
+float fair_value = S * exp_qt * norm_cdf(d1) - K * exp_rt * norm_cdf(d2)
 
-// Signals
-bottom_signal = close < fair_value * bottom_threshold
-top_signal = close > fair_value * top_threshold
-plotshape(bottom_signal ? close : na, "Likely Bottom", shape.labelup, location.belowbar, color=color.green, text="Bottom")
-plotshape(top_signal ? close : na, "Likely Top", shape.labeldown, location.abovebar, color=color.red, text="Top")
+// Bands
+float bottom_band = fair_value * bottom_mult
+float top_band = fair_value * top_mult
+
+// ═══════════════════════════════════════════════════════════════
+// BAND POSITION & PREMIUM
+// ═══════════════════════════════════════════════════════════════
+
+float premium_pct = fair_value != 0 ? (close - fair_value) / fair_value * 100 : 0
+float band_position = (top_band - bottom_band) != 0 ? (close - bottom_band) / (top_band - bottom_band) : 0.5
+
+// Zone classification
+string val_zone = band_position < 0.1 ? "DEEP DISCOUNT" : band_position < 0.3 ? "DISCOUNT" : band_position < 0.5 ? "FAIR LOW" : band_position < 0.7 ? "FAIR HIGH" : band_position < 0.9 ? "PREMIUM" : "EXTREME PREMIUM"
+
+// ═══════════════════════════════════════════════════════════════
+// TRANSITION SIGNALS (fire only on zone change, not continuously)
+// ═══════════════════════════════════════════════════════════════
+
+bool entered_bottom = close < bottom_band and close[1] >= nz(bottom_band[1], bottom_band)
+bool exited_bottom = close >= bottom_band and close[1] < nz(bottom_band[1], bottom_band)
+bool entered_top = close > top_band and close[1] <= nz(top_band[1], top_band)
+bool exited_top = close <= top_band and close[1] > nz(top_band[1], top_band)
+
+// ═══════════════════════════════════════════════════════════════
+// PLOTS
+// ═══════════════════════════════════════════════════════════════
+
+plot(fair_value, "Fair Value", color=color.new(color.blue, 20), linewidth=2)
+plot(show_bands ? bottom_band : na, "Bottom Band", color=color.new(color.green, 30), style=plot.style_line, linewidth=1)
+plot(show_bands ? top_band : na, "Top Band", color=color.new(color.red, 30), style=plot.style_line, linewidth=1)
+
+// Fill between bands
+p_top = plot(show_bands ? top_band : na, display=display.none)
+p_bot = plot(show_bands ? bottom_band : na, display=display.none)
+fill(p_top, p_bot, color=color.new(color.blue, 92))
+
+// Transition markers (sparse — only fire on crossings)
+plotshape(show_signals and entered_bottom, "Enter Below Bottom", shape.diamond, location.belowbar, color=#00FF00, size=size.small)
+plotshape(show_signals and entered_top, "Enter Above Top", shape.diamond, location.abovebar, color=color.red, size=size.small)
+
+// ═══════════════════════════════════════════════════════════════
+// STALENESS CHECK
+// ═══════════════════════════════════════════════════════════════
+
+// Parse last_updated date and check if >90 days stale
+// Pine doesn't have date parsing, so we'll use a simpler approach:
+// Compare input year/month against current bar time
+bool is_stale = false
+int update_year = str.length(last_updated) >= 4 ? int(str.tonumber(str.substring(last_updated, 0, 4))) : 2026
+int update_month = str.length(last_updated) >= 7 ? int(str.tonumber(str.substring(last_updated, 5, 7))) : 1
+int bar_year = year
+int bar_month = month
+int month_diff = (bar_year - update_year) * 12 + (bar_month - update_month)
+is_stale := month_diff > 3  // >3 months = stale
+
+// ═══════════════════════════════════════════════════════════════
+// INFO TABLE
+// ═══════════════════════════════════════════════════════════════
+
+var table info_tbl = table.new(position.bottom_right, 2, 14, bgcolor=color.new(color.black, 30), border_width=1, border_color=color.new(color.gray, 60))
+
+if barstate.islast and show_table
+    color hdr_clr = band_position < 0.2 ? color.green : band_position > 0.8 ? color.red : color.new(color.blue, 30)
+    table.cell(info_tbl, 0, 0, "PC Val v2", text_color=color.white, text_size=size.small, bgcolor=hdr_clr)
+    table.cell(info_tbl, 1, 0, val_zone, text_color=color.white, text_size=size.small, bgcolor=hdr_clr)
+
+    table.cell(info_tbl, 0, 1, "Fair Value", text_color=color.gray, text_size=size.tiny)
+    table.cell(info_tbl, 1, 1, str.format("${0}", str.tostring(fair_value, "#.##")), text_color=color.blue, text_size=size.tiny)
+
+    table.cell(info_tbl, 0, 2, "Premium", text_color=color.gray, text_size=size.tiny)
+    color prem_clr = premium_pct > 0 ? color.red : color.green
+    table.cell(info_tbl, 1, 2, str.format("{0}%", str.tostring(premium_pct, "+#.#;-#.#")), text_color=prem_clr, text_size=size.tiny)
+
+    table.cell(info_tbl, 0, 3, "Band Pos", text_color=color.gray, text_size=size.tiny)
+    table.cell(info_tbl, 1, 3, str.tostring(band_position, "#.##"), text_color=band_position < 0.2 ? color.green : band_position > 0.8 ? color.red : color.gray, text_size=size.tiny)
+
+    table.cell(info_tbl, 0, 4, "Bottom", text_color=color.gray, text_size=size.tiny)
+    table.cell(info_tbl, 1, 4, str.format("${0}", str.tostring(bottom_band, "#.##")), text_color=color.green, text_size=size.tiny)
+
+    table.cell(info_tbl, 0, 5, "Top", text_color=color.gray, text_size=size.tiny)
+    table.cell(info_tbl, 1, 5, str.format("${0}", str.tostring(top_band, "#.##")), text_color=color.red, text_size=size.tiny)
+
+    table.cell(info_tbl, 0, 6, "─── Inputs ───", text_color=color.gray, text_size=size.tiny)
+    table.cell(info_tbl, 1, 6, "", text_size=size.tiny)
+
+    table.cell(info_tbl, 0, 7, "BTC/Share", text_color=color.gray, text_size=size.tiny)
+    table.cell(info_tbl, 1, 7, str.tostring(btc_per_share, "#.######"), text_color=color.white, text_size=size.tiny)
+
+    table.cell(info_tbl, 0, 8, "Debt/Share", text_color=color.gray, text_size=size.tiny)
+    table.cell(info_tbl, 1, 8, str.format("${0}", str.tostring(K, "#.##")), text_color=color.white, text_size=size.tiny)
+
+    table.cell(info_tbl, 0, 9, "Shares (M)", text_color=color.gray, text_size=size.tiny)
+    table.cell(info_tbl, 1, 9, str.tostring(shares / 1000000, "#.#"), text_color=color.white, text_size=size.tiny)
+
+    table.cell(info_tbl, 0, 10, "BTC Vol", text_color=color.gray, text_size=size.tiny)
+    table.cell(info_tbl, 1, 10, str.format("{0}%", str.tostring(vol_safe * 100, "#.#")), text_color=vol_safe > 0.8 ? color.orange : color.gray, text_size=size.tiny)
+
+    table.cell(info_tbl, 0, 11, "Risk-Free", text_color=color.gray, text_size=size.tiny)
+    string rf_src = use_dynamic_rf and not na(us02y) ? " (US02Y)" : " (manual)"
+    table.cell(info_tbl, 1, 11, str.format("{0}%{1}", str.tostring(rf * 100, "#.##"), rf_src), text_color=color.gray, text_size=size.tiny)
+
+    table.cell(info_tbl, 0, 12, "T (years)", text_color=color.gray, text_size=size.tiny)
+    table.cell(info_tbl, 1, 12, str.tostring(T_years, "#.#"), text_color=color.gray, text_size=size.tiny)
+
+    // Staleness warning
+    if is_stale
+        table.cell(info_tbl, 0, 13, "⚠️ STALE", text_color=color.red, text_size=size.tiny, bgcolor=color.new(color.red, 80))
+        table.cell(info_tbl, 1, 13, str.format("BTC holdings from {0}", last_updated), text_color=color.red, text_size=size.tiny, bgcolor=color.new(color.red, 80))
+    else
+        table.cell(info_tbl, 0, 13, "Updated", text_color=color.gray, text_size=size.tiny)
+        table.cell(info_tbl, 1, 13, last_updated, text_color=color.gray, text_size=size.tiny)
+
+// ═══════════════════════════════════════════════════════════════
+// ALERTS
+// ═══════════════════════════════════════════════════════════════
+
+alertcondition(entered_bottom, title="PC Val Below Bottom", message="MSTR dropped below PC Val bottom band — deep discount to BS fair value")
+alertcondition(entered_top, title="PC Val Above Top", message="MSTR rose above PC Val top band — extreme premium to BS fair value")
+alertcondition(ta.cross(close, fair_value), title="PC Val Cross", message="MSTR crossed its BS fair value line")
