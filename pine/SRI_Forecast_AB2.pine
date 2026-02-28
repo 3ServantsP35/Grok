@@ -1,0 +1,304 @@
+// SRI Forecast AB2 — Spread Guidance + Historical Analog Projection
+// LT SRI backbone with STL colored by spread opportunity zone
+// GREEN=overweight, LIGHT GREEN=standard, YELLOW=conservative, GRAY=STRC, RED=avoid
+// Backtest: BTC 2021-2026, 79% breach prediction accuracy
+// © RizenShine — Forecast engine by CIO
+
+//@version=6
+indicator(title="SRI Forecast AB2", shorttitle="SRI AB2", overlay=true, max_lines_count=500, max_labels_count=50)
+
+// ═══════════════════════════════════════════════════════════════
+// INPUTS
+// ═══════════════════════════════════════════════════════════════
+string grp_core   = "Core Settings"
+int at_period     = input.int(14, "Trackline ATR Period", group=grp_core)
+float at_coeff    = input.float(1.0, "Trackline ATR Coefficient", group=grp_core)
+float near_pct    = input.float(3.0, "Near STL %", group=grp_core, tooltip="0-3%: breach risk assessed (green/light green/red)")
+float mid_pct     = input.float(8.0, "Mid STL %", group=grp_core, tooltip="3-8%: yellow conservative zone")
+
+string grp_disp   = "Display"
+bool show_ribbon        = input.bool(true, "Show Forecast Ribbon", group=grp_disp)
+bool show_table         = input.bool(true, "Show Info Table", group=grp_disp)
+bool show_ab2_markers   = input.bool(true, "Show AB2 Spread Markers", group=grp_disp)
+bool show_stage_bg      = input.bool(true, "Show LT Stage Background", group=grp_disp)
+
+// ═══════════════════════════════════════════════════════════════
+// TRACKLINE FUNCTION
+// ═══════════════════════════════════════════════════════════════
+
+f_trackline(int period, float coeff) =>
+    atr = ta.rma(ta.tr(true), period)
+    upT = low - atr * coeff
+    downT = high + atr * coeff
+    cond = ta.rsi(close, period) >= 50
+    var float track = 0.0
+    track := cond ? math.max(upT, nz(track[1])) : math.min(downT, nz(track[1]))
+    track
+
+// ═══════════════════════════════════════════════════════════════
+// SRIBI — All 4 Timeframes
+// ═══════════════════════════════════════════════════════════════
+
+float vst_ftl = request.security(syminfo.tickerid, "120", f_trackline(at_period, at_coeff))
+float vst_stl = request.security(syminfo.tickerid, "D",   f_trackline(at_period, at_coeff))
+float vst_sribi = vst_stl != 0 ? (vst_ftl - vst_stl) / vst_stl * 100 : 0
+float st_sribi = vst_sribi
+
+float lt_ftl = request.security(syminfo.tickerid, "240", f_trackline(at_period, at_coeff))
+float lt_stl = request.security(syminfo.tickerid, "W",   f_trackline(at_period, at_coeff))
+float lt_sribi = lt_stl != 0 ? (lt_ftl - lt_stl) / lt_stl * 100 : 0
+
+float vlt_ftl = request.security(syminfo.tickerid, "480", f_trackline(at_period, at_coeff))
+float vlt_stl = request.security(syminfo.tickerid, "2W",  f_trackline(at_period, at_coeff))
+float vlt_sribi = vlt_stl != 0 ? (vlt_ftl - vlt_stl) / vlt_stl * 100 : 0
+
+float sribi_avg = (vst_sribi + st_sribi + lt_sribi + vlt_sribi) / 4.0
+int bull_count = (vst_sribi > 0 ? 1 : 0) + (st_sribi > 0 ? 1 : 0) + (lt_sribi > 0 ? 1 : 0) + (vlt_sribi > 0 ? 1 : 0)
+
+int zone = sribi_avg < -25 ? 1 : sribi_avg < -5 ? 2 : sribi_avg < 5 ? 3 : sribi_avg < 25 ? 4 : 5
+string zone_name = zone == 1 ? "Very Bearish" : zone == 2 ? "Bearish" : zone == 3 ? "Neutral" : zone == 4 ? "Bullish" : "Very Bullish"
+color zone_color = zone == 1 ? color.new(color.red, 0) : zone == 2 ? color.new(color.orange, 0) : zone == 3 ? color.new(color.gray, 0) : zone == 4 ? color.new(color.teal, 0) : color.new(color.green, 0)
+color ribbon_fill = zone == 1 ? color.new(color.red, 80) : zone == 2 ? color.new(color.orange, 80) : zone == 3 ? color.new(color.gray, 85) : zone == 4 ? color.new(color.teal, 80) : color.new(color.green, 80)
+
+// ═══════════════════════════════════════════════════════════════
+// LT BACKBONE
+// ═══════════════════════════════════════════════════════════════
+
+bool lt_bullish = lt_ftl > lt_stl
+bool lt_ftl_rising = lt_ftl > nz(lt_ftl[1])
+
+// ═══════════════════════════════════════════════════════════════
+// STL SPREAD OPPORTUNITY ZONES
+// ═══════════════════════════════════════════════════════════════
+
+float pct_from_stl = lt_stl != 0 ? (close - lt_stl) / lt_stl * 100 : 0
+float abs_pct_from_stl = math.abs(pct_from_stl)
+float pct_from_ftl = lt_ftl != 0 ? (close - lt_ftl) / lt_ftl * 100 : 0
+bool is_support_test = close > lt_stl
+float roc_5 = close[5] != 0 ? (close - close[5]) / close[5] * 100 : 0
+
+bool is_near = abs_pct_from_stl < near_pct
+bool is_mid  = abs_pct_from_stl >= near_pct and abs_pct_from_stl < mid_pct
+bool is_far  = abs_pct_from_stl >= mid_pct
+
+float breach_risk = 0.0
+if is_near
+    if is_support_test
+        breach_risk += lt_ftl < lt_stl ? 3.0 : -2.0
+        breach_risk += bull_count == 0 ? -3.0 : 0.0
+        breach_risk += sribi_avg > 0 ? 2.0 : 0.0
+        breach_risk += roc_5 < -5 ? -1.0 : roc_5 > -2 ? 1.0 : 0.0
+    else
+        breach_risk += lt_ftl > lt_stl ? 3.0 : -2.0
+        breach_risk += bull_count == 0 ? -2.0 : 0.0
+        breach_risk += sribi_avg > 0 ? 2.0 : 0.0
+        breach_risk += roc_5 < -5 ? 1.0 : roc_5 > -2 ? -1.0 : 0.0
+
+int risk_class = breach_risk <= -2 ? 0 : breach_risk >= 2 ? 2 : 1
+
+int spread_zone = 0
+if is_far
+    spread_zone := 0
+else if is_mid
+    spread_zone := 1
+else if is_near
+    if risk_class == 2
+        spread_zone := 4
+    else if risk_class == 0
+        spread_zone := 3
+    else
+        spread_zone := 2
+
+string spread_action = spread_zone == 0 ? "STRC" : spread_zone == 1 ? "Conservative" : spread_zone == 2 ? "Standard" : spread_zone == 3 ? "Overweight" : "Avoid"
+
+color stl_color = switch spread_zone
+    0 => color.new(color.gray, 20)
+    1 => color.new(color.yellow, 0)
+    2 => color.new(#90EE90, 0)
+    3 => color.new(color.green, 0)
+    4 => color.new(color.red, 0)
+    => color.new(color.gray, 20)
+
+color ftl_color = lt_ftl_rising ? color.new(color.teal, 30) : color.new(color.maroon, 30)
+plot(lt_ftl, "LT Fast Trackline", color=ftl_color, linewidth=2, style=plot.style_circles)
+plot(lt_stl, "LT Slow Trackline", color=stl_color, linewidth=3)
+
+bgcolor(show_stage_bg ? (lt_bullish ? color.new(color.green, 93) : color.new(color.red, 93)) : na, title="LT Stage Background")
+
+// ═══════════════════════════════════════════════════════════════
+// AB2 SPREAD DETECTION
+// ═══════════════════════════════════════════════════════════════
+
+float p75_20d = zone == 1 ? 8.74 : zone == 2 ? 6.71 : zone == 3 ? 6.77 : zone == 4 ? 8.95 : 10.96
+float p25_20d = zone == 1 ? -5.81 : zone == 2 ? -8.28 : zone == 3 ? -6.19 : zone == 4 ? -5.86 : -4.61
+float ribbon_width = p75_20d - p25_20d
+
+bool ab2_bull_put = is_near and is_support_test and (spread_zone >= 2) and (spread_zone <= 3) and (zone <= 2)
+bool ab2_bear_call = pct_from_ftl > 5.0 and (zone >= 4) and (p75_20d < 12.0) and (spread_zone != 4)
+bool ab2_iron_condor = (zone == 3) and (ribbon_width < 14.0) and (spread_zone != 4)
+bool ab2_conservative = is_mid and (spread_zone == 1)
+
+string ab2_signal = ab2_bull_put ? "Bull Put ▲" : ab2_bear_call ? "Bear Call ▼" : ab2_iron_condor ? "Iron Condor ↔" : ab2_conservative ? "Conservative" : "None"
+
+plotshape(show_ab2_markers and ab2_bull_put and not ab2_bull_put[1], title="AB2 Bull Put", location=location.belowbar, style=shape.diamond, color=color.green, size=size.small)
+plotshape(show_ab2_markers and ab2_bear_call and not ab2_bear_call[1], title="AB2 Bear Call", location=location.abovebar, style=shape.diamond, color=color.red, size=size.small)
+plotshape(show_ab2_markers and ab2_iron_condor and not ab2_iron_condor[1], title="AB2 Iron Condor", location=location.belowbar, style=shape.diamond, color=color.purple, size=size.tiny)
+plotshape(show_ab2_markers and ab2_conservative and not ab2_conservative[1], title="AB2 Conservative", location=location.belowbar, style=shape.circle, color=color.yellow, size=size.tiny)
+
+// ═══════════════════════════════════════════════════════════════
+// FORECAST PERCENTILE LOOKUP
+// ═══════════════════════════════════════════════════════════════
+
+f_get_pct(int z, int day_idx, int pct) =>
+    float result = 0.0
+    if z == 1
+        if pct == 0
+            result := day_idx == 0 ? -2.91 : day_idx == 1 ? -3.66 : day_idx == 2 ? -4.92 : -5.81
+        else if pct == 1
+            result := day_idx == 0 ? 0.81 : day_idx == 1 ? 0.43 : day_idx == 2 ? 0.70 : 1.29
+        else
+            result := day_idx == 0 ? 4.21 : day_idx == 1 ? 5.72 : day_idx == 2 ? 6.93 : 8.74
+    else if z == 2
+        if pct == 0
+            result := day_idx == 0 ? -3.30 : day_idx == 1 ? -4.80 : day_idx == 2 ? -5.83 : -8.28
+        else if pct == 1
+            result := day_idx == 0 ? -0.24 : day_idx == 1 ? -0.30 : day_idx == 2 ? -0.15 : -0.58
+        else
+            result := day_idx == 0 ? 2.72 : day_idx == 1 ? 4.41 : day_idx == 2 ? 5.18 : 6.71
+    else if z == 3
+        if pct == 0
+            result := day_idx == 0 ? -3.00 : day_idx == 1 ? -4.95 : day_idx == 2 ? -5.81 : -6.19
+        else if pct == 1
+            result := day_idx == 0 ? -0.15 : day_idx == 1 ? -0.12 : day_idx == 2 ? -1.03 : -1.21
+        else
+            result := day_idx == 0 ? 3.21 : day_idx == 1 ? 4.46 : day_idx == 2 ? 5.36 : 6.77
+    else if z == 4
+        if pct == 0
+            result := day_idx == 0 ? -2.67 : day_idx == 1 ? -4.07 : day_idx == 2 ? -4.61 : -5.86
+        else if pct == 1
+            result := day_idx == 0 ? 0.29 : day_idx == 1 ? 0.85 : day_idx == 2 ? 0.86 : 0.10
+        else
+            result := day_idx == 0 ? 3.72 : day_idx == 1 ? 6.10 : day_idx == 2 ? 7.19 : 8.95
+    else
+        if pct == 0
+            result := day_idx == 0 ? -2.76 : day_idx == 1 ? -4.45 : day_idx == 2 ? -4.79 : -4.61
+        else if pct == 1
+            result := day_idx == 0 ? 0.08 : day_idx == 1 ? 1.01 : day_idx == 2 ? 1.42 : 2.78
+        else
+            result := day_idx == 0 ? 3.73 : day_idx == 1 ? 6.19 : day_idx == 2 ? 8.98 : 10.96
+    result
+
+// ═══════════════════════════════════════════════════════════════
+// FORECAST RIBBON
+// ═══════════════════════════════════════════════════════════════
+
+if barstate.islast and show_ribbon
+    float base_price = close
+    int[] offsets = array.from(0, 5, 10, 15, 20)
+
+    var line[] bull_lines = array.new<line>()
+    var line[] base_lines = array.new<line>()
+    var line[] bear_lines = array.new<line>()
+    var linefill[] fills  = array.new<linefill>()
+
+    if array.size(bull_lines) > 0
+        for i = 0 to array.size(bull_lines) - 1
+            line.delete(array.get(bull_lines, i))
+        array.clear(bull_lines)
+    if array.size(base_lines) > 0
+        for i = 0 to array.size(base_lines) - 1
+            line.delete(array.get(base_lines, i))
+        array.clear(base_lines)
+    if array.size(bear_lines) > 0
+        for i = 0 to array.size(bear_lines) - 1
+            line.delete(array.get(bear_lines, i))
+        array.clear(bear_lines)
+    if array.size(fills) > 0
+        for i = 0 to array.size(fills) - 1
+            linefill.delete(array.get(fills, i))
+        array.clear(fills)
+
+    for seg = 0 to 3
+        int bar_start = bar_index + array.get(offsets, seg)
+        int bar_end   = bar_index + array.get(offsets, seg + 1)
+
+        float p25_s = seg == 0 ? 0.0 : f_get_pct(zone, seg - 1, 0)
+        float p50_s = seg == 0 ? 0.0 : f_get_pct(zone, seg - 1, 1)
+        float p75_s = seg == 0 ? 0.0 : f_get_pct(zone, seg - 1, 2)
+        float p25_e = f_get_pct(zone, seg, 0)
+        float p50_e = f_get_pct(zone, seg, 1)
+        float p75_e = f_get_pct(zone, seg, 2)
+
+        line bl = line.new(bar_start, base_price * (1 + p75_s / 100), bar_end, base_price * (1 + p75_e / 100), color=color.new(zone_color, 50), width=1, style=line.style_dashed)
+        line ml = line.new(bar_start, base_price * (1 + p50_s / 100), bar_end, base_price * (1 + p50_e / 100), color=zone_color, width=2)
+        line sl = line.new(bar_start, base_price * (1 + p25_s / 100), bar_end, base_price * (1 + p25_e / 100), color=color.new(zone_color, 50), width=1, style=line.style_dashed)
+
+        array.push(bull_lines, bl)
+        array.push(base_lines, ml)
+        array.push(bear_lines, sl)
+        linefill lf = linefill.new(bl, sl, ribbon_fill)
+        array.push(fills, lf)
+
+// ═══════════════════════════════════════════════════════════════
+// INFO TABLE
+// ═══════════════════════════════════════════════════════════════
+
+var table info_tbl = table.new(position.bottom_right, 2, 10, bgcolor=color.new(color.black, 30), border_width=1, border_color=color.new(color.gray, 60), frame_width=1, frame_color=color.new(color.gray, 40))
+
+if barstate.islast and show_table
+    table.cell(info_tbl, 0, 0, "SRI AB2", text_color=color.white, text_size=size.small, bgcolor=zone_color)
+    table.cell(info_tbl, 1, 0, zone_name, text_color=color.white, text_size=size.small, bgcolor=zone_color)
+
+    table.cell(info_tbl, 0, 1, "Concordance", text_color=color.gray, text_size=size.tiny)
+    table.cell(info_tbl, 1, 1, str.format("CT{0} ({1}/4)", bull_count, bull_count), text_color=color.white, text_size=size.tiny)
+
+    color sribi_clr = sribi_avg > 5 ? color.teal : sribi_avg < -5 ? color.red : color.gray
+    table.cell(info_tbl, 0, 2, "SRIBI Avg", text_color=color.gray, text_size=size.tiny)
+    table.cell(info_tbl, 1, 2, str.tostring(sribi_avg, "#.#"), text_color=sribi_clr, text_size=size.tiny)
+
+    float[] sribi_vals = array.from(vst_sribi, st_sribi, lt_sribi, vlt_sribi)
+    string[] sribi_names = array.from("  VST", "  ST", "  LT", "  VLT")
+    for i = 0 to 3
+        float val = array.get(sribi_vals, i)
+        color val_clr = val > 0 ? color.teal : color.red
+        string dot = val > 0 ? "●" : "○"
+        table.cell(info_tbl, 0, 3 + i, array.get(sribi_names, i), text_color=color.gray, text_size=size.tiny)
+        table.cell(info_tbl, 1, 3 + i, str.format("{0} {1}", dot, str.tostring(val, "#.#")), text_color=val_clr, text_size=size.tiny)
+
+    float med_20 = zone == 1 ? 1.29 : zone == 2 ? -0.58 : zone == 3 ? -1.21 : zone == 4 ? 0.10 : 2.78
+    color med_clr = med_20 > 0 ? color.teal : med_20 < 0 ? color.red : color.gray
+    table.cell(info_tbl, 0, 7, "20d Median", text_color=color.gray, text_size=size.tiny)
+    table.cell(info_tbl, 1, 7, str.format("{0}%", str.tostring(med_20, "#.##")), text_color=med_clr, text_size=size.tiny)
+
+    color sz_clr = switch spread_zone
+        0 => color.gray
+        1 => color.yellow
+        2 => color.new(#90EE90, 0)
+        3 => color.green
+        4 => color.red
+        => color.gray
+    table.cell(info_tbl, 0, 8, "Spread", text_color=color.gray, text_size=size.tiny)
+    table.cell(info_tbl, 1, 8, spread_action, text_color=sz_clr, text_size=size.tiny)
+
+    color ab2_clr = ab2_bull_put ? color.green : ab2_bear_call ? color.red : ab2_iron_condor ? color.purple : ab2_conservative ? color.yellow : color.gray
+    table.cell(info_tbl, 0, 9, "AB2", text_color=color.gray, text_size=size.tiny)
+    table.cell(info_tbl, 1, 9, ab2_signal, text_color=ab2_clr, text_size=size.tiny)
+
+// ═══════════════════════════════════════════════════════════════
+// ALERTS
+// ═══════════════════════════════════════════════════════════════
+
+alertcondition(ta.cross(sribi_avg, 25.0), title="SRIBI Very Bullish", message="SRI AB2: SRIBI avg crossed +25 — Very Bullish zone")
+alertcondition(ta.cross(-25.0, sribi_avg), title="SRIBI Very Bearish", message="SRI AB2: SRIBI avg crossed -25 — Very Bearish (contrarian bullish)")
+alertcondition(ta.crossover(float(bull_count), 3.5), title="CT4 Full Concordance", message="SRI AB2: All 4 TFs bullish — CT4")
+alertcondition(ta.crossunder(float(bull_count), 0.5), title="CT0 Full Bearish", message="SRI AB2: All 4 TFs bearish — CT0")
+
+alertcondition(spread_zone == 3 and spread_zone[1] != 3, title="STL GREEN — Overweight Spreads", message="SRI AB2: GREEN — near STL, low breach risk, 81% hold. Overweight.")
+alertcondition(spread_zone == 2 and spread_zone[1] != 2, title="STL LIGHT GREEN — Standard Spreads", message="SRI AB2: LIGHT GREEN — near STL, 84% hold. Standard size.")
+alertcondition(spread_zone == 1 and spread_zone[1] != 1, title="STL YELLOW — Conservative Spreads", message="SRI AB2: YELLOW — 3-8% from STL, 74% hold. Conservative.")
+alertcondition(spread_zone == 4 and spread_zone[1] != 4, title="STL RED — Avoid Spreads", message="SRI AB2: RED — 73% breach rate. Avoid new spreads.")
+alertcondition(spread_zone == 0 and spread_zone[1] != 0, title="STL GRAY — STRC", message="SRI AB2: GRAY — >8% from STL. Capital better in STRC.")
+
+alertcondition(ab2_bull_put and not ab2_bull_put[1], title="AB2 Bull Put Spread", message="SRI AB2: Bull Put — near STL support, green zone. Strike at STL.")
+alertcondition(ab2_bear_call and not ab2_bear_call[1], title="AB2 Bear Call Spread", message="SRI AB2: Bear Call — extended above FTL, bullish zone.")
+alertcondition(ab2_iron_condor and not ab2_iron_condor[1], title="AB2 Iron Condor", message="SRI AB2: Iron Condor — neutral zone, narrow range.")
