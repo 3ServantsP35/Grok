@@ -1,0 +1,165 @@
+// SRI Forecast AB1 — Directional Trade Signals
+// LT SRI backbone + FTL/STL crossover and pullback entry detection
+// Fluorescent green = bullish, fluorescent pink = bearish (per-asset toggle)
+// BTC backtest: Initiation 67% win +9.1% at 20d, Pullback 74% win +6.1% at 20d
+// © RizenShine — Forecast engine by CIO
+
+//@version=6
+indicator(title="SRI Forecast AB1", shorttitle="SRI AB1", overlay=true, max_labels_count=50)
+
+// ═══════════════════════════════════════════════════════════════
+// INPUTS
+// ═══════════════════════════════════════════════════════════════
+string grp_core   = "Core Settings"
+int at_period     = input.int(14, "Trackline ATR Period", group=grp_core)
+float at_coeff    = input.float(1.0, "Trackline ATR Coefficient", group=grp_core)
+float mid_pct     = input.float(8.0, "Mid STL %", group=grp_core, tooltip="Pullback zone: 3-8% from STL")
+
+string grp_signals = "Signals"
+bool enable_bull  = input.bool(true, "Enable Bullish Signals", group=grp_signals, tooltip="FTL cross + CT3+ pullback. BTC: 67-74% win rate.")
+bool enable_bear  = input.bool(false, "Enable Bearish Signals", group=grp_signals, tooltip="OFF for BTC (no edge). Enable for SPY/other mean-reverting assets after backtesting.")
+
+string grp_disp   = "Display"
+bool show_table         = input.bool(true, "Show Info Table", group=grp_disp)
+bool show_stage_bg      = input.bool(true, "Show LT Stage Background", group=grp_disp)
+
+// ═══════════════════════════════════════════════════════════════
+// TRACKLINE FUNCTION
+// ═══════════════════════════════════════════════════════════════
+
+f_trackline(int period, float coeff) =>
+    atr = ta.rma(ta.tr(true), period)
+    upT = low - atr * coeff
+    downT = high + atr * coeff
+    cond = ta.rsi(close, period) >= 50
+    var float track = 0.0
+    track := cond ? math.max(upT, nz(track[1])) : math.min(downT, nz(track[1]))
+    track
+
+// ═══════════════════════════════════════════════════════════════
+// SRIBI — All 4 Timeframes
+// ═══════════════════════════════════════════════════════════════
+
+float vst_ftl = request.security(syminfo.tickerid, "120", f_trackline(at_period, at_coeff))
+float vst_stl = request.security(syminfo.tickerid, "D",   f_trackline(at_period, at_coeff))
+float vst_sribi = vst_stl != 0 ? (vst_ftl - vst_stl) / vst_stl * 100 : 0
+float st_sribi = vst_sribi
+
+float lt_ftl = request.security(syminfo.tickerid, "240", f_trackline(at_period, at_coeff))
+float lt_stl = request.security(syminfo.tickerid, "W",   f_trackline(at_period, at_coeff))
+float lt_sribi = lt_stl != 0 ? (lt_ftl - lt_stl) / lt_stl * 100 : 0
+
+float vlt_ftl = request.security(syminfo.tickerid, "480", f_trackline(at_period, at_coeff))
+float vlt_stl = request.security(syminfo.tickerid, "2W",  f_trackline(at_period, at_coeff))
+float vlt_sribi = vlt_stl != 0 ? (vlt_ftl - vlt_stl) / vlt_stl * 100 : 0
+
+float sribi_avg = (vst_sribi + st_sribi + lt_sribi + vlt_sribi) / 4.0
+int bull_count = (vst_sribi > 0 ? 1 : 0) + (st_sribi > 0 ? 1 : 0) + (lt_sribi > 0 ? 1 : 0) + (vlt_sribi > 0 ? 1 : 0)
+
+// ═══════════════════════════════════════════════════════════════
+// LT BACKBONE
+// ═══════════════════════════════════════════════════════════════
+
+bool lt_bullish = lt_ftl > lt_stl
+bool lt_ftl_rising = lt_ftl > nz(lt_ftl[1])
+
+// Plot tracklines (clean — no spread coloring, that's AB2's job)
+color ftl_color = lt_ftl_rising ? color.new(color.teal, 30) : color.new(color.maroon, 30)
+plot(lt_ftl, "LT Fast Trackline", color=ftl_color, linewidth=2, style=plot.style_circles)
+plot(lt_stl, "LT Slow Trackline", color=lt_bullish ? color.new(color.teal, 40) : color.new(color.maroon, 40), linewidth=2)
+
+bgcolor(show_stage_bg ? (lt_bullish ? color.new(color.green, 93) : color.new(color.red, 93)) : na, title="LT Stage Background")
+
+// ═══════════════════════════════════════════════════════════════
+// AB1 DIRECTIONAL SIGNALS
+//
+// BULLISH (backtested on BTC 2021-2026):
+//   Signal A — FTL crosses above STL: 67% win, +9.1% median at 20d (n=15, ~4x/yr)
+//   Signal B — CT3+ pullback entry:   74% win, +6.1% median at 20d (n=10, ~3x/yr)
+//
+// BEARISH (scaffolded — enable per-asset after backtesting):
+//   Signal C — FTL crosses below STL
+//   Signal D — CT0 + momentum breakdown
+//
+// WARNING: On BTC, bearish signals have no edge (48-49% win as shorts).
+// Steep declining STL + far below = CONTRARIAN LONG (66% win).
+// ═══════════════════════════════════════════════════════════════
+
+float pct_from_stl = lt_stl != 0 ? (close - lt_stl) / lt_stl * 100 : 0
+float abs_pct_from_stl = math.abs(pct_from_stl)
+float roc_5 = close[5] != 0 ? (close - close[5]) / close[5] * 100 : 0
+bool is_mid = abs_pct_from_stl >= 3.0 and abs_pct_from_stl < mid_pct
+
+// FTL/STL crossovers
+bool ftl_was_below = nz(lt_ftl[1]) <= nz(lt_stl[1])
+bool ftl_was_above = nz(lt_ftl[1]) > nz(lt_stl[1])
+bool ftl_cross_bull = lt_ftl > lt_stl and ftl_was_below
+bool ftl_cross_bear = lt_ftl < lt_stl and ftl_was_above
+
+// --- BULLISH ---
+bool ab1_bull_init = enable_bull and ftl_cross_bull
+bool ab1_bull_pull = enable_bull and (bull_count >= 3) and lt_bullish and is_mid and (roc_5 > 0)
+bool ab1_bull = ab1_bull_init or ab1_bull_pull
+
+// --- BEARISH (default OFF) ---
+bool ab1_bear_init = enable_bear and ftl_cross_bear
+bool ab1_bear_brkdn = enable_bear and (bull_count == 0) and not lt_bullish and (pct_from_stl < -3) and (roc_5 < -3)
+bool ab1_bear = ab1_bear_init or ab1_bear_brkdn
+
+// Combined
+string ab1_signal = ab1_bull_init ? "LONG Init ▲▲" : ab1_bull_pull ? "LONG Pullback ▲" : ab1_bear_init ? "SHORT Init ▼▼" : ab1_bear_brkdn ? "SHORT Brkdn ▼" : "None"
+
+// Colors
+color fluorescent_green = #39FF14
+color fluorescent_pink  = #FF1493
+
+// Markers
+plotshape(ab1_bull_init, title="AB1 Bull Initiation", location=location.belowbar, style=shape.triangleup, color=fluorescent_green, size=size.normal, text="AB1", textcolor=fluorescent_green)
+plotshape(ab1_bull_pull and not ab1_bull_pull[1], title="AB1 Bull Pullback", location=location.belowbar, style=shape.triangleup, color=fluorescent_green, size=size.small, text="AB1↩", textcolor=fluorescent_green)
+plotshape(ab1_bear_init, title="AB1 Bear Initiation", location=location.abovebar, style=shape.triangledown, color=fluorescent_pink, size=size.normal, text="AB1", textcolor=fluorescent_pink)
+plotshape(ab1_bear_brkdn and not ab1_bear_brkdn[1], title="AB1 Bear Breakdown", location=location.abovebar, style=shape.triangledown, color=fluorescent_pink, size=size.small, text="AB1↩", textcolor=fluorescent_pink)
+
+// ═══════════════════════════════════════════════════════════════
+// INFO TABLE
+// ═══════════════════════════════════════════════════════════════
+
+var table info_tbl = table.new(position.bottom_right, 2, 6, bgcolor=color.new(color.black, 30), border_width=1, border_color=color.new(color.gray, 60), frame_width=1, frame_color=color.new(color.gray, 40))
+
+if barstate.islast and show_table
+    // Header
+    color hdr_clr = ab1_bull ? fluorescent_green : ab1_bear ? fluorescent_pink : color.gray
+    table.cell(info_tbl, 0, 0, "SRI AB1", text_color=color.white, text_size=size.small, bgcolor=hdr_clr)
+    table.cell(info_tbl, 1, 0, ab1_signal, text_color=color.white, text_size=size.small, bgcolor=hdr_clr)
+
+    // Structure
+    string struct_txt = lt_bullish ? "FTL > STL ✓" : "FTL < STL ✗"
+    color struct_clr = lt_bullish ? color.teal : color.maroon
+    table.cell(info_tbl, 0, 1, "Structure", text_color=color.gray, text_size=size.tiny)
+    table.cell(info_tbl, 1, 1, struct_txt, text_color=struct_clr, text_size=size.tiny)
+
+    // Concordance
+    table.cell(info_tbl, 0, 2, "Concordance", text_color=color.gray, text_size=size.tiny)
+    table.cell(info_tbl, 1, 2, str.format("CT{0} ({1}/4)", bull_count, bull_count), text_color=color.white, text_size=size.tiny)
+
+    // SRIBI
+    color sribi_clr = sribi_avg > 5 ? color.teal : sribi_avg < -5 ? color.red : color.gray
+    table.cell(info_tbl, 0, 3, "SRIBI Avg", text_color=color.gray, text_size=size.tiny)
+    table.cell(info_tbl, 1, 3, str.tostring(sribi_avg, "#.#"), text_color=sribi_clr, text_size=size.tiny)
+
+    // Distance from STL
+    table.cell(info_tbl, 0, 4, "From STL", text_color=color.gray, text_size=size.tiny)
+    table.cell(info_tbl, 1, 4, str.format("{0}%", str.tostring(pct_from_stl, "#.#")), text_color=color.white, text_size=size.tiny)
+
+    // Momentum
+    color roc_clr = roc_5 > 0 ? color.teal : color.red
+    table.cell(info_tbl, 0, 5, "5d ROC", text_color=color.gray, text_size=size.tiny)
+    table.cell(info_tbl, 1, 5, str.format("{0}%", str.tostring(roc_5, "#.#")), text_color=roc_clr, text_size=size.tiny)
+
+// ═══════════════════════════════════════════════════════════════
+// ALERTS
+// ═══════════════════════════════════════════════════════════════
+
+alertcondition(ab1_bull_init, title="AB1 LONG — Trend Initiation", message="SRI AB1: LONG — FTL crossed above STL. Fresh bullish structure. BTC: 67% win, +9.1% at 20d. Calls or shares.")
+alertcondition(ab1_bull_pull and not ab1_bull_pull[1], title="AB1 LONG — Pullback Entry", message="SRI AB1: LONG — CT3+ confirmed, pullback to 3-8% from STL, bouncing. BTC: 74% win, +6.1% at 20d.")
+alertcondition(ab1_bear_init, title="AB1 SHORT — Trend Initiation", message="SRI AB1: SHORT — FTL crossed below STL. Bearish structure. Requires per-asset backtest.")
+alertcondition(ab1_bear_brkdn and not ab1_bear_brkdn[1], title="AB1 SHORT — Breakdown", message="SRI AB1: SHORT — CT0 momentum breakdown. Requires per-asset backtest.")
