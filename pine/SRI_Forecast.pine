@@ -16,10 +16,15 @@ float at_coeff    = input.float(1.0, "Trackline ATR Coefficient", group=grp_core
 float near_pct    = input.float(3.0, "Near STL %", group=grp_core, tooltip="0-3%: breach risk assessed (green/light green/red)")
 float mid_pct     = input.float(8.0, "Mid STL %", group=grp_core, tooltip="3-8%: yellow conservative zone")
 
+string grp_ab1    = "AB1 Directional"
+bool enable_ab1_bull  = input.bool(true, "Enable Bullish AB1 Signals", group=grp_ab1, tooltip="FTL cross + CT3+ pullback. BTC: 67-74% win rate.")
+bool enable_ab1_bear  = input.bool(false, "Enable Bearish AB1 Signals", group=grp_ab1, tooltip="Disabled for BTC (no edge). Enable for SPY/other mean-reverting assets.")
+
 string grp_disp   = "Display"
 bool show_ribbon        = input.bool(true, "Show Forecast Ribbon", group=grp_disp)
 bool show_table         = input.bool(true, "Show Info Table", group=grp_disp)
 bool show_ab2_markers   = input.bool(true, "Show AB2 Spread Markers", group=grp_disp)
+bool show_ab1_markers   = input.bool(true, "Show AB1 Directional Markers", group=grp_disp)
 bool show_stage_bg      = input.bool(true, "Show LT Stage Background", group=grp_disp)
 
 // ═══════════════════════════════════════════════════════════════
@@ -180,6 +185,65 @@ plotshape(show_ab2_markers and ab2_iron_condor and not ab2_iron_condor[1], title
 plotshape(show_ab2_markers and ab2_conservative and not ab2_conservative[1], title="AB2 Conservative", location=location.belowbar, style=shape.circle, color=color.yellow, size=size.tiny)
 
 // ═══════════════════════════════════════════════════════════════
+// AB1 DIRECTIONAL SIGNALS
+//
+// BULLISH (backtested on BTC 2021-2026):
+//   Signal A — FTL crosses above STL: 67% win, +9.1% median at 20d (n=15)
+//   Signal B — CT3+ pullback entry:   74% win, +6.1% median at 20d (n=10)
+//
+// BEARISH (scaffolded — no edge on BTC, enable for other assets):
+//   Signal C — FTL crosses below STL: needs per-asset backtest
+//   Signal D — CT0 breakdown:         needs per-asset backtest
+//
+// NOTE: On BTC, steep declining STL + far below = CONTRARIAN LONG (66% win).
+// Bearish signals default OFF. Enable per-asset after backtesting.
+// ═══════════════════════════════════════════════════════════════
+
+// Detect FTL/STL crossovers
+bool ftl_was_below = nz(lt_ftl[1]) <= nz(lt_stl[1])
+bool ftl_was_above = nz(lt_ftl[1]) > nz(lt_stl[1])
+bool ftl_cross_bull = lt_ftl > lt_stl and ftl_was_below   // Fresh bullish structure
+bool ftl_cross_bear = lt_ftl < lt_stl and ftl_was_above   // Fresh bearish structure
+
+// --- BULLISH AB1 ---
+// Signal A: FTL crosses above STL (trend initiation)
+// BTC: 67% win, +9.1% median at 20d, ~4x/year
+bool ab1_bull_initiation = enable_ab1_bull and ftl_cross_bull
+
+// Signal B: CT3+ confirmed trend, price pulls back to yellow zone (3-8% from STL), now bouncing
+// BTC: 74% win, +6.1% median at 20d, ~3x/year
+bool ab1_bull_pullback = enable_ab1_bull and (bull_count >= 3) and lt_bullish and is_mid and (roc_5 > 0)
+
+// Combined bullish AB1
+bool ab1_bull = ab1_bull_initiation or ab1_bull_pullback
+string ab1_bull_type = ab1_bull_initiation ? "Initiation" : ab1_bull_pullback ? "Pullback" : ""
+
+// --- BEARISH AB1 (disabled by default — no edge on BTC) ---
+// Signal C: FTL crosses below STL (trend initiation — bearish)
+bool ab1_bear_initiation = enable_ab1_bear and ftl_cross_bear
+
+// Signal D: CT0 + FTL<STL + price breaking below mid zone + momentum confirming
+bool ab1_bear_breakdown = enable_ab1_bear and (bull_count == 0) and not lt_bullish and (pct_from_stl < -3) and (roc_5 < -3)
+
+// Combined bearish AB1
+bool ab1_bear = ab1_bear_initiation or ab1_bear_breakdown
+string ab1_bear_type = ab1_bear_initiation ? "Initiation" : ab1_bear_breakdown ? "Breakdown" : ""
+
+// Combined AB1
+string ab1_signal = ab1_bull_initiation ? "LONG Init ▲▲" : ab1_bull_pullback ? "LONG Pullback ▲" : ab1_bear_initiation ? "SHORT Init ▼▼" : ab1_bear_breakdown ? "SHORT Brkdn ▼" : "None"
+bool ab1_active = ab1_bull or ab1_bear
+
+// AB1 markers — fluorescent green for bull, fluorescent pink for bear
+// Larger than AB2 markers to reflect higher conviction / larger position sizing
+color fluorescent_green = #39FF14
+color fluorescent_pink  = #FF1493
+
+plotshape(show_ab1_markers and ab1_bull_initiation, title="AB1 Bull Initiation", location=location.belowbar, style=shape.triangleup, color=fluorescent_green, size=size.normal, text="AB1", textcolor=fluorescent_green)
+plotshape(show_ab1_markers and ab1_bull_pullback and not ab1_bull_pullback[1], title="AB1 Bull Pullback", location=location.belowbar, style=shape.triangleup, color=fluorescent_green, size=size.small, text="AB1↩", textcolor=fluorescent_green)
+plotshape(show_ab1_markers and ab1_bear_initiation, title="AB1 Bear Initiation", location=location.abovebar, style=shape.triangledown, color=fluorescent_pink, size=size.normal, text="AB1", textcolor=fluorescent_pink)
+plotshape(show_ab1_markers and ab1_bear_breakdown and not ab1_bear_breakdown[1], title="AB1 Bear Breakdown", location=location.abovebar, style=shape.triangledown, color=fluorescent_pink, size=size.small, text="AB1↩", textcolor=fluorescent_pink)
+
+// ═══════════════════════════════════════════════════════════════
 // FORECAST PERCENTILE LOOKUP
 // ═══════════════════════════════════════════════════════════════
 
@@ -277,7 +341,7 @@ if barstate.islast and show_ribbon
 // INFO TABLE — Bottom-right corner
 // ═══════════════════════════════════════════════════════════════
 
-var table info_tbl = table.new(position.bottom_right, 2, 10, bgcolor=color.new(color.black, 30), border_width=1, border_color=color.new(color.gray, 60), frame_width=1, frame_color=color.new(color.gray, 40))
+var table info_tbl = table.new(position.bottom_right, 2, 11, bgcolor=color.new(color.black, 30), border_width=1, border_color=color.new(color.gray, 60), frame_width=1, frame_color=color.new(color.gray, 40))
 
 if barstate.islast and show_table
     // Row 0: Header
@@ -325,6 +389,11 @@ if barstate.islast and show_table
     table.cell(info_tbl, 0, 9, "AB2", text_color=color.gray, text_size=size.tiny)
     table.cell(info_tbl, 1, 9, ab2_signal, text_color=ab2_clr, text_size=size.tiny)
 
+    // Row 10: AB1 Signal
+    color ab1_clr = ab1_bull ? fluorescent_green : ab1_bear ? fluorescent_pink : color.gray
+    table.cell(info_tbl, 0, 10, "AB1", text_color=color.gray, text_size=size.tiny)
+    table.cell(info_tbl, 1, 10, ab1_signal, text_color=ab1_clr, text_size=size.tiny)
+
 // ═══════════════════════════════════════════════════════════════
 // ALERTS
 // ═══════════════════════════════════════════════════════════════
@@ -346,3 +415,9 @@ alertcondition(spread_zone == 0 and spread_zone[1] != 0, title="STL GRAY — STR
 alertcondition(ab2_bull_put and not ab2_bull_put[1], title="AB2 Bull Put Spread", message="SRI Forecast: Bull Put — near STL support, green zone, bearish forecast. Strike at STL.")
 alertcondition(ab2_bear_call and not ab2_bear_call[1], title="AB2 Bear Call Spread", message="SRI Forecast: Bear Call — extended above FTL, bullish zone. Strike above current.")
 alertcondition(ab2_iron_condor and not ab2_iron_condor[1], title="AB2 Iron Condor", message="SRI Forecast: Iron Condor — neutral zone, narrow range. Strikes at p25/p75.")
+
+// AB1 directional alerts
+alertcondition(ab1_bull_initiation, title="AB1 LONG — Trend Initiation", message="SRI Forecast: AB1 LONG — FTL crossed above STL. Fresh bullish structure. BTC backtest: 67% win, +9.1% median at 20d. Consider calls or shares.")
+alertcondition(ab1_bull_pullback and not ab1_bull_pullback[1], title="AB1 LONG — Pullback Entry", message="SRI Forecast: AB1 LONG — CT3+ trend confirmed, price pulled back to 3-8% from STL, now bouncing. BTC backtest: 74% win, +6.1% median at 20d.")
+alertcondition(ab1_bear_initiation, title="AB1 SHORT — Trend Initiation", message="SRI Forecast: AB1 SHORT — FTL crossed below STL. Fresh bearish structure. Requires per-asset backtest validation.")
+alertcondition(ab1_bear_breakdown and not ab1_bear_breakdown[1], title="AB1 SHORT — Breakdown", message="SRI Forecast: AB1 SHORT — CT0 with momentum breakdown. Requires per-asset backtest validation.")
