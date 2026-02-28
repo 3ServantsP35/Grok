@@ -15,8 +15,9 @@ float at_coeff    = input.float(1.0, "Trackline ATR Coefficient")
 int rsi_len       = input.int(14, "RSI Length")
 int reg_len       = input.int(50, "LT Regression Length")
 float reg_mult    = input.float(1.0, "LT Regression Deviation")
-bool show_ribbon  = input.bool(true, "Show Forecast Ribbon")
-bool show_label   = input.bool(true, "Show Concordance Label")
+bool show_ribbon        = input.bool(true, "Show Forecast Ribbon")
+bool show_forecast_lbl  = input.bool(false, "Show Forecast End Label")
+bool show_concordance   = input.bool(false, "Show Concordance Label")
 
 // ═══════════════════════════════════════════════════════════════
 // LT SRI BACKBONE — Simplified (FTL + STL + Stage Background)
@@ -253,23 +254,24 @@ if barstate.islast and show_ribbon
         array.push(fills, lf)
 
     // End-of-ribbon label
-    float end_p50 = f_get_pct(zone, 3, 1)
-    float end_p75 = f_get_pct(zone, 3, 2)
-    float end_p25 = f_get_pct(zone, 3, 0)
-    label.new(bar_index + 22, base_price * (1 + end_p50 / 100),
-         text=str.format("{0}\nMedian: {1}%\nRange: {2}% to {3}%\nSRIBI Avg: {4}", 
-              zone_name, 
-              str.tostring(end_p50, "#.##"),
-              str.tostring(end_p25, "#.##"),
-              str.tostring(end_p75, "#.##"),
-              str.tostring(sribi_avg, "#.#")),
-         color=zone_color, textcolor=color.white, style=label.style_label_left, size=size.small)
+    if show_forecast_lbl
+        float end_p50 = f_get_pct(zone, 3, 1)
+        float end_p75 = f_get_pct(zone, 3, 2)
+        float end_p25 = f_get_pct(zone, 3, 0)
+        label.new(bar_index + 22, base_price * (1 + end_p50 / 100),
+             text=str.format("{0}\nMedian: {1}%\nRange: {2}% to {3}%\nSRIBI Avg: {4}", 
+                  zone_name, 
+                  str.tostring(end_p50, "#.##"),
+                  str.tostring(end_p25, "#.##"),
+                  str.tostring(end_p75, "#.##"),
+                  str.tostring(sribi_avg, "#.#")),
+             color=zone_color, textcolor=color.white, style=label.style_label_left, size=size.small)
 
 // ═══════════════════════════════════════════════════════════════
 // CONCORDANCE INFO LABEL (current bar)
 // ═══════════════════════════════════════════════════════════════
 
-if barstate.islast and show_label
+if barstate.islast and show_concordance
     string ct_text = str.format("CT{0} | SRIBI Avg: {1}\nVST:{2} ST:{3} LT:{4} VLT:{5}", 
          bull_count,
          str.tostring(sribi_avg, "#.#"),
