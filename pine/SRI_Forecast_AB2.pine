@@ -27,14 +27,15 @@ bool is_mr = resolved_mode == "Mean-Reverting"
 string grp_core   = "Core Settings"
 int at_period     = input.int(14, "Trackline ATR Period", group=grp_core)
 float at_coeff    = input.float(1.0, "Trackline ATR Coefficient", group=grp_core)
-float near_input   = input.float(3.0, "Near STL %", group=grp_core, tooltip="Momentum: 3% | Mean-Revert: 2% (auto-adjusted)")
-float mid_input    = input.float(8.0, "Mid STL %", group=grp_core, tooltip="Momentum: 8% | Mean-Revert: 6% (auto-adjusted)")
-float near_pct     = is_mr ? 2.0 : near_input
-float mid_pct      = is_mr ? 6.0 : mid_input
+float near_input  = input.float(3.0, "Near STL %", group=grp_core, tooltip="Momentum: 3% | Mean-Revert: 2% (auto-adjusted)")
+float mid_input   = input.float(8.0, "Mid STL %", group=grp_core, tooltip="Momentum: 8% | Mean-Revert: 6% (auto-adjusted)")
+float near_pct    = is_mr ? 2.0 : near_input
+float mid_pct     = is_mr ? 6.0 : mid_input
 
 string grp_disp   = "Display"
 bool show_ribbon        = input.bool(true, "Show Forecast Ribbon", group=grp_disp)
 bool show_table         = input.bool(true, "Show Info Table", group=grp_disp)
+bool show_legend        = input.bool(true, "Show Legend", group=grp_disp)
 bool show_ab2_markers   = input.bool(true, "Show AB2 Spread Markers", group=grp_disp)
 bool show_stage_bg      = input.bool(true, "Show LT Stage Background", group=grp_disp)
 
@@ -142,7 +143,10 @@ plot(lt_stl, "LT Slow Trackline", color=stl_color, linewidth=3)
 bgcolor(show_stage_bg ? (lt_bullish ? color.new(color.green, 93) : color.new(color.red, 93)) : na, title="LT Stage Background")
 
 // ═══════════════════════════════════════════════════════════════
-// AB2 SPREAD DETECTION
+// AB2 SPREAD DETECTION — FIXED MARKER POSITIONS
+// Bull put = below (bullish, expect price to stay above)
+// Bear call = above (bearish, expect price to stay below)
+// Iron condor = below (neutral)
 // ═══════════════════════════════════════════════════════════════
 
 float p75_20d = zone == 1 ? 8.74 : zone == 2 ? 6.71 : zone == 3 ? 6.77 : zone == 4 ? 8.95 : 10.96
@@ -156,9 +160,13 @@ bool ab2_conservative = is_mid and (spread_zone == 1)
 
 string ab2_signal = ab2_bull_put ? "Bull Put ▲" : ab2_bear_call ? "Bear Call ▼" : ab2_iron_condor ? "Iron Condor ↔" : ab2_conservative ? "Conservative" : "None"
 
+// Bull put → below candle (green diamond)
 plotshape(show_ab2_markers and ab2_bull_put and not ab2_bull_put[1], title="AB2 Bull Put", location=location.belowbar, style=shape.diamond, color=color.green, size=size.small)
+// Bear call → above candle (red diamond)
 plotshape(show_ab2_markers and ab2_bear_call and not ab2_bear_call[1], title="AB2 Bear Call", location=location.abovebar, style=shape.diamond, color=color.red, size=size.small)
-plotshape(show_ab2_markers and ab2_iron_condor and not ab2_iron_condor[1], title="AB2 Iron Condor", location=location.belowbar, style=shape.diamond, color=color.purple, size=size.tiny)
+// Iron condor → below candle (purple circle)
+plotshape(show_ab2_markers and ab2_iron_condor and not ab2_iron_condor[1], title="AB2 Iron Condor", location=location.belowbar, style=shape.circle, color=color.purple, size=size.tiny)
+// Conservative → below candle (yellow circle)
 plotshape(show_ab2_markers and ab2_conservative and not ab2_conservative[1], title="AB2 Conservative", location=location.belowbar, style=shape.circle, color=color.yellow, size=size.tiny)
 
 // ═══════════════════════════════════════════════════════════════
@@ -301,6 +309,32 @@ if barstate.islast and show_table
     color ab2_clr = ab2_bull_put ? color.green : ab2_bear_call ? color.red : ab2_iron_condor ? color.purple : ab2_conservative ? color.yellow : color.gray
     table.cell(info_tbl, 0, 9, "AB2", text_color=color.gray, text_size=size.tiny)
     table.cell(info_tbl, 1, 9, ab2_signal, text_color=ab2_clr, text_size=size.tiny)
+
+// ═══════════════════════════════════════════════════════════════
+// LEGEND
+// ═══════════════════════════════════════════════════════════════
+
+var table legend_tbl = table.new(position.bottom_left, 2, 9, bgcolor=color.new(color.black, 20), border_width=1, border_color=color.new(color.gray, 70), frame_width=1, frame_color=color.new(color.gray, 50))
+
+if barstate.islast and show_legend
+    table.cell(legend_tbl, 0, 0, "AB2 Legend", text_color=color.white, text_size=size.tiny, bgcolor=color.new(color.gray, 50))
+    table.cell(legend_tbl, 1, 0, "", bgcolor=color.new(color.gray, 50))
+    table.cell(legend_tbl, 0, 1, "◆ below", text_color=color.green, text_size=size.tiny)
+    table.cell(legend_tbl, 1, 1, "Bull put spread", text_color=color.white, text_size=size.tiny)
+    table.cell(legend_tbl, 0, 2, "◆ above", text_color=color.red, text_size=size.tiny)
+    table.cell(legend_tbl, 1, 2, "Bear call spread", text_color=color.white, text_size=size.tiny)
+    table.cell(legend_tbl, 0, 3, "○ below", text_color=color.purple, text_size=size.tiny)
+    table.cell(legend_tbl, 1, 3, "Iron condor", text_color=color.white, text_size=size.tiny)
+    table.cell(legend_tbl, 0, 4, "○ below", text_color=color.yellow, text_size=size.tiny)
+    table.cell(legend_tbl, 1, 4, "Conservative spread", text_color=color.gray, text_size=size.tiny)
+    table.cell(legend_tbl, 0, 5, "STL Colors:", text_color=color.gray, text_size=size.tiny)
+    table.cell(legend_tbl, 1, 5, "", text_size=size.tiny)
+    table.cell(legend_tbl, 0, 6, "█ Green", text_color=color.green, text_size=size.tiny)
+    table.cell(legend_tbl, 1, 6, "Overweight (81% hold)", text_color=color.white, text_size=size.tiny)
+    table.cell(legend_tbl, 0, 7, "█ Lt Grn / Yel / Gray", text_color=color.new(#90EE90, 0), text_size=size.tiny)
+    table.cell(legend_tbl, 1, 7, "Std(84%) / Cons(74%) / STRC", text_color=color.gray, text_size=size.tiny)
+    table.cell(legend_tbl, 0, 8, "█ Red", text_color=color.red, text_size=size.tiny)
+    table.cell(legend_tbl, 1, 8, "Avoid (27% hold)", text_color=color.white, text_size=size.tiny)
 
 // ═══════════════════════════════════════════════════════════════
 // ALERTS
