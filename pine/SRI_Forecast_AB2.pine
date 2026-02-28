@@ -27,8 +27,10 @@ bool is_mr = resolved_mode == "Mean-Reverting"
 string grp_core   = "Core Settings"
 int at_period     = input.int(14, "Trackline ATR Period", group=grp_core)
 float at_coeff    = input.float(1.0, "Trackline ATR Coefficient", group=grp_core)
-float near_pct    = input.float(is_mr ? 2.0 : 3.0, "Near STL %", group=grp_core, tooltip="MR: 2% (tighter, price stays closer) | TR: 3%")
-float mid_pct     = input.float(is_mr ? 6.0 : 8.0, "Mid STL %", group=grp_core, tooltip="MR: 6% (tighter) | TR: 8%")
+float near_input   = input.float(3.0, "Near STL %", group=grp_core, tooltip="Momentum: 3% | Mean-Revert: 2% (auto-adjusted)")
+float mid_input    = input.float(8.0, "Mid STL %", group=grp_core, tooltip="Momentum: 8% | Mean-Revert: 6% (auto-adjusted)")
+float near_pct     = is_mr ? 2.0 : near_input
+float mid_pct      = is_mr ? 6.0 : mid_input
 
 string grp_disp   = "Display"
 bool show_ribbon        = input.bool(true, "Show Forecast Ribbon", group=grp_disp)
