@@ -10,11 +10,25 @@ indicator(title="SRI Forecast AB2", shorttitle="SRI AB2", overlay=true, max_line
 // ═══════════════════════════════════════════════════════════════
 // INPUTS
 // ═══════════════════════════════════════════════════════════════
+string grp_mode   = "Asset Mode"
+string asset_mode = input.string("Auto-Detect", "Asset Behavior", options=["Auto-Detect", "Momentum", "Mean-Reverting"], group=grp_mode, tooltip="Auto-Detect: uses symbol to classify\nMomentum: BTC, MSTR, TSLA — wider zones, bull puts primary\nMean-Reverting: SPY, QQQ, TLT — tighter zones, symmetric spreads")
+
+f_is_momentum() =>
+    string t = str.upper(syminfo.ticker)
+    bool is_crypto = syminfo.type == "crypto" or str.contains(t, "BTC") or str.contains(t, "ETH") or str.contains(t, "SOL") or str.contains(t, "XRP")
+    bool is_mstr = str.contains(t, "MSTR")
+    bool is_tsla = str.contains(t, "TSLA")
+    bool is_ibit = str.contains(t, "IBIT") or str.contains(t, "GBTC") or str.contains(t, "BITO")
+    is_crypto or is_mstr or is_tsla or is_ibit
+
+string resolved_mode = asset_mode == "Auto-Detect" ? (f_is_momentum() ? "Momentum" : "Mean-Reverting") : asset_mode
+bool is_mr = resolved_mode == "Mean-Reverting"
+
 string grp_core   = "Core Settings"
 int at_period     = input.int(14, "Trackline ATR Period", group=grp_core)
 float at_coeff    = input.float(1.0, "Trackline ATR Coefficient", group=grp_core)
-float near_pct    = input.float(3.0, "Near STL %", group=grp_core, tooltip="0-3%: breach risk assessed (green/light green/red)")
-float mid_pct     = input.float(8.0, "Mid STL %", group=grp_core, tooltip="3-8%: yellow conservative zone")
+float near_pct    = input.float(is_mr ? 2.0 : 3.0, "Near STL %", group=grp_core, tooltip="MR: 2% (tighter, price stays closer) | TR: 3%")
+float mid_pct     = input.float(is_mr ? 6.0 : 8.0, "Mid STL %", group=grp_core, tooltip="MR: 6% (tighter) | TR: 8%")
 
 string grp_disp   = "Display"
 bool show_ribbon        = input.bool(true, "Show Forecast Ribbon", group=grp_disp)
@@ -246,7 +260,9 @@ if barstate.islast and show_ribbon
 var table info_tbl = table.new(position.bottom_right, 2, 10, bgcolor=color.new(color.black, 30), border_width=1, border_color=color.new(color.gray, 60), frame_width=1, frame_color=color.new(color.gray, 40))
 
 if barstate.islast and show_table
-    table.cell(info_tbl, 0, 0, "SRI AB2", text_color=color.white, text_size=size.small, bgcolor=zone_color)
+    string mode_tag = is_mr ? "MR" : "TR"
+    string auto_tag = asset_mode == "Auto-Detect" ? "⚡" : ""
+    table.cell(info_tbl, 0, 0, str.format("AB2 [{0}]{1}", mode_tag, auto_tag), text_color=color.white, text_size=size.small, bgcolor=zone_color)
     table.cell(info_tbl, 1, 0, zone_name, text_color=color.white, text_size=size.small, bgcolor=zone_color)
 
     table.cell(info_tbl, 0, 1, "Concordance", text_color=color.gray, text_size=size.tiny)
