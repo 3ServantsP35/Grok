@@ -72,10 +72,8 @@ float vol_daily = ta.stdev(btc_log_ret, vol_lookback)
 float vol = vol_daily * math.sqrt(365)  // annualize (crypto trades 365 days)
 float vol_safe = na(vol) or vol < 0.1 ? 0.75 : vol  // floor at 10%, fallback 75%
 
-// Dilution rate (annualized share growth as proxy for dividend yield q)
-float shares_1y = request.financial("NASDAQ:MSTR", "TOTAL_SHARES_OUTSTANDING", "FQ", ignore_invalid_timeframe=true)
-// Approximate: if shares grew, that's dilution
-// Use a conservative 5% as default since quarterly-to-annual is noisy
+// Dilution rate — MSTR dilutes ~5-10%/yr via ATM offerings for BTC purchases
+// Conservative 5% used as proxy for the continuous dividend yield (q) in BS model
 float dilution_rate = 0.05
 
 // ═══════════════════════════════════════════════════════════════
