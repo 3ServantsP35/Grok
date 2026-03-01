@@ -1,5 +1,5 @@
 # SRI Decision Engine — Complete Methodology Tutorial
-**Version 2.0 | Date: 2026-03-01 | Author: CIO Engine**
+**Version 2.1 | Date: 2026-03-05 | Author: CIO Engine**
 
 ---
 
@@ -10,29 +10,38 @@
 3. [SRI Framework Fundamentals](#3-sri-framework-fundamentals)
 4. [ST-Primary Framework](#4-st-primary-framework)
 5. [Context Classification: Headwind / Mixed / Tailwind](#5-context-classification)
-6. [Regime Engine — Layer 1](#6-regime-engine)
-7. [LOI — LEAP Opportunity Index](#7-loi--leap-opportunity-index)
-8. [AB1 — Tactical LEAP Engine](#8-ab1--tactical-leap-engine)
-9. [AB2 — Credit Spread Engine](#9-ab2--credit-spread-engine)
-10. [AB3 — Strategic LEAP Accumulation](#10-ab3--strategic-leap-accumulation)
-11. [AB4 — Cash & STRC Reserve](#11-ab4--cash--strc-reserve)
-12. [Capital Allocation Engine](#12-capital-allocation-engine)
-13. [PC Val — MSTR Perpetual Call Valuation](#13-pc-val--mstr-perpetual-call-valuation)
-14. [Asset Classification](#14-asset-classification)
-15. [Signal Cross-Reference & Priority Rules](#15-signal-cross-reference--priority-rules)
-16. [Validated Performance Numbers](#16-validated-performance-numbers)
-17. [Current Engine State (2026-03-01)](#17-current-engine-state)
+6. [GLI Engine — Layer 0](#6-gli-engine--layer-0)
+7. [Regime Engine — Layer 1](#7-regime-engine--layer-1)
+8. [LOI — LEAP Opportunity Index](#8-loi--leap-opportunity-index)
+9. [AB1 — Tactical LEAP Engine](#9-ab1--tactical-leap-engine)
+10. [AB2 — Credit Spread Engine](#10-ab2--credit-spread-engine)
+11. [AB3 — Strategic LEAP Accumulation](#11-ab3--strategic-leap-accumulation)
+12. [AB4 — Cash & STRC Reserve](#12-ab4--cash--strc-reserve)
+13. [Capital Allocation Engine](#13-capital-allocation-engine)
+14. [PC Val — MSTR Perpetual Call Valuation](#14-pc-val--mstr-perpetual-call-valuation)
+15. [Asset Classification](#15-asset-classification)
+16. [Signal Cross-Reference & Priority Rules](#16-signal-cross-reference--priority-rules)
+17. [Validated Performance Numbers](#17-validated-performance-numbers)
+18. [Current Engine State (2026-03-05)](#18-current-engine-state)
 
 ---
 
 ## 1. Architecture Overview
 
-The engine is organized into three layers. Each layer has a distinct function and feeds the next.
+The engine is organized into four layers. Each layer has a distinct function and feeds the next.
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
+│  LAYER 0: GLI ENGINE (Global Liquidity Index)               │
+│  Central bank balance sheets → probability adjusters        │
+│  Inputs: Fed (WALCL/M2), PBoC, ECB, BOJ + 42 Macro GRID    │
+│  Output: GLI Z-score, GEGI score, Paradigm label            │
+│  Function: Adjusts Layer 1 probabilities, NOT entry signals │
+└─────────────────────────────────┬───────────────────────────┘
+                                  │ probability weights
+┌─────────────────────────────────▼───────────────────────────┐
 │  LAYER 1: REGIME ENGINE                                     │
-│  8 regime inputs → composite score + vehicle selection      │
+│  8 market inputs → composite score + vehicle selection      │
 │  Inputs: BTC, MSTR/IBIT ratio, StableDom, STRC,            │
 │          TLT, DXY, HYG, VIX                                 │
 │  Output: Score -7 to +7, regime label, vehicle (MSTR/IBIT) │
@@ -254,17 +263,190 @@ When LT turns positive after entry in MIXED context:
 
 ---
 
-## 6. Regime Engine
+## 6. GLI Engine — Layer 0
 
-### 6.1 Purpose
+### 6.1 Purpose and Role
 
-The Regime Engine reads 8 regime inputs and produces:
+The GLI Engine sits above the market-based Regime Engine. It measures **global monetary liquidity** — the aggregate expansion or contraction of central bank balance sheets worldwide — and converts this into **probability adjusters** that modify how the Regime Engine interprets bullish and bearish signals.
+
+Layer 0 does **not** generate buy/sell signals directly. It shifts the probability of Layer 1 regime calls being correct.
+
+**Key research finding (Michael Howell, CrossBorder Capital):**
+- GLI leads BTC price by **13 weeks** (correlation ρ = 0.58)
+- Global liquidity expansions precede BTC rallies; contractions precede corrections
+- This is the most reliable macro leading indicator for crypto and risk assets
+
+### 6.2 GLI Proxy Components (Public FRED Sources)
+
+The engine builds a GLI proxy entirely from publicly available Federal Reserve Economic Data (FRED). No paid API required.
+
+**US Liquidity Block (primary):**
+
+| Component | FRED Series | Weight | Interpretation |
+|---|---|---|---|
+| Fed Balance Sheet | WALCL | Primary | Total Fed assets — QE/QT direction |
+| Bank Reserves | RESBALNS | Supporting | Reserve availability — credit multiplier |
+| M2 Money Supply | WM2NS | Supporting | Broad money growth rate |
+| SOFR-IORB Spread | SOFR - IORB | Signal | Funding stress indicator |
+
+**International Block (proxies):**
+
+| Central Bank | Proxy Method | Notes |
+|---|---|---|
+| PBoC (China) | M2 China (via FRED MYAGM2CNM189S) | Largest contributor to global liquidity after Fed |
+| ECB (Europe) | ECB balance sheet (ECBASSETSW) | Euro area monetary base |
+| BOJ (Japan) | BOJ balance sheet (JPNASSETS or proxy) | Persistent QE; yen carry trade signal |
+
+**Combined GLI Index:**  
+Sum of rolling 26-week change across all components (USD-normalized). Normalized to Z-score against 2-year rolling mean and standard deviation.
+
+### 6.3 GLI Output: Z-Score and Trend
+
+| Z-Score | Interpretation | Action |
+|---|---|---|
+| > +1.0 | Strong liquidity expansion | High confidence in bullish regime calls |
+| +0.5 to +1.0 | Moderate expansion | Slight bullish tilt |
+| -0.5 to +0.5 | Neutral | No adjustment to Layer 1 |
+| -0.5 to -1.0 | Moderate contraction | Slight bearish tilt |
+| < -1.0 | Strong contraction | High confidence in bearish regime calls |
+
+### 6.4 GEGI — Global Economic Growth Index
+
+The GEGI (Global Economic Growth Index) is a composite economic health measure separate from monetary liquidity. It combines:
+
+| Component | Weight | Source |
+|---|---|---|
+| Fiscal policy impulse | 40% | Deficit-to-GDP direction (FRED) |
+| Monetary policy stance | 30% | Rate cycle phase (Fed dot plot / actual) |
+| External demand drivers | 30% | Trade balance, PMI composites |
+
+**GEGI output:** Normalized score.  
+- **GEGI > 1.0:** Amplify bullish regime signals  
+- **GEGI < 0:** Amplify bearish regime signals  
+- **GEGI 0–1.0:** Neutral — no amplification
+
+### 6.5 Probability Adjustment Rules
+
+These rules are applied to Layer 1 regime probabilities before generating entry gates:
+
+```
+GLI Z-score > +0.5:
+  → Reduce bearish stage probability ~20%
+  → Treat SRI Stage 4 as likely consolidation, not confirmed downtrend
+
+GLI Z-score < -0.5:
+  → Reduce bullish stage probability ~20%
+  → Treat SRI Stage 1 as likely false bottom, not confirmed markup
+
+GEGI > 1.0:
+  → Amplify bullish regime overrides (higher confidence on risk-on calls)
+
+GEGI < 0:
+  → Amplify bearish regime overrides (higher confidence on risk-off calls)
+```
+
+**Critical: These are probability adjusters, not hard gates.** A GLI Z < -0.5 does not block AB1 entries. It raises the confidence threshold required and tags the signal with "GLI HEADWIND" in the output.
+
+### 6.6 42 Macro GRID / Paradigm Framework
+
+The GRID model classifies the macro regime along two axes:
+
+```
+         Growth ↑          Growth ↓
+         ──────────────────────────────
+Infl ↓ │ GOLDILOCKS        DEFLATION
+Infl ↑ │ REFLATION         STAGFLATION
+```
+
+**Portfolio implications by GRID regime:**
+
+| GRID Regime | Risk Assets | Bonds | Commodities | BTC/Crypto |
+|---|---|---|---|---|
+| **GOLDILOCKS** | Bullish | Bullish | Neutral | Bullish (lagged) |
+| **REFLATION** | Bullish | Bearish | Very Bullish | Bullish |
+| **STAGFLATION** | Bearish | Bearish | Bullish | Bearish |
+| **DEFLATION** | Bearish | Very Bullish | Bearish | Bearish |
+
+**Paradigm Framework (42 Macro):**  
+Characterizes the structural monetary policy environment in multi-year phases:
+
+| Paradigm | Description | Dominant Theme |
+|---|---|---|
+| **A** | Tightening — rate hikes, QT | Favor defensive, cash, short duration |
+| **B** | Cutting — rate cuts, neutral QT | Risk recovery; bonds and gold lead |
+| **C** | Largesse — fiscal + deregulation + reshoring | Risk assets, commodities, crypto; broadening rally |
+
+### 6.7 42 Macro KISS and Dr. Mo Signals
+
+**KISS (Keep It Simple, Stupid) model:** Binary portfolio signals — what to hold long vs short in the current regime. Updated weekly by 42 Macro.
+
+**Dr. Mo:** Momentum-based confirmation signals. Confirms KISS portfolio direction with price momentum data.
+
+Integration rule: KISS signals inform which assets to favor in the AB2 credit spread selection (e.g., KISS Bullish LQD → short-duration corporate credit is favorable; risk of spread blowout is low). These are advisory signals, not entry triggers.
+
+### 6.8 Current Global Macro State (as of Jan 9, 2026 — 42 Macro Report)
+
+```
+GRID Regime:   GOLDILOCKS (growth ↑, inflation ↓) — modal medium-term outcome
+Paradigm:      C — Fiscal/monetary largesse + deregulation + reshoring
+GLI Trend:     Higher — significant uptrend medium-term per key leading indicators
+GLI Peak:      Peaked; next trough expected ~2027 (Howell)
+
+Dr. Mo:        Bullish → LQD (investment-grade corporate credit)
+               Bearish → (none active)
+
+Macro Weather Model (3-month outlook):
+  Bullish:    Bonds, USD
+  Bearish:    Stocks, Bitcoin, Commodities
+  Warning:    Low probability of sustaining risk-on regime next 3 months
+
+Positioning:   Reasonable crash risk (↓20%) medium-to-long term
+               High crowding in equities — concentrated long exposure
+               Warsh nomination = short-term risk-off for gold and stocks
+
+Key catalysts:
+  Fed RMOP:  $40B/month QT since Dec 2025
+  SLR:       Supplementary Leverage Ratio reduction expected by Mar 2026
+             (favorable for bank balance sheet expansion → liquidity positive)
+  Dollar:    Structural headwinds — Paradigm C typically dollar-negative medium-term
+```
+
+**BTC-specific GLI signal (Howell):**  
+GLI leading indicator peaked in late 2025. 13-week lag implies BTC faces meaningful headwinds in H1 2026. Target from Howell's model: potential retest toward $30K before next liquidity upcycle (~2027 base case). The $45T global refinancing wall by 2030 is the structural tailwind for risk assets beyond this correction.
+
+**How this adjusts our Layer 1 scores:**  
+- GLI Z-score currently declining from peak → trending toward -0.5 threshold  
+- When GLI Z crosses below -0.5: any Stage 1 SRI signals on BTC/MSTR get tagged "likely false bottom" — require additional confirmation before AB1 entry  
+- GEGI currently neutral (Paradigm C supports fiscal impulse; monetary policy still cutting) → no amplification currently
+
+### 6.9 Implementation Status
+
+| Component | Status | Location |
+|---|---|---|
+| GLI proxy (FRED) | 🔄 In Progress | `/mnt/mstr-scripts/gli_engine.py` (pending) |
+| GEGI calculation | 🔄 Queued | To be appended to `gli_engine.py` |
+| Layer 0 → Layer 1 wire | 🔄 Queued | `RegimeEngine.compute()` receives `GLIState` |
+| 42 Macro manual import | ✅ Active | CIO reads report; applies rules manually until automated |
+| FRED API client | ✅ Ready | `python-dotenv` + `requests`; no SSL issues in container |
+
+**Manual protocol until `GLIEngine` is built:**  
+When CIO produces a Morning Brief or trade recommendation, it reads the most recent 42 Macro research update and applies the probability adjustment rules manually. The GRID regime, Paradigm, and Dr. Mo signals are stated explicitly in the brief.
+
+---
+
+## 7. Regime Engine — Layer 1
+
+### 7.1 Purpose
+
+The Regime Engine reads 8 market-based regime inputs and produces:
 1. A composite score (-7 to +7)
 2. A regime label
 3. A vehicle recommendation (MSTR or IBIT)
 4. VIX level (for AB2 strategy selection)
 
-### 6.2 Scoring Rules
+Layer 0 (GLI) probability adjustments are applied to these outputs before regime gates are enforced on the Signal Layer.
+
+### 7.2 Scoring Rules
 
 | Input | Bullish (+1) | Neutral (0) | Bearish (-1) |
 |---|---|---|---|
@@ -279,7 +461,7 @@ The Regime Engine reads 8 regime inputs and produces:
 
 **VIX note:** VIX does not score bullish/bearish direction. It adjusts AB2 sizing: VIX > 25 = +25% size; VIX < 18 = -50% size.
 
-### 6.3 Regime Labels
+### 7.3 Regime Labels
 
 | Score | Label | Action |
 |---|---|---|
@@ -291,7 +473,7 @@ The Regime Engine reads 8 regime inputs and produces:
 
 **Entry gate:** No new AB1 or AB2 entries when regime score ≤ -2.
 
-### 6.4 Vehicle Selection (MSTR/IBIT Ratio)
+### 7.4 Vehicle Selection (MSTR/IBIT Ratio)
 
 The MSTR/IBIT ratio SRIBI context determines which vehicle to use for crypto exposure:
 
@@ -301,15 +483,15 @@ The MSTR/IBIT ratio SRIBI context determines which vehicle to use for crypto exp
 | TAILWIND (LT+, VLT+) | Premium peaked | **IBIT** (MSTR premium about to compress) |
 | HEADWIND (LT-, VLT-) | Premium compressing | **IBIT** (wait for MSTR) |
 
-**Current (Feb 27, 2026):** Ratio in TAILWIND → vehicle = **IBIT**
+**Current (Mar 5, 2026):** See Section 18 for latest regime state.
 
 ---
 
-## 7. LOI — LEAP Opportunity Index
+## 8. LOI — LEAP Opportunity Index
 
 The LOI is a composite oscillator (-100 to +100) that measures the structural opportunity for LEAP accumulation.
 
-### 7.1 Formula
+### 8.1 Formula
 
 ```
 LOI = (VLT_SRIBI_normalized × 40) + (VLT_acceleration × 30) + (LT_SRIBI_normalized × 15) + (Concordance × 15)
@@ -322,7 +504,7 @@ LOI = (VLT_SRIBI_normalized × 40) + (VLT_acceleration × 30) + (LT_SRIBI_normal
 | LT SRIBI (normalized) | 15% | Medium-term confirmation |
 | Concordance | 15% | % of TFs in agreement (bull count) |
 
-### 7.2 Thresholds by Asset Mode
+### 8.2 Thresholds by Asset Mode
 
 | Signal | Momentum Assets | Mean-Reverting Assets |
 |---|---|---|
@@ -332,7 +514,7 @@ LOI = (VLT_SRIBI_normalized × 40) + (VLT_acceleration × 30) + (LT_SRIBI_normal
 | Trim 50% | LOI > +60 | LOI > +30 |
 | Trim 75% | LOI > +80 | LOI > +50 |
 
-### 7.3 LOI Deep Dive — What Each Zone Means
+### 8.3 LOI Deep Dive — What Each Zone Means
 
 **LOI < -80 (Deep Accumulation):**  
 All TFs negative, VLT accelerating downward. This is extreme fear. Historical: fired twice on BTC equivalent since 2021 (FTX bottom, current cycle Feb 2026). On MSTR: fired ~7 times total since 2021, 80%+ forward return at 90 days.
@@ -351,9 +533,9 @@ All TFs positive and high. Final exits. GLD hit +80 in Feb 2026 — max trim zon
 
 ---
 
-## 8. AB1 — Tactical LEAP Engine
+## 9. AB1 — Tactical LEAP Engine
 
-### 8.1 Philosophy
+### 9.1 Philosophy
 
 AB1 is the tactical LEAP bucket. It buys LEAPs **before** a high-probability breakout, captures the 10-40%+ underlying move over 1 week to 90 days, and exits when the structural move completes (LT turns positive). It is NOT a long-term hold — that's AB3.
 
@@ -361,7 +543,7 @@ Key distinction from AB3:
 - **AB1:** Enter at pre-breakout signal, hold 1-90 days, capture the swing
 - **AB3:** Enter at LOI deep accumulation, hold months to cycle completion, exit on phased trims
 
-### 8.2 Entry Conditions (All 5 Required)
+### 9.2 Entry Conditions (All 5 Required)
 
 ```
 C1: AB3 ANCHOR — LOI was below acc_thresh within last 120 bars
@@ -384,7 +566,7 @@ C5: ST POSITIVE — ST SRIBI > 0
 
 **Cooldown:** 40 bars (6.7 trading days) minimum between signals on same asset.
 
-### 8.3 Confidence Scoring
+### 9.3 Confidence Scoring
 
 | Condition | Bonus |
 |---|---|
@@ -394,28 +576,28 @@ C5: ST POSITIVE — ST SRIBI > 0
 | LOI recovering above 0 | +10% |
 | Maximum | 90% |
 
-### 8.4 LEAP Strategy
+### 9.4 LEAP Strategy
 
 - **Strike:** 5-15% OTM (captures maximum leverage on a 10-30% underlying move)
 - **Expiry:** 90-180 DTE at entry to allow the thesis to develop
 - **Target:** 10%+ underlying move → 3-5× LEAP return (OTM leverage)
 - **Max hold:** 90 calendar days (6 bars/day × 540 bars)
 
-### 8.5 Exit Rules
+### 9.5 Exit Rules
 
 | Trigger | Rule |
 |---|---|
 | **LT turns positive (primary)** | Exit immediately — structural catch-up complete |
 | 90-day time stop | Exit at max hold regardless of position |
 
-### 8.6 Failure → AB3 Transition
+### 9.6 Failure → AB3 Transition
 
 If the breakout fails:
 - **Failure definition:** ST cross negative (ST SRIBI drops below 0) within 40 bars of entry AND underlying price gain < 5%
 - **Action:** Tag the LEAP as AB3 (accounting change — do NOT force close)
 - **Rationale:** If you bought a 1-year LEAP at a genuine accumulation bottom and the 90-day breakout didn't materialize, the long-term thesis likely still holds. Reclassify rather than realize a loss.
 
-### 8.7 Validated Performance
+### 9.7 Validated Performance
 
 | Asset | N | 30d Hit 10%+ | 60d Hit 10%+ | 90d Hit 10%+ | Max/90d |
 |---|---|---|---|---|---|
@@ -430,15 +612,15 @@ If the breakout fails:
 
 ---
 
-## 9. AB2 — Credit Spread Engine
+## 10. AB2 — Credit Spread Engine
 
-### 9.1 Philosophy
+### 10.1 Philosophy
 
 AB2 sells premium INTO structural divergence. When the market shows ST recovery but LT is still lagging (MIXED context), the spread premium decays as LT catches up. This is a mean-reversion premium capture play.
 
 **The divergence thesis:** MIXED context (LT-, VLT+) = LT hasn't confirmed the recovery yet. Short-duration Bull Put spreads benefit from the passage of time as the structural recovery matures. LT turning positive = catch-up complete = exit the spread and capture theta.
 
-### 9.2 Entry Conditions
+### 10.2 Entry Conditions
 
 ```
 C1: ST crosses positive (ST SRIBI crosses from below zero to above)
@@ -450,21 +632,21 @@ C5: VIX > 18 (premium worth selling)
 
 **Critical:** MIXED context is the non-negotiable gate. This is what distinguishes AB2 v2 from v1, and why win rates improved dramatically across all assets.
 
-### 9.3 Strategy Type
+### 10.3 Strategy Type
 
 **Bull Put Spread:** Sell a put, buy a put further OTM. Profits from upward movement or neutral price action while LT recovers.
 
 Spreads currently validated on: MSTR, TSLA, SPY, QQQ, GLD, IWM  
 **IBIT is disabled for AB2** — MIXED context does not predict reliable LT catch-up timing on crypto-adjacent assets.
 
-### 9.4 Exit Rules
+### 10.4 Exit Rules
 
 | Trigger | Priority |
 |---|---|
 | **LT turns positive** | Primary — structural divergence resolved, exit immediately |
 | 90-bar time stop (~15 trading days) | Secondary — if LT hasn't confirmed, cut the position |
 
-### 9.5 VIX Scaling
+### 10.5 VIX Scaling
 
 | VIX | Action |
 |---|---|
@@ -472,7 +654,7 @@ Spreads currently validated on: MSTR, TSLA, SPY, QQQ, GLD, IWM
 | 18-25 | Standard sizing |
 | < 18 | -50% position size (low premium = unfavorable) |
 
-### 9.6 Validated Performance (v2)
+### 10.6 Validated Performance (v2)
 
 | Asset | N | Win% | Avg Underlying P&L | Avg Hold |
 |---|---|---|---|---|
@@ -487,7 +669,7 @@ Note: P&L shown is underlying % change from entry to exit. Actual spread P&L wil
 
 **Exit breakdown:** ~90% of exits are LT_POSITIVE; <10% are TIME_STOP. TIME_STOP exits average -8 to -17% underlying — this is the tail risk.
 
-### 9.7 What Changed from v1 to v2
+### 10.7 What Changed from v1 to v2
 
 | Parameter | v1 | v2 | Impact |
 |---|---|---|---|
@@ -498,13 +680,13 @@ Note: P&L shown is underlying % change from entry to exit. Actual spread P&L wil
 
 ---
 
-## 10. AB3 — Strategic LEAP Accumulation
+## 11. AB3 — Strategic LEAP Accumulation
 
-### 10.1 Philosophy
+### 11.1 Philosophy
 
 AB3 is the long-duration LEAP bucket. It identifies major cycle bottoms using the LOI oscillator and enters with the explicit expectation of holding through the full cycle (months to a year+). Exits are phased — it never tries to pick a top; it trims in tranches as LOI confirms distribution.
 
-### 10.2 State Machine
+### 11.2 State Machine
 
 The AB3 engine runs a cycle state machine with 4 states:
 
@@ -527,7 +709,7 @@ TRIMMING ◄── all trims fired ──────── HOLDING
 | HOLDING | Exiting accumulation | LOI > first trim level |
 | TRIMMING | LOI > final trim level | EXIT signal fires |
 
-### 10.3 Thresholds by Asset Mode
+### 11.3 Thresholds by Asset Mode
 
 | Parameter | Momentum | Mean-Reverting |
 |---|---|---|
@@ -541,7 +723,7 @@ TRIMMING ◄── all trims fired ──────── HOLDING
 
 **Cooldown:** 30 bars minimum between signals. Prevents re-firing during volatile LOI oscillations.
 
-### 10.4 Trim Schedule
+### 11.4 Trim Schedule
 
 Gavin's decision (2026-02-28): **25% equal tranches across all assets.**
 
@@ -554,7 +736,7 @@ Gavin's decision (2026-02-28): **25% equal tranches across all assets.**
 
 When AB3 exits at +80 LOI, the full cycle from accumulation to distribution has completed. A new accumulation cycle may begin immediately if LOI drops back below the threshold.
 
-### 10.5 Validated Performance
+### 11.5 Validated Performance
 
 | Asset | N/yr | Acc Signal Win% at 20d | Notes |
 |---|---|---|---|
@@ -566,7 +748,7 @@ When AB3 exits at +80 LOI, the full cycle from accumulation to distribution has 
 | IWM | 12.0/yr | 57% | Acceptable |
 | TSLA | 4.2/yr | 0% (n=2) | ACC signals timing too early |
 
-### 10.6 Current Open Positions (Feb 27, 2026)
+### 11.6 Current Open Positions (Mar 5, 2026)
 
 | Asset | State | Last Signal | Date | Price |
 |---|---|---|---|---|
@@ -582,33 +764,33 @@ When AB3 exits at +80 LOI, the full cycle from accumulation to distribution has 
 
 ---
 
-## 11. AB4 — Cash & STRC Reserve
+## 12. AB4 — Cash & STRC Reserve
 
-### 11.1 Purpose
+### 12.1 Purpose
 
 AB4 is the capital preservation bucket. When signals are absent or regime is bearish, capital sits here rather than being deployed into lower-probability trades.
 
-### 11.2 STRC as the Hurdle Rate
+### 12.2 STRC as the Hurdle Rate
 
 STRC (Strategy Credit — Saylor's preferred share series) yields approximately **10% annual (~0.83%/month)**. This is the risk-free rate for this system.
 
 **Decision rule:** Any AB1/AB2 trade must beat 0.83%/month expected return, or the capital stays in STRC.
 
-### 11.3 STRC as a Regime Indicator
+### 12.3 STRC as a Regime Indicator
 
 STRC price < $97 = credit stress signal. Saylor's funding engine is under pressure. This typically precedes BTC weakness and MSTR drawdowns.
 
 STRC SRI state is included in the regime composite score.
 
-### 11.4 Floor
+### 12.4 Floor
 
 **AB4 minimum: 10%.** Regardless of opportunity set, 10% of each portfolio stays in AB4 at all times. This ensures liquidity for emerging opportunities and prevents full deployment at cycle peaks.
 
 ---
 
-## 12. Capital Allocation Engine
+## 13. Capital Allocation Engine
 
-### 12.1 Baseline Allocation
+### 13.1 Baseline Allocation
 
 | Bucket | Purpose | Target % | Floor | Ceiling |
 |---|---|---|---|---|
@@ -617,7 +799,7 @@ STRC SRI state is included in the regime composite score.
 | AB3 | Strategic LEAPs | 25% | None | **35%** |
 | AB4 | Cash/STRC | 25% | **10%** | None |
 
-### 12.2 AB1 → AB3 Transition
+### 13.2 AB1 → AB3 Transition
 
 When an AB1 LEAP fails to break out within the failure window:
 
@@ -629,14 +811,14 @@ When an AB1 LEAP fails to break out within the failure window:
 
 **Key:** This is never a forced close. It is a reclassification of intent and accounting.
 
-### 12.3 AB3 Ceiling Enforcement
+### 13.3 AB3 Ceiling Enforcement
 
 - **35% ceiling is mark-to-market**, not deployment-based
 - If AB3 positions appreciate past 35% (e.g., MSTR doubles), an alert fires
 - Engine does NOT automatically trim — it alerts the portfolio owner
 - Owner may instruct a rebalance, or override and allow AB3 to stay above 35%
 
-### 12.4 Portfolio Independence
+### 13.4 Portfolio Independence
 
 Three portfolios are tracked independently:
 - **Greg** ($5M, live trading)
@@ -645,21 +827,21 @@ Three portfolios are tracked independently:
 
 Allocation decisions in one portfolio have zero implications for others.
 
-### 12.5 Bucket Compression Priority
+### 13.5 Bucket Compression Priority
 
 When AB3 receives capital via AB1 transitions, AB1 compresses automatically. If further adjustment is needed, the engine asks the portfolio owner for guidance. AB4 (cash) is the last resort and never goes below 10%.
 
 ---
 
-## 13. PC Val — MSTR Perpetual Call Valuation
+## 14. PC Val — MSTR Perpetual Call Valuation
 
-### 13.1 Model
+### 14.1 Model
 
 MSTR is modeled as a **perpetual call option on its Bitcoin holdings**. The theoretical fair value is computed using Black-Scholes modified for perpetual options.
 
 **Intuition:** MSTR holds Bitcoin as its primary asset. Its equity value above the net liability stack (debt + preferred - cash) is similar to a call option that expires whenever Saylor decides to realize the gains.
 
-### 13.2 Formula
+### 14.2 Formula
 
 ```
 Underlying = BTC/share = (BTC holdings × BTC price) / shares
@@ -672,7 +854,7 @@ Fair Value = Black-Scholes(Underlying, Strike, T=5, vol, rf)
 Band = ±1 standard deviation of historical FV
 ```
 
-### 13.3 Constants (last updated from 8-K filings)
+### 14.3 Constants (last updated from 8-K filings)
 
 | Parameter | Value |
 |---|---|
@@ -686,7 +868,7 @@ Band = ±1 standard deviation of historical FV
 
 **Staleness check:** Engine warns if holdings data is >90 days old. Update from EDGAR (8-K filings) after each quarterly filing.
 
-### 13.4 Signal Interpretation
+### 14.4 Signal Interpretation
 
 | Position vs Fair Value | Interpretation | AB Signal |
 |---|---|---|
@@ -697,15 +879,15 @@ Band = ±1 standard deviation of historical FV
 | < -20% | Deep discount | Strong buy signal; LEAP entry (AB1) |
 | At bottom band | Buy zone | Highest confidence LEAP entry |
 
-### 13.5 Where It Lives
+### 14.5 Where It Lives
 
 PC Val is computed entirely in Python from live BTC price + 8-K constants. No TradingView dependency.
 
 ---
 
-## 14. Asset Classification
+## 15. Asset Classification
 
-### 14.1 Three Asset Modes
+### 15.1 Three Asset Modes
 
 **Momentum Assets** (BTC/MSTR/TSLA/IBIT dynamics):
 - High volatility, trending behavior
@@ -724,7 +906,7 @@ PC Val is computed entirely in Python from live BTC price + 8-K constants. No Tr
 - Uses Momentum thresholds for LOI
 - Backtested: AB1 100% win rate, AB2 75%, AB3 high signal frequency
 
-### 14.2 Auto-Detection Logic
+### 15.2 Auto-Detection Logic
 
 ```python
 if ticker in ['MSTR','BTC','BTCUSD','TSLA','IBIT','GBTC','BITO']:
@@ -735,27 +917,28 @@ else:
     mode = MEAN_REVERTING  # default for equities/ETFs
 ```
 
-### 14.3 Observation Mode
+### 15.3 Observation Mode
 
 **PURR** (AI company, listed Dec 2025): Only 117 bars as of March 2026. Engine tracks but does not generate signals. Minimum bar threshold: **500 bars** (~3 months at 4H). Expected to graduate from observation mode by ~June 2026.
 
 ---
 
-## 15. Signal Cross-Reference & Priority Rules
+## 16. Signal Cross-Reference & Priority Rules
 
-### 15.1 Signal Hierarchy
+### 16.1 Signal Hierarchy
 
 When multiple signals fire on the same asset, priority order:
 
-1. **Regime gate** — if score ≤ -2, override all entry signals
-2. **AB3 deep accumulation (LOI < -80)** — highest priority entry
-3. **AB1 pre-breakout** — tactical entry on confirmed Stage 4→1
-4. **AB3 accumulation (LOI < acc_thresh)** — standard strategic entry
-5. **AB2 Bull Put** — spread entry in MIXED context
-6. **AB3 trim signals** — reduce existing positions
-7. **AB2/AB1 LT exit** — close positions on structural catch-up
+1. **Layer 0 (GLI) flag** — "GLI HEADWIND" tag reduces confidence; does not block
+2. **Regime gate** — if score ≤ -2, override all entry signals
+3. **AB3 deep accumulation (LOI < -80)** — highest priority entry
+4. **AB1 pre-breakout** — tactical entry on confirmed Stage 4→1
+5. **AB3 accumulation (LOI < acc_thresh)** — standard strategic entry
+6. **AB2 Bull Put** — spread entry in MIXED context
+7. **AB3 trim signals** — reduce existing positions
+8. **AB2/AB1 LT exit** — close positions on structural catch-up
 
-### 15.2 Conflict Resolution
+### 16.2 Conflict Resolution
 
 **AB3 ACC fires while AB2 BULL_PUT is open:**  
 Both are bullish. Keep the spread running. The AB3 entry builds a longer position alongside the spread.
@@ -766,7 +949,10 @@ The trim is AB3 reducing an existing large position. The AB1 is a new tactical p
 **Regime turns RISK-OFF while spreads are open:**  
 Do NOT forcefully close open spreads — their max loss is defined. Apply regime gate to NEW entries only. Alert the portfolio owner.
 
-### 15.3 The AB1/AB3 Sequencing Pattern
+**GLI Z < -0.5 + AB1 signal fires:**  
+Tag signal as "GLI HEADWIND — elevated false bottom risk." Raise minimum confidence threshold to 80% (vs standard 60%). Require deep anchor (LOI < -80) rather than -60. Signal is not blocked — it requires stronger confirmation.
+
+### 16.3 The AB1/AB3 Sequencing Pattern
 
 The ideal pattern is:
 ```
@@ -781,9 +967,9 @@ AB1 and AB3 are complementary, not competing. They use the same accumulation sig
 
 ---
 
-## 16. Validated Performance Numbers
+## 17. Validated Performance Numbers
 
-### 16.1 AB1 Pre-Breakout (Underlying Returns)
+### 17.1 AB1 Pre-Breakout (Underlying Returns)
 
 | Asset | N | 60d 10%+ hit | 90d 10%+ hit | Max 90d |
 |---|---|---|---|---|
@@ -794,7 +980,7 @@ AB1 and AB3 are complementary, not competing. They use the same accumulation sig
 | SPY | 9 | 50% | 75% | 75% |
 | IWM | 6 | 40% | 40% | 80% |
 
-### 16.2 AB2 MIXED-Context Bull Put (Underlying Signal)
+### 17.2 AB2 MIXED-Context Bull Put (Underlying Signal)
 
 | Asset | N | Win% | Avg P&L | Hold |
 |---|---|---|---|---|
@@ -805,7 +991,7 @@ AB1 and AB3 are complementary, not competing. They use the same accumulation sig
 | SPY | 27 | 67% | +0.1% | 4d |
 | TSLA | 18 | 61% | -0.7% | 5d |
 
-### 16.3 AB3 Accumulation Signal (20d forward return)
+### 17.3 AB3 Accumulation Signal (20d forward return)
 
 | Asset | Win% at 20d | Median Return |
 |---|---|---|
@@ -815,7 +1001,7 @@ AB1 and AB3 are complementary, not competing. They use the same accumulation sig
 | IWM | 57% | +1.0% |
 | MSTR | 50% (n=2) | +7.5% |
 
-### 16.4 Context Impact Summary
+### 17.4 Context Impact Summary
 
 The single most impactful parameter change validated in backtesting:
 
@@ -828,11 +1014,30 @@ This confirms the ST-Primary Framework's core thesis: MIXED context (LT-, VLT+) 
 
 ---
 
-## 17. Current Engine State
+## 18. Current Engine State
 
-*As of 2026-02-27 data (last CSV push)*
+*As of 2026-03-05 data (last CSV push)*
 
-### 17.1 Regime
+### 18.1 Layer 0 — Global Macro
+
+```
+42 Macro GRID:    GOLDILOCKS (growth ↑, inflation ↓)
+Paradigm:         C — Fiscal/monetary largesse + deregulation + reshoring
+GLI Trend:        Declining from peak (peaked late 2025)
+GLI Z-Score:      Approaching -0.5 threshold — monitor weekly
+GEGI:             Neutral (no amplification active)
+Dr. Mo:           Bullish → LQD | Bearish → none
+Warsh Warning:    Short-term risk-off for gold and equities
+3-Month Outlook:  Macro Weather bearish for Stocks, BTC, Commodities
+                  Low probability of sustaining risk-on regime next 3 months
+BTC GLI Target:   Potential retest $30K if GLI trough arrives ~mid-2026
+                  (Howell model; 13-week lead time)
+SLR Catalyst:     Expected Mar 2026 — net liquidity positive for equities
+GLI Adjustment:   Stage 1 SRI signals on BTC/MSTR tagged "false bottom risk"
+                  until GLI Z recovers above -0.5
+```
+
+### 18.2 Layer 1 — Regime (Market-Based)
 
 ```
 Composite Score: +1 / 7
@@ -845,7 +1050,7 @@ Bearish:  BTC (avg SRIBI -34), DXY (strong dollar)
 Neutral:  STRC ($100), VIX (20)
 ```
 
-### 17.2 Asset State
+### 18.3 Asset State
 
 | Asset | Price | Context | LOI | AB3 State |
 |---|---|---|---|---|
@@ -857,7 +1062,7 @@ Neutral:  STRC ($100), VIX (20)
 | GLD | $483.73 | TAILWIND | **+80.0** | TRIMMING |
 | IWM | $261.43 | MIXED | +11.6 | TRIMMING |
 
-### 17.3 Open AB2 Spreads
+### 18.4 Open AB2 Spreads
 
 | Asset | Entry Date | Entry Price | Status |
 |---|---|---|---|
@@ -865,7 +1070,7 @@ Neutral:  STRC ($100), VIX (20)
 | SPY | Feb 9, 2026 | $694.23 | 🟢 OPEN (27 bars) |
 | QQQ | Feb 25, 2026 | $615.41 | 🟢 OPEN (5 bars) |
 
-### 17.4 Live AB1 Signals
+### 18.5 Live AB1 Signals
 
 | Asset | Entry Date | Price | Conf | Status |
 |---|---|---|---|---|
@@ -880,6 +1085,11 @@ Neutral:  STRC ($100), VIX (20)
 
 ```
 Incoming signal on asset X:
+
+0. Check Layer 0 (GLI):
+   - GLI Z < -0.5? → Tag signal "GLI HEADWIND"; raise confidence threshold
+   - GEGI < 0? → Reduce position size; amplify bearish regime weight
+   - Dr. Mo bearish on asset class? → Flag for human review before entry
 
 1. Is regime score ≤ -2? → NO new entries
 2. Is asset in observation mode (< 500 bars)? → track only
@@ -918,7 +1128,15 @@ Incoming signal on asset X:
 | PC Val | Perpetual Call Valuation — MSTR fair value via Black-Scholes |
 | STRC | Saylor preferred share; 10% yield; regime indicator |
 | AB1/2/3/4 | Allocation Buckets — Tactical LEAP / Spreads / Strategic LEAP / Cash |
+| GLI | Global Liquidity Index — aggregate central bank balance sheet measure |
+| GEGI | Global Economic Growth Index — fiscal + monetary + external demand composite |
+| GRID | 42 Macro growth/inflation regime matrix (Goldilocks/Reflation/Stagflation/Deflation) |
+| Paradigm | 42 Macro multi-year monetary cycle phase (A=tighten, B=cut, C=largesse) |
+| KISS | 42 Macro model portfolio — binary long/short signals by asset class |
+| Dr. Mo | 42 Macro momentum confirmation model — validates KISS portfolio direction |
+| RMOP | Reserve Management and Operations Program — Fed QT mechanism |
+| SLR | Supplementary Leverage Ratio — bank capital rule; reduction = liquidity expansion |
 
 ---
 
-*Tutorial reflects engine state as of 2026-03-01. Update after each major framework change.*
+*Tutorial reflects engine state as of 2026-03-05. Next update: after GLIEngine Python class is built and wired into RegimeEngine.compute().*
