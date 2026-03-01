@@ -487,6 +487,264 @@ class GLIEngine:
 
 
 # ═══════════════════════════════════════════════════════════════
+# GLI FORECAST — P4 Deliverable B
+# ═══════════════════════════════════════════════════════════════
+
+@dataclass
+class GLIForecast:
+    """
+    13-week GLI forward forecast.
+    Howell: GLI leads BTC by 13 weeks (ρ=0.58). Projecting GLI 13w forward
+    gives a directional signal for BTC over the next quarter.
+    """
+    generated_at: datetime
+    # Current state
+    current_zscore: float
+    current_trend: str
+    current_momentum: float       # 13w momentum of composite ROC
+    # Forecast
+    forecast_direction: str       # EXPANDING / CONTRACTING / NEUTRAL
+    forecast_confidence: str      # HIGH / MODERATE / LOW
+    forecast_zscore_low: float    # -1σ band (bear scenario)
+    forecast_zscore_mid: float    # base case
+    forecast_zscore_high: float   # +1σ band (bull scenario)
+    # Peak/trough detection
+    is_peak: bool                 # GLI likely peaked (downswing beginning)
+    is_trough: bool               # GLI likely troughing (upswing beginning)
+    weeks_since_inflection: int   # weeks since last direction change
+    # BTC implication (13-week lead)
+    btc_signal_13w: str           # BULLISH / BEARISH / NEUTRAL
+    btc_signal_note: str
+    # Cycle context
+    cycle_phase: str              # EARLY_EXPANSION / LATE_EXPANSION / EARLY_CONTRACTION / LATE_CONTRACTION
+    next_inflection_est: str      # Estimated date of next peak/trough (rough)
+
+
+class GLIForecaster:
+    """
+    Projects GLI 13 weeks forward using momentum extrapolation.
+    Identifies peaks and troughs using momentum sign changes.
+
+    Method:
+      1. Compute composite GLI ROC series (from GLIEngine)
+      2. Fit a simple linear momentum model (last 13w slope)
+      3. Project forward 13 weeks with ±1σ uncertainty band
+      4. Detect peak (momentum crossing from + to -) or trough (- to +)
+      5. Translate into BTC directional signal via 13-week lead
+    """
+
+    LEAD_WEEKS = 13    # Howell: GLI leads BTC by 13 weeks
+    LOOKBACK   = 26    # Weeks of history for momentum estimation
+    PEAK_CONFIRM = 4   # Consecutive declining weeks to call a peak
+    TROUGH_CONFIRM = 4 # Consecutive rising weeks to call a trough
+
+    def __init__(self, engine: "GLIEngine"):
+        self.engine = engine
+
+    def _get_composite_roc_series(self) -> List[float]:
+        """Reconstruct composite ROC series newest-first from component data."""
+        weighted_series: List[List[float]] = []
+
+        for series_id, label, weight, invert in self.engine.GLI_COMPONENTS:
+            limit = 52 if series_id == "JPNASSETS" else 200
+            periods = 6 if series_id == "JPNASSETS" else 26
+            obs = self.engine._fetch(series_id, limit=limit)
+            if not obs:
+                continue
+            roc_s = self.engine._roc_series(obs, periods=periods)
+            if not roc_s:
+                continue
+            if invert:
+                roc_s = [-x for x in roc_s]
+            weighted_series.append([x * weight for x in roc_s])
+
+        if not weighted_series:
+            return []
+
+        min_len = min(len(s) for s in weighted_series)
+        return [sum(s[i] for s in weighted_series) for i in range(min_len)]
+
+    def _detect_cycle_phase(self, series: List[float]) -> Tuple[bool, bool, int, str]:
+        """
+        Detect whether GLI is at a peak, trough, or trending.
+        Returns: (is_peak, is_trough, weeks_since_inflection, cycle_phase)
+        """
+        if len(series) < self.PEAK_CONFIRM + 2:
+            return False, False, 0, "UNKNOWN"
+
+        # Momentum = sign of 4w change in composite ROC
+        recent = series[:self.PEAK_CONFIRM]
+        consecutive_down = all(recent[i] < recent[i+1] for i in range(len(recent)-1))
+        consecutive_up   = all(recent[i] > recent[i+1] for i in range(len(recent)-1))
+
+        # Find last inflection (sign change in momentum)
+        weeks_since = 0
+        prev_dir = None
+        for i in range(len(series) - 1):
+            curr_dir = "UP" if series[i] > series[i+1] else "DOWN"
+            if prev_dir and curr_dir != prev_dir:
+                weeks_since = i
+                break
+            prev_dir = curr_dir
+
+        # Cycle phase from current level and momentum
+        current = series[0]
+        if current > 3 and consecutive_down:
+            phase = "LATE_EXPANSION"
+        elif current > 0 and not consecutive_down:
+            phase = "EARLY_EXPANSION"
+        elif current < -3 and consecutive_up:
+            phase = "LATE_CONTRACTION"
+        else:
+            phase = "EARLY_CONTRACTION"
+
+        return consecutive_down, consecutive_up, weeks_since, phase
+
+    def _project_forward(self, series: List[float]) -> Tuple[float, float, float, float]:
+        """
+        Linear projection of composite ROC 13 weeks forward.
+        Returns (slope, projected_value, lower_1sigma, upper_1sigma)
+        """
+        if len(series) < self.LOOKBACK:
+            return 0.0, series[0] if series else 0.0, -2.0, 2.0
+
+        window = series[:self.LOOKBACK]
+        n = len(window)
+
+        # Linear regression (OLS) — x=0 is most recent (newest-first reversal)
+        x = list(range(n))
+        x_mean = sum(x) / n
+        y_mean = sum(window) / n
+        ss_xy = sum((x[i] - x_mean) * (window[i] - y_mean) for i in range(n))
+        ss_xx = sum((x[i] - x_mean) ** 2 for i in range(n))
+        slope = ss_xy / ss_xx if ss_xx != 0 else 0.0
+
+        # Projected value in 13 weeks (positive x = past, project to negative x = future)
+        projected = series[0] + (slope * self.LEAD_WEEKS * -1)  # slope is negative (going into future)
+
+        # Residual std for confidence band
+        fitted = [y_mean + slope * (xi - x_mean) for xi in x]
+        residuals = [window[i] - fitted[i] for i in range(n)]
+        std_resid = math.sqrt(sum(r**2 for r in residuals) / n) if n > 1 else 1.0
+        band = std_resid * math.sqrt(1 + 1/n + (self.LEAD_WEEKS**2 / ss_xx)) if ss_xx > 0 else std_resid
+
+        return slope, projected, projected - band, projected + band
+
+    def forecast(self, current_state: "GLIState") -> GLIForecast:
+        """Generate 13-week GLI forecast from current state."""
+        series = self._get_composite_roc_series()
+
+        if not series:
+            return GLIForecast(
+                generated_at=datetime.utcnow(),
+                current_zscore=current_state.gli_zscore,
+                current_trend=current_state.gli_trend,
+                current_momentum=current_state.gli_momentum,
+                forecast_direction="NEUTRAL",
+                forecast_confidence="LOW",
+                forecast_zscore_low=-1.0, forecast_zscore_mid=0.0, forecast_zscore_high=1.0,
+                is_peak=False, is_trough=False, weeks_since_inflection=0,
+                btc_signal_13w="NEUTRAL",
+                btc_signal_note="Insufficient data for GLI forecast",
+                cycle_phase="UNKNOWN",
+                next_inflection_est="Unknown",
+            )
+
+        is_peak, is_trough, weeks_since, phase = self._detect_cycle_phase(series)
+        slope, proj_mid, proj_low, proj_high = self._project_forward(series)
+
+        # Forecast direction from slope and projection
+        if proj_mid > 1.0:
+            fdir = "EXPANDING"
+        elif proj_mid < -1.0:
+            fdir = "CONTRACTING"
+        else:
+            fdir = "NEUTRAL"
+
+        # Confidence from convergence of signals
+        signals_agree = (
+            (fdir == "EXPANDING" and is_trough) or
+            (fdir == "CONTRACTING" and is_peak) or
+            (abs(slope) > 0.5 and abs(proj_mid) > 2.0)
+        )
+        confidence = "HIGH" if signals_agree else ("MODERATE" if abs(proj_mid) > 0.5 else "LOW")
+
+        # BTC signal (13-week lead — current GLI → BTC in 13 weeks)
+        z = current_state.gli_zscore
+        mom = current_state.gli_momentum
+        if z > 0.5 and mom > 0:
+            btc_sig = "BULLISH"
+            btc_note = f"GLI Z={z:+.2f} expanding with +momentum → BTC tailwind in ~13w"
+        elif z < -0.5 and mom < 0:
+            btc_sig = "BEARISH"
+            btc_note = f"GLI Z={z:+.2f} contracting with -momentum → BTC headwind in ~13w"
+        elif is_peak:
+            btc_sig = "BEARISH"
+            btc_note = f"GLI likely peaked — downswing beginning → BTC headwind in ~13w"
+        elif is_trough:
+            btc_sig = "BULLISH"
+            btc_note = f"GLI likely troughing — upswing beginning → BTC tailwind in ~13w"
+        else:
+            btc_sig = "NEUTRAL"
+            btc_note = f"GLI Z={z:+.2f} — mixed signals, no strong BTC directional read"
+
+        # Estimate next inflection (rough)
+        cycle_len = 26  # ~6-month half-cycle typical
+        weeks_remaining = max(1, cycle_len - weeks_since)
+        next_date = (datetime.utcnow() + timedelta(weeks=weeks_remaining)).strftime("%Y-%m")
+        next_inf = f"~{next_date} (est. {weeks_remaining}w)"
+
+        # Z-score bands (convert projected ROC to approximate Z using current ratio)
+        z_now = current_state.gli_zscore
+        roc_now = series[0] if series else 1.0
+        z_per_roc = z_now / roc_now if abs(roc_now) > 0.1 else 1.0
+        fz_mid  = round(proj_mid  * z_per_roc, 2)
+        fz_low  = round(proj_low  * z_per_roc, 2)
+        fz_high = round(proj_high * z_per_roc, 2)
+
+        return GLIForecast(
+            generated_at=datetime.utcnow(),
+            current_zscore=current_state.gli_zscore,
+            current_trend=current_state.gli_trend,
+            current_momentum=current_state.gli_momentum,
+            forecast_direction=fdir,
+            forecast_confidence=confidence,
+            forecast_zscore_low=fz_low,
+            forecast_zscore_mid=fz_mid,
+            forecast_zscore_high=fz_high,
+            is_peak=is_peak,
+            is_trough=is_trough,
+            weeks_since_inflection=weeks_since,
+            btc_signal_13w=btc_sig,
+            btc_signal_note=btc_note,
+            cycle_phase=phase,
+            next_inflection_est=next_inf,
+        )
+
+    def print_forecast(self, fc: GLIForecast) -> None:
+        """Print formatted GLI forecast report."""
+        btc_sym = {"BULLISH": "🟢", "BEARISH": "🔴", "NEUTRAL": "⚪"}.get(fc.btc_signal_13w, "⚪")
+        peak_str = " ⚠ PEAK DETECTED" if fc.is_peak else ""
+        trough_str = " ✓ TROUGH DETECTED" if fc.is_trough else ""
+
+        print("\n" + "─" * 60)
+        print("GLI FORECAST — 13-Week Horizon (P4 Deliverable B)")
+        print("─" * 60)
+        print(f"  Current:       Z={fc.current_zscore:+.3f}  [{fc.current_trend}]  mom={fc.current_momentum:+.2f}")
+        print(f"  Cycle phase:   {fc.cycle_phase}{peak_str}{trough_str}")
+        print(f"  Since inflect: {fc.weeks_since_inflection}w ago")
+        print()
+        print(f"  13w Forecast:  {fc.forecast_direction}  [{fc.forecast_confidence} confidence]")
+        print(f"  Z-score range: {fc.forecast_zscore_low:+.2f} / {fc.forecast_zscore_mid:+.2f} / {fc.forecast_zscore_high:+.2f}")
+        print(f"                 (bear / base / bull)")
+        print()
+        print(f"  BTC signal:    {btc_sym} {fc.btc_signal_13w}")
+        print(f"  Note: {fc.btc_signal_note}")
+        print(f"  Next inflect:  {fc.next_inflection_est}")
+        print("─" * 60)
+
+
+# ═══════════════════════════════════════════════════════════════
 # STANDALONE TEST
 # ═══════════════════════════════════════════════════════════════
 
@@ -495,5 +753,11 @@ if __name__ == "__main__":
     engine = GLIEngine()
     state = engine.compute()
     engine.print_report(state)
+
+    print("\nRunning GLI Forecast — P4 Deliverable B...")
+    forecaster = GLIForecaster(engine)
+    fc = forecaster.forecast(state)
+    forecaster.print_forecast(fc)
+
     print(f"\nScore adjustment to pass to RegimeEngine: {state.score_adjustment:+d}")
     print(f"Probability adjustment:                   {state.probability_adjustment:+.1%}")
