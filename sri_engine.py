@@ -1941,11 +1941,29 @@ class SRIEngineV2:
             results[asset] = machine.scan(df)
         return results
     
+    def run_ab2(self, regime: RegimeState = None) -> Dict[str, List[Dict]]:
+        """Run AB2 credit spread scan on all assets"""
+        results = {}
+        reg = regime or self.regime_engine.compute()
+        ab2 = AB2EngineV2()
+        
+        for asset in self.TRADING_ASSETS:
+            df = self._dfs.get(asset)
+            if df is None:
+                continue
+            sigs = ab2.scan(df, asset,
+                            regime_score=reg.composite_score,
+                            vix_level=reg.vix_level)
+            if sigs:
+                results[asset] = sigs
+        return results
+    
     def run_all(self, verbose: bool = True) -> Dict:
         """Full pipeline run"""
         load_status = self.load_all()
         reg = self.regime_engine.compute()
         ab1_sigs = self.run_ab1(reg)
+        ab2_sigs = self.run_ab2(reg)
         ab3_sigs = self.run_ab3()
         
         # Current state summary
@@ -1979,16 +1997,17 @@ class SRIEngineV2:
                 ab3_last[asset] = sigs[-1]
         
         if verbose:
-            self._print_report(reg, current_state, ab1_sigs, ab3_sigs, ab3_last)
+            self._print_report(reg, current_state, ab1_sigs, ab2_sigs, ab3_sigs, ab3_last)
         
         return {
             "regime": reg,
             "current_state": current_state,
             "ab1_signals": ab1_sigs,
+            "ab2_signals": ab2_sigs,
             "ab3_signals": ab3_sigs,
         }
     
-    def _print_report(self, reg, current_state, ab1_sigs, ab3_sigs, ab3_last):
+    def _print_report(self, reg, current_state, ab1_sigs, ab2_sigs, ab3_sigs, ab3_last):
         import datetime as dt
         print("=" * 90)
         print(f"  SRI ENGINE v2.0 — {dt.datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}")
@@ -2024,6 +2043,47 @@ class SRIEngineV2:
         if not any_ab1:
             print("  No recent AB1 pre-breakout signals")
         
+        # AB2 signals (open positions + last entry per asset)
+        print(f"\n  AB2 CREDIT SPREADS — MIXED context only (v2)")
+        any_ab2 = False
+        for asset, sigs in ab2_sigs.items():
+            if not sigs:
+                continue
+            # Show open position or last closed
+            open_pos = [s for s in sigs if s.get('status') == 'OPEN']
+            last_closed = [s for s in sigs if s.get('status') != 'OPEN']
+            if open_pos:
+                any_ab2 = True
+                p = open_pos[-1]
+                ed = p['entry_date'].strftime('%Y-%m-%d') if hasattr(p['entry_date'], 'strftime') else str(p['entry_date'])[:10]
+                print(f"  {asset:<6} 🟢 OPEN  entered {ed} @ ${p['entry']:.2f}  "
+                      f"ctx={p['context']}  {p['bars_held']}b held")
+            elif last_closed:
+                any_ab2 = True
+                p = last_closed[-1]
+                ed = p['entry_date'].strftime('%Y-%m-%d') if hasattr(p['entry_date'], 'strftime') else str(p['entry_date'])[:10]
+                pnl = p.get('underlying_pnl', 0)
+                mark = "✓" if pnl > 0 else "✗"
+                print(f"  {asset:<6} ⚫ last  {ed} @ ${p['entry']:.2f}  "
+                      f"exit={p.get('exit_reason','?')}  underlying {pnl:+.1f}% {mark}")
+        
+        # Current AB2 opportunity scan
+        ab2_engine = AB2EngineV2()
+        for asset, df in self._dfs.items():
+            if asset in AB2EngineV2.AB2_DISABLED or len(df) < 2:
+                continue
+            sig = ab2_engine.current_signal(df, asset)
+            if sig == "BULL_PUT_ENTRY":
+                any_ab2 = True
+                price = float(df.iloc[-1]['close'])
+                print(f"  {asset:<6} 🚨 LIVE SIGNAL: BULL_PUT_ENTRY @ ${price:.2f}")
+            elif sig == "LT_EXIT":
+                any_ab2 = True
+                print(f"  {asset:<6} 🔔 LT_EXIT signal — close open spread")
+        
+        if not any_ab2:
+            print("  No active AB2 positions or signals")
+        
         # AB3 recent signals per asset
         print(f"\n  AB3 STRATEGIC LEAP — RECENT SIGNALS")
         for asset, sigs in ab3_sigs.items():
@@ -2033,4 +2093,164 @@ class SRIEngineV2:
                     f"{s[1]} {s[0].strftime('%Y-%m-%d')} ${s[3]:.0f}" for s in recent
                 )
                 print(f"  {asset:<6}: {sig_strs}")
+
+
+
+# ═══════════════════════════════════════════════════════════════
+# AB2 ENGINE v2 (2026-03-01)
+# MIXED context only, LT_POSITIVE exit — validated across 7 assets
+# ═══════════════════════════════════════════════════════════════
+
+class AB2EngineV2:
+    """
+    Credit Spread Engine v2
+    
+    Validated spec (2026-03-01 backtest):
+      Entry: ST cross+ AND VST+ AND MIXED context (LT<0, VLT>0)
+      Exit:  LT turns positive (primary) | 90-bar time stop (secondary)
+      Gate:  Regime score ≥ -1; VIX size scaling
+      
+    Win rates: MSTR 72% | QQQ 84% | IWM 75% | GLD 75% | SPY 67% | TSLA 61%
+    Disabled:  IBIT (MIXED context doesn't predict LT catch-up reliably)
+    
+    Hold: ~4-6 trading days (22-30 bars @ 4H)
+    Note: P/L shown in underlying % — actual spread P/L will differ based on
+          strike selection and premium received. Use as entry/exit timing signal.
+    """
+    
+    AB2_DISABLED = {"IBIT", "BTC", "PURR"}  # No spreads on these assets
+    
+    def __init__(self, cooldown_bars: int = 12):
+        self.cooldown_bars = cooldown_bars
+    
+    def scan(self, df: pd.DataFrame, asset: str,
+             regime_score: int = 0,
+             vix_level: float = 20.0) -> List[Dict]:
+        """
+        Full backtest/live scan. Returns list of closed + open spread dicts.
+        """
+        if asset in self.AB2_DISABLED:
+            return []
+        
+        # Regime gate: no new entries in risk-off
+        if regime_score <= -2:
+            return []
+        
+        # VIX size scaling factor (informational — affects sizing, not signals)
+        if vix_level < 18:
+            size_scale = 0.5
+        elif vix_level > 25:
+            size_scale = 1.25
+        else:
+            size_scale = 1.0
+        
+        df = df.copy().reset_index(drop=True)
+        if 'date' not in df.columns:
+            df['date'] = pd.to_datetime(df['time'], unit='s')
+        
+        closed = []
+        active = None
+        prev_sribi = None
+        last_entry_bar = -self.cooldown_bars
+        
+        for i, row in df.iterrows():
+            sribi = SRIBIState(
+                vst=float(row.get('VST SRI Bias Histogram', 0) or 0),
+                st=float(row.get('ST SRI Bias Histogram', 0) or 0),
+                lt=float(row.get('LT SRI Bias Histogram', 0) or 0),
+                vlt=float(row.get('VLT SRI Bias Histogram', 0) or 0),
+            )
+            price = float(row['close'])
+            date = row['date']
+            ctx = sribi.context
+            
+            if prev_sribi is not None:
+                cooldown_ok = (i - last_entry_bar) > self.cooldown_bars
+                st_cross_bull = sribi.st > 0 and prev_sribi.st <= 0
+                
+                # Entry: MIXED context only
+                if active is None and cooldown_ok:
+                    if st_cross_bull and sribi.vst > 0 and ctx == Context.MIXED:
+                        active = {
+                            'asset': asset,
+                            'type': 'BULL_PUT',
+                            'entry': price,
+                            'entry_bar': i,
+                            'entry_date': date,
+                            'context': ctx.value,
+                            'lt_at_entry': sribi.lt,
+                            'size_scale': size_scale,
+                            'vix_at_entry': vix_level,
+                        }
+                        last_entry_bar = i
+                
+                # Exit management
+                if active is not None:
+                    bars_held = i - active['entry_bar']
+                    exit_reason = None
+                    
+                    if sribi.lt > 0 and prev_sribi.lt <= 0:
+                        exit_reason = "LT_POSITIVE"
+                    elif bars_held > 90:
+                        exit_reason = "TIME_STOP"
+                    
+                    if exit_reason:
+                        underlying_pnl = (price - active['entry']) / active['entry'] * 100
+                        active.update({
+                            'exit': price,
+                            'exit_date': date,
+                            'exit_bar': i,
+                            'exit_reason': exit_reason,
+                            'underlying_pnl': underlying_pnl,
+                            'bars_held': bars_held,
+                            'days_held': bars_held / 6,
+                        })
+                        closed.append(dict(active))
+                        active = None
+            
+            prev_sribi = sribi
+        
+        # Include open position if any
+        if active is not None:
+            active['status'] = 'OPEN'
+            active['bars_held'] = len(df) - 1 - active['entry_bar']
+            closed.append(dict(active))
+        
+        return closed
+    
+    def current_signal(self, df: pd.DataFrame, asset: str) -> Optional[str]:
+        """
+        Check if current bar meets AB2 entry conditions.
+        Returns signal type string or None.
+        """
+        if asset in self.AB2_DISABLED or len(df) < 2:
+            return None
+        
+        last = df.iloc[-1]
+        prev = df.iloc[-2]
+        
+        sribi_now = SRIBIState(
+            vst=float(last.get('VST SRI Bias Histogram', 0) or 0),
+            st=float(last.get('ST SRI Bias Histogram', 0) or 0),
+            lt=float(last.get('LT SRI Bias Histogram', 0) or 0),
+            vlt=float(last.get('VLT SRI Bias Histogram', 0) or 0),
+        )
+        sribi_prev = SRIBIState(
+            vst=float(prev.get('VST SRI Bias Histogram', 0) or 0),
+            st=float(prev.get('ST SRI Bias Histogram', 0) or 0),
+            lt=float(prev.get('LT SRI Bias Histogram', 0) or 0),
+            vlt=float(prev.get('VLT SRI Bias Histogram', 0) or 0),
+        )
+        
+        st_cross_bull = sribi_now.st > 0 and sribi_prev.st <= 0
+        ctx = sribi_now.context
+        
+        if st_cross_bull and sribi_now.vst > 0 and ctx == Context.MIXED:
+            return "BULL_PUT_ENTRY"
+        
+        # Exit check for active positions
+        if sribi_now.lt > 0 and sribi_prev.lt <= 0:
+            return "LT_EXIT"
+        
+        return None
 
