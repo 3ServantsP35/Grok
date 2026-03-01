@@ -1,7 +1,7 @@
-// SRI Forecast AB1 — Directional Trade Signals (v3)
-// Sequential staging: ARMED → CONFIRMED → ENTRY
-// Catches first pullback after structural shift, not overextension
-// Exit: Time stop (10 bars) or FTL<STL
+// SRI Forecast AB1 — Directional Trade Signals (v5)
+// ST-Primary Framework: ST = Decision | VST = Timing | LT/VLT = Context
+// Entry: ST SRIBI crosses positive + VST positive (precision)
+// Exit: LT confirms positive (mixed/headwind) or trailing stop (tailwind)
 // © RizenShine — Forecast engine by CIO
 
 //@version=6
@@ -23,22 +23,17 @@ bool is_mr = resolved_mode == "Mean-Reverting"
 string grp_core   = "Core Settings"
 int at_period     = input.int(14, "Trackline ATR Period", group=grp_core)
 float at_coeff    = input.float(1.0, "Trackline ATR Coefficient", group=grp_core)
-int stage_window  = input.int(30, "Staging Window (bars)", group=grp_core, tooltip="Max bars between stages. 30 bars ≈ 5 days on 4H.")
-int cooldown_bars = input.int(30, "Cooldown Between Signals", group=grp_core, tooltip="Min bars between Strong signals to reduce noise")
-int time_stop_bars = input.int(10, "Time Stop (bars)", group=grp_core, tooltip="Close if no +5% move in N bars. 10 bars ≈ 1.5 days on 4H.")
-
-string grp_signals = "Signals"
-bool enable_bull  = input.bool(true, "Enable Bullish Signals", group=grp_signals)
-bool bear_override = input.bool(false, "Force Bearish Signals", group=grp_signals)
-bool enable_bear  = bear_override or is_mr
+int cooldown_bars = input.int(18, "Cooldown Between Entries (bars)", group=grp_core, tooltip="Min bars between entries. 18 bars ≈ 3 days on 4H.")
+float trail_hw    = input.float(8.0, "Trailing Stop — Headwind/Mixed (%)", group=grp_core)
+float trail_tw    = input.float(10.0, "Trailing Stop — Tailwind (%)", group=grp_core)
 
 string grp_disp   = "Display"
 bool show_table   = input.bool(true, "Show Info Table", group=grp_disp)
 bool show_legend  = input.bool(true, "Show Legend", group=grp_disp)
-bool show_stage_bg = input.bool(true, "Show LT Stage Background", group=grp_disp)
+bool show_context = input.bool(true, "Show Context Background", group=grp_disp)
 
 // ═══════════════════════════════════════════════════════════════
-// TRACKLINE + SRIBI
+// TRACKLINES + SRIBI (4 Timeframes)
 // ═══════════════════════════════════════════════════════════════
 
 f_trackline(int period, float coeff) =>
@@ -50,233 +45,216 @@ f_trackline(int period, float coeff) =>
     track := cond ? math.max(upT, nz(track[1])) : math.min(downT, nz(track[1]))
     track
 
+// VST: RB=2H, FTL=2H, STL=1D
 float vst_ftl = request.security(syminfo.tickerid, "120", f_trackline(at_period, at_coeff))
 float vst_stl = request.security(syminfo.tickerid, "D",   f_trackline(at_period, at_coeff))
 float vst_sribi = vst_stl != 0 ? (vst_ftl - vst_stl) / vst_stl * 100 : 0
-float st_sribi = vst_sribi
 
+// ST: RB=4H, FTL=2H, STL=1D
+float st_ftl = request.security(syminfo.tickerid, "120", f_trackline(at_period, at_coeff))
+float st_stl = request.security(syminfo.tickerid, "D",   f_trackline(at_period, at_coeff))
+float st_sribi = st_stl != 0 ? (st_ftl - st_stl) / st_stl * 100 : 0
+
+// LT: RB=1D, FTL=4H, STL=1W
 float lt_ftl = request.security(syminfo.tickerid, "240", f_trackline(at_period, at_coeff))
 float lt_stl = request.security(syminfo.tickerid, "W",   f_trackline(at_period, at_coeff))
 float lt_sribi = lt_stl != 0 ? (lt_ftl - lt_stl) / lt_stl * 100 : 0
 
+// VLT: RB=2D, FTL=8H, STL=2W
 float vlt_ftl = request.security(syminfo.tickerid, "480", f_trackline(at_period, at_coeff))
 float vlt_stl = request.security(syminfo.tickerid, "2W",  f_trackline(at_period, at_coeff))
 float vlt_sribi = vlt_stl != 0 ? (vlt_ftl - vlt_stl) / vlt_stl * 100 : 0
 
 float sribi_avg = (vst_sribi + st_sribi + lt_sribi + vlt_sribi) / 4.0
-int bull_count = (vst_sribi > 0 ? 1 : 0) + (st_sribi > 0 ? 1 : 0) + (lt_sribi > 0 ? 1 : 0) + (vlt_sribi > 0 ? 1 : 0)
 
 // ═══════════════════════════════════════════════════════════════
-// LT BACKBONE + ATR
+// CONTEXT CLASSIFICATION
+// LT/VLT tell you the structural environment, not whether to trade
 // ═══════════════════════════════════════════════════════════════
 
-bool lt_bullish = lt_ftl > lt_stl
-bool lt_ftl_rising = lt_ftl > nz(lt_ftl[1])
-float lt_atr = ta.atr(14)
-float pct_from_stl = lt_stl != 0 ? (close - lt_stl) / lt_stl * 100 : 0
-float pct_from_ftl = lt_ftl != 0 ? (close - lt_ftl) / lt_ftl * 100 : 0
+bool lt_neg  = lt_sribi < 0
+bool lt_pos  = lt_sribi > 0
+bool vlt_neg = vlt_sribi < 0
+bool vlt_pos = vlt_sribi > 0
 
-color ftl_color = lt_ftl_rising ? color.new(color.teal, 30) : color.new(color.maroon, 30)
-plot(lt_ftl, "LT Fast Trackline", color=ftl_color, linewidth=2, style=plot.style_circles)
-plot(lt_stl, "LT Slow Trackline", color=lt_bullish ? color.new(color.teal, 40) : color.new(color.maroon, 40), linewidth=2)
-bgcolor(show_stage_bg ? (lt_bullish ? color.new(color.green, 93) : color.new(color.red, 93)) : na)
+string context = lt_neg and vlt_neg ? "HEADWIND" : lt_pos and vlt_pos ? "TAILWIND" : "MIXED"
 
-// ═══════════════════════════════════════════════════════════════
-// SHARED REGIME (used by all AB scripts)
-// ═══════════════════════════════════════════════════════════════
-
-// Compute LOI inline (same formula as AB3)
-float vlt_norm = math.max(-100, math.min(100, vlt_sribi / 80 * 100))
-float lt_norm  = math.max(-100, math.min(100, lt_sribi / 80 * 100))
-float conc_norm = (bull_count - 2.0) / 2.0 * 100
-float vlt_roc_raw = vlt_sribi - nz(vlt_sribi[10])
-float roc_norm = math.max(-100, math.min(100, vlt_roc_raw / 40 * 100))
-float loi = (vlt_norm * 40 + roc_norm * 30 + lt_norm * 15 + conc_norm * 15) / 100
-
-string regime = loi < -20 and not lt_bullish ? "ACCUMULATE" : lt_bullish and loi < 0 ? "EARLY_BULL" : lt_bullish and sribi_avg > 10 ? "CONFIRMED_BULL" : loi > 40 and sribi_avg < nz(sribi_avg[6]) ? "DISTRIBUTION" : not lt_bullish ? "BREAKDOWN" : "NEUTRAL"
+color ctx_bg = context == "HEADWIND" ? color.new(color.red, 94) : context == "TAILWIND" ? color.new(color.green, 94) : color.new(color.yellow, 95)
+bgcolor(show_context ? ctx_bg : na)
 
 // ═══════════════════════════════════════════════════════════════
-// AB1 v3 — SEQUENTIAL STAGING
+// ST-PRIMARY ENTRY SIGNAL
 //
-// BULLISH:
-//   Stage 1 (ARMED): FTL crosses above STL
-//   Stage 2 (CONFIRMED): Within window, SRIBI avg turns positive
-//   Stage 3 (ENTRY): Within window, pullback to within 3% of FTL
-//   Guard: Don't fire if price >8% above STL (overextended)
-//
-// BEARISH (MR only):
-//   Stage 1: FTL crosses below STL
-//   Stage 2: SRIBI avg turns negative
-//   Stage 3: Rally to within 3% of FTL from below
+// Alert: ST SRIBI crosses positive (the DECISION)
+// Entry: VST SRIBI also positive (precision TIMING)
+// Context modulates exit strategy, not entry decision
 // ═══════════════════════════════════════════════════════════════
 
-// --- BULLISH STAGING ---
-bool ftl_cross_bull = lt_ftl > lt_stl and nz(lt_ftl[1]) <= nz(lt_stl[1])
-bool ftl_cross_bear = lt_ftl < lt_stl and nz(lt_ftl[1]) >= nz(lt_stl[1])
+bool st_cross_bull = st_sribi > 0 and nz(st_sribi[1]) <= 0
+bool vst_confirms  = vst_sribi > 0
 
-var int bull_stage = 0
-var int bull_stage1_bar = 0
-var int last_strong_bar = -999
-
-// Stage 1: FTL crosses above STL
-if ftl_cross_bull
-    bull_stage := 1
-    bull_stage1_bar := bar_index
-
-// Stage 2: SRIBI avg turns positive (within window of stage 1)
-if bull_stage == 1 and sribi_avg > 0 and nz(sribi_avg[1]) <= 0 and (bar_index - bull_stage1_bar) <= stage_window
-    bull_stage := 2
-
-// Stage 3: Pullback to within 3% of FTL (entry zone)
-bool near_ftl = math.abs(pct_from_ftl) < 3.0
-bool not_overextended = pct_from_stl < 8.0
-bool bull_entry = enable_bull and bull_stage >= 2 and near_ftl and not_overextended and (bar_index - bull_stage1_bar) <= stage_window * 2
+bool raw_entry = st_cross_bull and vst_confirms
 
 // Cooldown
-bool bull_strong_new = bull_entry and (bar_index - last_strong_bar) > cooldown_bars
+var int last_entry_bar = -999
+bool entry_signal = raw_entry and (bar_index - last_entry_bar) > cooldown_bars
 
-if bull_strong_new
-    last_strong_bar := bar_index
-    bull_stage := 0  // reset after firing
+if entry_signal
+    last_entry_bar := bar_index
 
-// Expire staging if window exceeded
-if bull_stage > 0 and (bar_index - bull_stage1_bar) > stage_window * 2
-    bull_stage := 0
+// ST bearish cross (potential short on MR, or contrarian buy signal)
+bool st_cross_bear = st_sribi < 0 and nz(st_sribi[1]) >= 0
 
-// Setup: Stage 1 or 2 active but not yet entry
-bool bull_setup = enable_bull and bull_stage >= 1 and not bull_entry
+// ═══════════════════════════════════════════════════════════════
+// EXIT TRACKING
+// Mixed/Headwind: exit when LT confirms positive OR trailing stop
+// Tailwind: ride with wider trailing stop
+// ═══════════════════════════════════════════════════════════════
 
-// --- BEARISH STAGING (MR only) ---
-var int bear_stage = 0
-var int bear_stage1_bar = 0
-var int last_bear_bar = -999
+var bool in_trade = false
+var int trade_bar = 0
+var float trade_entry = 0.0
+var float trade_peak = 0.0
+var string trade_context = ""
+var float active_trail_pct = 0.0
 
-if ftl_cross_bear and enable_bear
-    bear_stage := 1
-    bear_stage1_bar := bar_index
+if entry_signal
+    in_trade := true
+    trade_bar := bar_index
+    trade_entry := close
+    trade_peak := close
+    trade_context := context
+    active_trail_pct := (context == "TAILWIND") ? trail_tw : trail_hw
 
-if bear_stage == 1 and sribi_avg < 0 and nz(sribi_avg[1]) >= 0 and (bar_index - bear_stage1_bar) <= stage_window
-    bear_stage := 2
+if in_trade
+    trade_peak := math.max(trade_peak, close)
 
-bool bear_near_ftl = math.abs(pct_from_ftl) < 3.0
-bool bear_entry = enable_bear and bear_stage >= 2 and bear_near_ftl and pct_from_stl > -8.0 and (bar_index - bear_stage1_bar) <= stage_window * 2
+// Exit conditions
+bool exit_lt_confirm = in_trade and trade_context != "TAILWIND" and lt_sribi > 0 and nz(lt_sribi[1]) <= 0
+bool exit_trail = in_trade and close < trade_peak * (1 - active_trail_pct / 100)
 
-bool bear_strong_new = bear_entry and (bar_index - last_bear_bar) > cooldown_bars
+bool exit_signal = exit_lt_confirm or exit_trail
+string exit_reason = exit_lt_confirm ? "LT Confirm" : exit_trail ? "Trail Stop" : ""
 
-if bear_strong_new
-    last_bear_bar := bar_index
-    bear_stage := 0
+if exit_signal
+    in_trade := false
 
-if bear_stage > 0 and (bar_index - bear_stage1_bar) > stage_window * 2
-    bear_stage := 0
+// Trade P&L for display
+float trade_pnl = in_trade ? (close - trade_entry) / trade_entry * 100 : 0
+float trail_level = in_trade ? trade_peak * (1 - active_trail_pct / 100) : na
+int bars_held = in_trade ? bar_index - trade_bar : 0
 
-bool bear_setup = enable_bear and bear_stage >= 1 and not bear_entry
+// ═══════════════════════════════════════════════════════════════
+// PLOTS
+// ═══════════════════════════════════════════════════════════════
 
-// --- EXIT TRACKING ---
-var bool in_bull_regime = false
-var int regime_bar = 0
-var float regime_entry = 0.0
-var float regime_peak = 0.0
+// LT backbone for reference
+bool lt_bullish = lt_ftl > lt_stl
+color ftl_color = lt_ftl > nz(lt_ftl[1]) ? color.new(color.teal, 30) : color.new(color.maroon, 30)
+plot(lt_ftl, "LT Fast Trackline", color=ftl_color, linewidth=2, style=plot.style_circles)
+plot(lt_stl, "LT Slow Trackline", color=lt_bullish ? color.new(color.teal, 40) : color.new(color.maroon, 40), linewidth=2)
 
-if bull_strong_new
-    in_bull_regime := true
-    regime_bar := bar_index
-    regime_entry := close
-    regime_peak := close
+// Trailing stop level
+plot(trail_level, "Trail Stop", color=color.new(color.orange, 50), linewidth=1, style=plot.style_stepline)
 
-if in_bull_regime
-    regime_peak := math.max(regime_peak, close)
-
-bool exit_ftl = in_bull_regime and ftl_cross_bear
-bool exit_time = in_bull_regime and (bar_index - regime_bar >= time_stop_bars) and regime_entry > 0 and ((regime_peak - regime_entry) / regime_entry * 100 < 5.0)
-
-if exit_ftl or exit_time
-    in_bull_regime := false
-
-// Signal string
-string ab1_signal = bull_strong_new ? "ENTRY ◆" : bear_strong_new ? "SHORT ◆" : bull_setup ? str.format("Stage {0}", bull_stage) : in_bull_regime ? "In Trade ▶" : "—"
-
-// Colors
+// Entry markers
 color fluorescent_green = #39FF14
-color fluorescent_pink  = #FF1493
-color dim_green = color.new(#39FF14, 60)
-color dim_pink  = color.new(#FF1493, 60)
+plotshape(entry_signal and context == "HEADWIND", title="Entry Headwind", location=location.belowbar, style=shape.diamond, color=color.red, size=size.small)
+plotshape(entry_signal and context == "MIXED", title="Entry Mixed", location=location.belowbar, style=shape.diamond, color=color.yellow, size=size.small)
+plotshape(entry_signal and context == "TAILWIND", title="Entry Tailwind", location=location.belowbar, style=shape.diamond, color=fluorescent_green, size=size.small)
 
-// ═══════════════════════════════════════════════════════════════
-// MARKERS
-// ═══════════════════════════════════════════════════════════════
+// Exit markers
+plotshape(exit_lt_confirm, title="Exit LT Confirm", location=location.abovebar, style=shape.xcross, color=color.new(color.blue, 20), size=size.tiny)
+plotshape(exit_trail, title="Exit Trail Stop", location=location.abovebar, style=shape.xcross, color=color.new(color.orange, 20), size=size.tiny)
 
-plotshape(bull_strong_new, title="AB1 Strong Bull", location=location.belowbar, style=shape.diamond, color=fluorescent_green, size=size.small)
-plotshape(bear_strong_new, title="AB1 Strong Bear", location=location.abovebar, style=shape.diamond, color=fluorescent_pink, size=size.small)
-plotshape(exit_ftl, title="AB1 Exit FTL", location=location.abovebar, style=shape.xcross, color=color.new(color.gray, 30), size=size.tiny)
-plotshape(exit_time, title="AB1 Exit Time", location=location.abovebar, style=shape.xcross, color=color.new(color.orange, 30), size=size.tiny)
-
-// Stage markers (subtle)
-plotshape(ftl_cross_bull and enable_bull, title="Stage 1 Armed", location=location.belowbar, style=shape.circle, color=color.new(color.gray, 50), size=size.tiny)
+// ST alert (not yet confirmed by VST — watch for entry)
+plotshape(st_cross_bull and not vst_confirms and not raw_entry, title="ST Alert (VST pending)", location=location.belowbar, style=shape.circle, color=color.new(color.gray, 50), size=size.tiny)
 
 // ═══════════════════════════════════════════════════════════════
 // INFO TABLE
 // ═══════════════════════════════════════════════════════════════
 
-var table info_tbl = table.new(position.bottom_right, 2, 8, bgcolor=color.new(color.black, 30), border_width=1, border_color=color.new(color.gray, 60))
+var table info_tbl = table.new(position.bottom_right, 2, 12, bgcolor=color.new(color.black, 30), border_width=1, border_color=color.new(color.gray, 60))
 
 if barstate.islast and show_table
     string mode_tag = is_mr ? "MR" : "TR"
     string auto_tag = asset_mode == "Auto-Detect" ? "⚡" : ""
-    color hdr_clr = bull_strong_new or in_bull_regime ? fluorescent_green : bear_strong_new ? fluorescent_pink : color.new(color.gray, 30)
+
+    color ctx_clr = context == "HEADWIND" ? color.red : context == "TAILWIND" ? color.green : color.yellow
+    string ctx_icon = context == "HEADWIND" ? "🔴" : context == "TAILWIND" ? "🟢" : "🟡"
+    
+    color hdr_clr = in_trade ? color.new(color.teal, 20) : color.new(color.gray, 30)
     table.cell(info_tbl, 0, 0, str.format("AB1 [{0}]{1}", mode_tag, auto_tag), text_color=color.white, text_size=size.small, bgcolor=hdr_clr)
-    table.cell(info_tbl, 1, 0, ab1_signal, text_color=color.white, text_size=size.small, bgcolor=hdr_clr)
+    table.cell(info_tbl, 1, 0, in_trade ? "IN TRADE" : "Watching", text_color=color.white, text_size=size.small, bgcolor=hdr_clr)
 
-    table.cell(info_tbl, 0, 1, "Regime", text_color=color.gray, text_size=size.tiny)
-    color reg_clr = regime == "ACCUMULATE" ? color.green : regime == "EARLY_BULL" ? color.teal : regime == "CONFIRMED_BULL" ? color.blue : regime == "DISTRIBUTION" ? color.orange : regime == "BREAKDOWN" ? color.red : color.gray
-    table.cell(info_tbl, 1, 1, regime, text_color=reg_clr, text_size=size.tiny)
+    table.cell(info_tbl, 0, 1, "Context", text_color=color.gray, text_size=size.tiny)
+    table.cell(info_tbl, 1, 1, str.format("{0} {1}", ctx_icon, context), text_color=ctx_clr, text_size=size.tiny)
 
-    table.cell(info_tbl, 0, 2, "Bull Stage", text_color=color.gray, text_size=size.tiny)
-    string stage_str = bull_stage == 0 ? "— (waiting)" : bull_stage == 1 ? "1: ARMED" : bull_stage == 2 ? "2: CONFIRMED" : "—"
-    table.cell(info_tbl, 1, 2, stage_str, text_color=bull_stage >= 2 ? fluorescent_green : bull_stage == 1 ? color.yellow : color.gray, text_size=size.tiny)
+    // TF Hierarchy
+    table.cell(info_tbl, 0, 2, "ST (Decision)", text_color=color.white, text_size=size.tiny)
+    table.cell(info_tbl, 1, 2, str.format("{0} {1}", st_sribi > 0 ? "●" : "○", str.tostring(st_sribi, "#.#")), text_color=st_sribi > 0 ? color.teal : color.red, text_size=size.tiny)
 
-    table.cell(info_tbl, 0, 3, "SRIBI Avg", text_color=color.gray, text_size=size.tiny)
-    table.cell(info_tbl, 1, 3, str.tostring(sribi_avg, "#.#"), text_color=sribi_avg > 0 ? color.teal : color.red, text_size=size.tiny)
+    table.cell(info_tbl, 0, 3, "VST (Timing)", text_color=color.white, text_size=size.tiny)
+    table.cell(info_tbl, 1, 3, str.format("{0} {1}", vst_sribi > 0 ? "●" : "○", str.tostring(vst_sribi, "#.#")), text_color=vst_sribi > 0 ? color.teal : color.red, text_size=size.tiny)
 
-    table.cell(info_tbl, 0, 4, "LOI", text_color=color.gray, text_size=size.tiny)
-    table.cell(info_tbl, 1, 4, str.tostring(loi, "#.#"), text_color=loi < -20 ? color.green : loi > 40 ? color.red : color.gray, text_size=size.tiny)
+    table.cell(info_tbl, 0, 4, "LT (Context)", text_color=color.gray, text_size=size.tiny)
+    table.cell(info_tbl, 1, 4, str.format("{0} {1}", lt_sribi > 0 ? "▲" : "▼", str.tostring(lt_sribi, "#.#")), text_color=lt_sribi > 0 ? color.teal : color.red, text_size=size.tiny)
 
-    table.cell(info_tbl, 0, 5, "From FTL", text_color=color.gray, text_size=size.tiny)
-    table.cell(info_tbl, 1, 5, str.format("{0}%", str.tostring(pct_from_ftl, "#.#")), text_color=math.abs(pct_from_ftl) < 3 ? fluorescent_green : color.gray, text_size=size.tiny)
+    table.cell(info_tbl, 0, 5, "VLT (Context)", text_color=color.gray, text_size=size.tiny)
+    table.cell(info_tbl, 1, 5, str.format("{0} {1}", vlt_sribi > 0 ? "▲" : "▼", str.tostring(vlt_sribi, "#.#")), text_color=vlt_sribi > 0 ? color.teal : color.red, text_size=size.tiny)
 
-    table.cell(info_tbl, 0, 6, "From STL", text_color=color.gray, text_size=size.tiny)
-    table.cell(info_tbl, 1, 6, str.format("{0}%", str.tostring(pct_from_stl, "#.#")), text_color=pct_from_stl > 8 ? color.red : color.white, text_size=size.tiny)
+    table.cell(info_tbl, 0, 6, "SRIBI Avg", text_color=color.gray, text_size=size.tiny)
+    table.cell(info_tbl, 1, 6, str.tostring(sribi_avg, "#.#"), text_color=sribi_avg > 0 ? color.teal : color.red, text_size=size.tiny)
 
-    string trade_str = in_bull_regime ? str.format("Active ({0}b)", bar_index - regime_bar) : "—"
-    table.cell(info_tbl, 0, 7, "Trade", text_color=color.gray, text_size=size.tiny)
-    table.cell(info_tbl, 1, 7, trade_str, text_color=in_bull_regime ? color.teal : color.gray, text_size=size.tiny)
+    // Trade status
+    if in_trade
+        color pnl_clr = trade_pnl > 0 ? color.green : color.red
+        table.cell(info_tbl, 0, 7, "P&L", text_color=color.gray, text_size=size.tiny)
+        table.cell(info_tbl, 1, 7, str.format("{0}% ({1}b)", str.tostring(trade_pnl, "+#.#;-#.#"), bars_held), text_color=pnl_clr, text_size=size.tiny)
+        
+        table.cell(info_tbl, 0, 8, "Trail @", text_color=color.gray, text_size=size.tiny)
+        table.cell(info_tbl, 1, 8, str.format("${0} ({1}%)", str.tostring(trail_level, "#.##"), str.tostring(active_trail_pct, "#")), text_color=color.orange, text_size=size.tiny)
+        
+        table.cell(info_tbl, 0, 9, "Entry Ctx", text_color=color.gray, text_size=size.tiny)
+        table.cell(info_tbl, 1, 9, trade_context, text_color=color.gray, text_size=size.tiny)
+        
+        string exit_hint = trade_context != "TAILWIND" ? "LT turns + or trail" : str.format("{0}% trail", trail_tw)
+        table.cell(info_tbl, 0, 10, "Exit Rule", text_color=color.gray, text_size=size.tiny)
+        table.cell(info_tbl, 1, 10, exit_hint, text_color=color.gray, text_size=size.tiny)
+    else
+        string next_str = st_sribi <= 0 ? "Waiting for ST+" : not vst_confirms ? "ST+ ✓ — waiting VST+" : "Ready"
+        table.cell(info_tbl, 0, 7, "Next", text_color=color.gray, text_size=size.tiny)
+        table.cell(info_tbl, 1, 7, next_str, text_color=color.gray, text_size=size.tiny)
 
 // ═══════════════════════════════════════════════════════════════
 // LEGEND
 // ═══════════════════════════════════════════════════════════════
 
-var table legend_tbl = table.new(position.bottom_left, 2, 6, bgcolor=color.new(color.black, 20), border_width=1, border_color=color.new(color.gray, 70))
+var table legend_tbl = table.new(position.bottom_left, 2, 8, bgcolor=color.new(color.black, 20), border_width=1, border_color=color.new(color.gray, 70))
 
 if barstate.islast and show_legend
-    table.cell(legend_tbl, 0, 0, "AB1 Legend", text_color=color.white, text_size=size.tiny, bgcolor=color.new(color.gray, 50))
-    table.cell(legend_tbl, 1, 0, "", bgcolor=color.new(color.gray, 50))
-    table.cell(legend_tbl, 0, 1, "○ gray", text_color=color.gray, text_size=size.tiny)
-    table.cell(legend_tbl, 1, 1, "Stage 1: FTL crossed STL", text_color=color.gray, text_size=size.tiny)
-    table.cell(legend_tbl, 0, 2, "◆ green", text_color=fluorescent_green, text_size=size.tiny)
-    table.cell(legend_tbl, 1, 2, "Entry: pullback to FTL", text_color=color.white, text_size=size.tiny)
-    table.cell(legend_tbl, 0, 3, "◆ pink", text_color=fluorescent_pink, text_size=size.tiny)
-    table.cell(legend_tbl, 1, 3, "Short entry (MR only)", text_color=color.white, text_size=size.tiny)
-    table.cell(legend_tbl, 0, 4, "✕", text_color=color.gray, text_size=size.tiny)
-    table.cell(legend_tbl, 1, 4, "Exit (FTL break / time stop)", text_color=color.gray, text_size=size.tiny)
-    table.cell(legend_tbl, 0, 5, "Dots/Line", text_color=color.gray, text_size=size.tiny)
-    table.cell(legend_tbl, 1, 5, "FTL (dots) / STL (solid)", text_color=color.gray, text_size=size.tiny)
+    table.cell(legend_tbl, 0, 0, "AB1 v5", text_color=color.white, text_size=size.tiny, bgcolor=color.new(color.gray, 50))
+    table.cell(legend_tbl, 1, 0, "ST-Primary", bgcolor=color.new(color.gray, 50), text_color=color.white, text_size=size.tiny)
+    table.cell(legend_tbl, 0, 1, "◆ green", text_color=fluorescent_green, text_size=size.tiny)
+    table.cell(legend_tbl, 1, 1, "Entry — Tailwind (ride)", text_color=color.white, text_size=size.tiny)
+    table.cell(legend_tbl, 0, 2, "◆ yellow", text_color=color.yellow, text_size=size.tiny)
+    table.cell(legend_tbl, 1, 2, "Entry — Mixed (LT exit)", text_color=color.white, text_size=size.tiny)
+    table.cell(legend_tbl, 0, 3, "◆ red", text_color=color.red, text_size=size.tiny)
+    table.cell(legend_tbl, 1, 3, "Entry — Headwind (tight)", text_color=color.white, text_size=size.tiny)
+    table.cell(legend_tbl, 0, 4, "○ gray", text_color=color.gray, text_size=size.tiny)
+    table.cell(legend_tbl, 1, 4, "ST alert, VST not yet +", text_color=color.gray, text_size=size.tiny)
+    table.cell(legend_tbl, 0, 5, "✕ blue", text_color=color.blue, text_size=size.tiny)
+    table.cell(legend_tbl, 1, 5, "Exit — LT confirmed +", text_color=color.white, text_size=size.tiny)
+    table.cell(legend_tbl, 0, 6, "✕ orange", text_color=color.orange, text_size=size.tiny)
+    table.cell(legend_tbl, 1, 6, "Exit — Trail stop hit", text_color=color.white, text_size=size.tiny)
+    table.cell(legend_tbl, 0, 7, "Background", text_color=color.gray, text_size=size.tiny)
+    table.cell(legend_tbl, 1, 7, "🔴Head 🟡Mix 🟢Tail", text_color=color.gray, text_size=size.tiny)
 
 // ═══════════════════════════════════════════════════════════════
 // ALERTS
 // ═══════════════════════════════════════════════════════════════
 
-alertcondition(bull_strong_new, title="AB1 ENTRY", message="SRI AB1: ENTRY — Sequential staging complete. Pullback to FTL after structural shift confirmed.")
-alertcondition(ftl_cross_bull, title="AB1 Stage 1 Armed", message="SRI AB1: Stage 1 ARMED — FTL crossed above STL. Watching for SRIBI confirmation.")
-alertcondition(bear_strong_new, title="AB1 SHORT", message="SRI AB1: SHORT ENTRY — Bearish sequential staging complete (MR asset).")
-alertcondition(exit_ftl, title="AB1 Exit FTL", message="SRI AB1: EXIT — FTL crossed below STL.")
-alertcondition(exit_time, title="AB1 Exit Time", message="SRI AB1: EXIT — Time stop, no +5% move.")
+alertcondition(entry_signal, title="AB1 Entry", message="SRI AB1: ST crossed bullish + VST confirms. Context: {{plot(\"Context\")}}. Entry signal.")
+alertcondition(st_cross_bull, title="AB1 ST Alert", message="SRI AB1: ST SRIBI crossed positive — watch for VST confirmation.")
+alertcondition(exit_lt_confirm, title="AB1 Exit LT", message="SRI AB1: EXIT — LT SRIBI turned positive. Structural catch-up complete.")
+alertcondition(exit_trail, title="AB1 Exit Trail", message="SRI AB1: EXIT — Trailing stop hit.")
