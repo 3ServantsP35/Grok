@@ -28,6 +28,14 @@ from enum import Enum
 import json
 import math
 
+# Layer 0: GLI Engine (optional import — engine runs without it if unavailable)
+try:
+    from gli_engine import GLIEngine, GLIState
+    _GLI_AVAILABLE = True
+except ImportError:
+    _GLI_AVAILABLE = False
+    GLIState = None  # type: ignore
+
 # ═══════════════════════════════════════════════════════════════
 # CONSTANTS
 # ═══════════════════════════════════════════════════════════════
@@ -991,35 +999,45 @@ class RegimeInput:
 
 @dataclass
 class RegimeState:
-    """Composite regime state from all 8 inputs"""
+    """Composite regime state from all 8 inputs + Layer 0 GLI adjustment"""
     timestamp: datetime
     inputs: Dict[str, RegimeInput] = field(default_factory=dict)
-    composite_score: int = 0        # -6 to +6
+    composite_score: int = 0        # -7 to +7 (raw Layer 1)
     regime_label: str = "NEUTRAL"
     vehicle: str = "IBIT"           # MSTR or IBIT (from ratio SRIBI)
     btc_avg_sribi: float = 0.0
     vix_level: float = 0.0
-    
+    # Layer 0 fields (populated when GLIEngine is available)
+    gli_state: Optional[object] = None   # GLIState instance
+    adjusted_score: int = 0              # composite_score + gli.score_adjustment
+    adjusted_regime_label: str = ""      # Label based on adjusted_score
+
+    @property
+    def effective_score(self) -> int:
+        """Use adjusted score if GLI is available, otherwise raw composite."""
+        return self.adjusted_score if self.gli_state is not None else self.composite_score
+
     @property
     def is_risk_on(self) -> bool:
-        return self.composite_score >= 2
-    
+        return self.effective_score >= 2
+
     @property
     def is_risk_off(self) -> bool:
-        return self.composite_score <= -2
-    
+        return self.effective_score <= -2
+
     @property
     def allow_new_entries(self) -> bool:
-        return self.composite_score >= -1  # Block entries at -2 or worse
-    
-    @property 
+        return self.effective_score >= -1  # Block entries at -2 or worse
+
+    @property
     def size_multiplier(self) -> float:
         """Recommended position size multiplier (0.5 to 1.0)"""
-        if self.composite_score >= 3:
+        score = self.effective_score
+        if score >= 3:
             return 1.0
-        elif self.composite_score >= 1:
+        elif score >= 1:
             return 0.75
-        elif self.composite_score >= -1:
+        elif score >= -1:
             return 0.5
         else:
             return 0.0  # No new entries
@@ -1183,8 +1201,8 @@ class RegimeEngine:
             vlt=float(row.get('VLT SRI Bias Histogram', 0) or 0),
         )
     
-    def compute(self) -> RegimeState:
-        """Compute current regime state from all inputs"""
+    def _compute_raw(self) -> RegimeState:
+        """Compute raw Layer 1 regime state from all 8 market inputs."""
         state = RegimeState(timestamp=datetime.utcnow())
         score = 0
         
@@ -1312,7 +1330,8 @@ class RegimeEngine:
             )
         
         state.composite_score = score
-        
+        state.adjusted_score = score  # default until GLI applied
+
         # Regime label
         if score >= 4:
             state.regime_label = "RISK-ON — full allocation, favor momentum"
@@ -1324,7 +1343,29 @@ class RegimeEngine:
             state.regime_label = "CAUTIOUS BEARISH — defensive, spreads + cash"
         else:
             state.regime_label = "RISK-OFF — cash/STRC, no new entries"
-        
+
+        state.adjusted_regime_label = state.regime_label
+        return state
+
+    def compute(self, gli_state=None) -> "RegimeState":
+        """
+        Compute Layer 1 regime state.
+        Optionally accepts a GLIState from Layer 0 to apply probability adjustments.
+        Call signature: regime_engine.compute(gli_state=gli_engine.compute())
+        """
+        state = self._compute_raw()
+        if gli_state is not None:
+            state.gli_state = gli_state
+            adj = gli_state.score_adjustment
+            adjusted = max(-7, min(7, state.composite_score + adj))
+            state.adjusted_score = adjusted
+            def _regime_label(s: int) -> str:
+                if s >= 4:   return "RISK-ON — full allocation, favor momentum"
+                elif s >= 2: return "CAUTIOUS BULLISH — standard allocation"
+                elif s >= 0: return "NEUTRAL — 50% size, favor MR/GLD"
+                elif s >= -2: return "CAUTIOUS BEARISH — defensive, spreads + cash"
+                else:         return "RISK-OFF — cash/STRC, no new entries"
+            state.adjusted_regime_label = _regime_label(adjusted)
         return state
     
     def ab2_strategy(self, regime: RegimeState) -> str:
@@ -1895,9 +1936,15 @@ class SRIEngineV2:
                 self._ab1_engines[asset] = AB1PreBreakoutEngine(mode)
         return status
     
-    def regime(self) -> RegimeState:
-        """Get current regime state"""
-        return self.regime_engine.compute()
+    def regime(self, with_gli: bool = True) -> RegimeState:
+        """Get current regime state (Layer 0 + Layer 1)"""
+        gli_state = None
+        if with_gli and _GLI_AVAILABLE:
+            try:
+                gli_state = GLIEngine().compute()
+            except Exception:
+                pass
+        return self.regime_engine.compute(gli_state=gli_state)
     
     def run_ab1(self, regime: RegimeState = None) -> Dict[str, List[Signal]]:
         """Run AB1 pre-breakout scan on all assets"""
@@ -1958,10 +2005,25 @@ class SRIEngineV2:
                 results[asset] = sigs
         return results
     
-    def run_all(self, verbose: bool = True) -> Dict:
-        """Full pipeline run"""
+    def run_all(self, verbose: bool = True, skip_gli: bool = False) -> Dict:
+        """Full pipeline run — Layer 0 (GLI) → Layer 1 (Regime) → Layer 2 (Signals) → Layer 3 (Allocation)"""
         load_status = self.load_all()
-        reg = self.regime_engine.compute()
+
+        # Layer 0: GLI Engine
+        gli_state = None
+        if _GLI_AVAILABLE and not skip_gli:
+            try:
+                gli_engine = GLIEngine()
+                gli_state = gli_engine.compute()
+                if verbose and gli_state.error is None:
+                    gli_engine.print_report(gli_state)
+                elif verbose and gli_state.error:
+                    print(f"  [Layer 0] GLI unavailable: {gli_state.error}")
+            except Exception as e:
+                print(f"  [Layer 0] GLI engine error: {e}")
+
+        # Layer 1: Regime Engine (with GLI adjustment)
+        reg = self.regime_engine.compute(gli_state=gli_state)
         ab1_sigs = self.run_ab1(reg)
         ab2_sigs = self.run_ab2(reg)
         ab3_sigs = self.run_ab3()
@@ -2013,9 +2075,23 @@ class SRIEngineV2:
         print(f"  SRI ENGINE v2.0 — {dt.datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}")
         print("=" * 90)
         
+        # Layer 0 summary (if GLI ran)
+        if reg.gli_state is not None:
+            g = reg.gli_state
+            gli_tag = f"[{g.label}]" if g.error is None else "[UNAVAILABLE]"
+            adj_str = f"{g.score_adjustment:+d}" if g.score_adjustment != 0 else "±0"
+            print(f"\n  LAYER 0 — GLI: Z={g.gli_zscore:+.2f} {gli_tag}  "
+                  f"GEGI={g.gegi.composite:+.2f} [{g.gegi.label}]  "
+                  f"SOFR-IORB={g.sofr_iorb_spread_bps:+.0f}bps  "
+                  f"Score adj: {adj_str}")
+
         # Regime
-        print(f"\n  REGIME: {reg.regime_label}")
-        print(f"  Score: {reg.composite_score:+d}/7 | Vehicle: {reg.vehicle} | VIX: {reg.vix_level:.1f}")
+        if reg.gli_state is not None and reg.adjusted_score != reg.composite_score:
+            print(f"\n  LAYER 1 REGIME: {reg.adjusted_regime_label}  (GLI-adjusted)")
+            print(f"  Raw Score: {reg.composite_score:+d}/7  →  Adjusted: {reg.adjusted_score:+d}/7 | Vehicle: {reg.vehicle} | VIX: {reg.vix_level:.1f}")
+        else:
+            print(f"\n  LAYER 1 REGIME: {reg.regime_label}")
+            print(f"  Score: {reg.composite_score:+d}/7 | Vehicle: {reg.vehicle} | VIX: {reg.vix_level:.1f}")
         print(f"  {'Input':<12} {'Score':>6} {'Interpretation'}")
         for name, inp in reg.inputs.items():
             print(f"  {name:<12} {inp.score:>+5d}  {inp.interpretation}")
