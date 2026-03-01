@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="refresh" content="300">
+  <title>SRI Engine Dashboard</title>
+  <style>
+:root {
+  --bg: #0d1117; --bg2: #161b22; --bg3: #21262d;
+  --border: #30363d; --text: #c9d1d9; --muted: #8b949e;
+  --green: #3fb950; --yellow: #d29922; --red: #f85149;
+  --blue: #58a6ff; --purple: #bc8cff;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--text); font-family: 'SF Mono', 'Fira Code', monospace; font-size: 13px; line-height: 1.5; }
+h1 { font-size: 18px; color: var(--blue); }
+h2 { font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; }
+.header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+.ts { color: var(--muted); font-size: 11px; }
+.layout { display: grid; grid-template-columns: 320px 1fr; gap: 12px; padding: 12px; }
+.left-col { display: flex; flex-direction: column; gap: 12px; }
+.right-col { display: flex; flex-direction: column; gap: 12px; }
+.panel { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 14px; }
+.panel-title { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+table { width: 100%; border-collapse: collapse; }
+th { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; padding: 4px 6px; text-align: left; border-bottom: 1px solid var(--border); }
+td { padding: 5px 6px; border-bottom: 1px solid var(--bg3); }
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: var(--bg3); }
+.green  { color: var(--green); }
+.yellow { color: var(--yellow); }
+.red    { color: var(--red); }
+.blue   { color: var(--blue); }
+.purple { color: var(--purple); }
+.neutral { color: var(--muted); }
+.bold   { font-weight: bold; }
+.score-big { font-size: 28px; font-weight: bold; text-align: center; padding: 8px 0; }
+.score-label { text-align: center; font-size: 11px; color: var(--muted); margin-bottom: 12px; }
+.kv { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid var(--bg3); }
+.kv:last-child { border-bottom: none; }
+.kv-key { color: var(--muted); }
+.kv-val { font-weight: bold; }
+.tag { display: inline-block; padding: 1px 6px; border-radius: 4px; font-size: 11px; font-weight: bold; }
+.tag-green  { background: #1a3a1f; color: var(--green); }
+.tag-yellow { background: #3a2f0a; color: var(--yellow); }
+.tag-red    { background: #3a0f0f; color: var(--red); }
+.tag-blue   { background: #0d2a4a; color: var(--blue); }
+.tag-neutral{ background: var(--bg3); color: var(--muted); }
+.signal-dot { font-size: 10px; margin-right: 2px; }
+.component-bar { height: 4px; background: var(--bg3); border-radius: 2px; margin-top: 2px; }
+.component-fill { height: 4px; border-radius: 2px; }
+.bar-pos { background: var(--green); }
+.bar-neg { background: var(--red); }
+.bar-neu { background: var(--muted); }
+.full-width { grid-column: 1 / -1; }
+@media (max-width: 900px) { .layout { grid-template-columns: 1fr; } .left-col, .right-col { } }
+</style>
+</head>
+<body>
+  <div class="header">
+    <div>
+      <h1>SRI Engine Dashboard</h1>
+      <div class="ts">4-Layer Architecture: GLI → Regime → Signal → Allocation</div>
+    </div>
+    <div class="ts" style="text-align:right">
+      Last updated: 2026-03-01 22:54 UTC<br>
+      Regime: <span class="yellow">+1/7</span> &nbsp; Vehicle: <span class="blue">IBIT</span> &nbsp; VIX: 19.9
+    </div>
+  </div>
+
+  <div class="layout">
+    <div class="left-col">
+      
+        <div class="panel">
+          <div class="panel-title">Layer 0 — GLI Engine</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
+            <div>
+              <div style="font-size:10px;color:var(--muted)">GLI Z-Score</div>
+              <div style="font-size:22px;font-weight:bold" class="neutral">+0.104</div>
+              <div style="font-size:10px;color:var(--muted)">NEUTRAL | mom +3.29</div>
+            </div>
+            <div>
+              <div style="font-size:10px;color:var(--muted)">GEGI</div>
+              <div style="font-size:22px;font-weight:bold" class="neutral">+0.200</div>
+              <div style="font-size:10px;color:var(--muted)">NEUTRAL</div>
+            </div>
+          </div>
+          <div class="kv"><span class="kv-key">SOFR-IORB</span><span class="kv-val neutral">+2 bps ✓</span></div>
+          <div class="kv"><span class="kv-key">Monetary</span><span class="kv-val green">+1.00</span></div>
+          <div class="kv"><span class="kv-key">Fiscal</span><span class="kv-val red">-1.00</span></div>
+          <div class="kv" style="margin-bottom:12px"><span class="kv-key">External (NFCI)</span><span class="kv-val green">+1.00</span></div>
+          <div style="margin-bottom:8px"><span class="tag tag-neutral">NEUTRAL (+0)</span></div>
+          <table>
+            <tr><th>Series</th><th>Wt</th><th>ROC 26w</th><th>As of</th></tr>
+            
+            <tr>
+              <td>WALCL</td>
+              <td style="color:var(--muted);font-size:10px">40%</td>
+              <td class="green">→ +0.2%</td>
+              <td style="color:var(--muted);font-size:10px">2026-02-25</td>
+            </tr>
+            <tr>
+              <td>WM2NS</td>
+              <td style="color:var(--muted);font-size:10px">15%</td>
+              <td class="green">↑ +1.9%</td>
+              <td style="color:var(--muted);font-size:10px">2026-02-02</td>
+            </tr>
+            <tr>
+              <td>WRESBAL</td>
+              <td style="color:var(--muted);font-size:10px">5%</td>
+              <td class="red">↓ -8.0%</td>
+              <td style="color:var(--muted);font-size:10px">2026-02-25</td>
+            </tr>
+            <tr>
+              <td>WTREGEN</td>
+              <td style="color:var(--muted);font-size:10px">5%</td>
+              <td class="red">↓ -50.4%</td>
+              <td style="color:var(--muted);font-size:10px">2026-02-25</td>
+            </tr>
+            <tr>
+              <td>ECBASSETSW</td>
+              <td style="color:var(--muted);font-size:10px">20%</td>
+              <td class="green">↑ +2.5%</td>
+              <td style="color:var(--muted);font-size:10px">2026-02-20</td>
+            </tr>
+            <tr>
+              <td>JPNASSETS</td>
+              <td style="color:var(--muted);font-size:10px">15%</td>
+              <td class="red">↓ -5.3%</td>
+              <td style="color:var(--muted);font-size:10px">2026-01-01</td>
+            </tr>
+          </table>
+        </div>
+      
+    <div class="panel">
+      <div class="panel-title">Layer 1 — Regime Engine</div>
+      <div class="score-big yellow">+1<span style="font-size:14px;color:var(--muted)">/7</span></div>
+      <div class="score-label">NEUTRAL — 50% size, favor MR/GLD</div>
+      
+      <div class="kv"><span class="kv-key">Vehicle</span><span class="kv-val blue">IBIT</span></div>
+      <div class="kv" style="margin-bottom:12px"><span class="kv-key">VIX</span><span class="kv-val neutral">19.9</span></div>
+      <table>
+        <tr><th>Input</th><th>Δ</th><th>Interpretation</th></tr>
+        
+        <tr>
+          <td class="bold">BTC</td>
+          <td class="red">-1</td>
+          <td style="color:var(--muted);font-size:11px">BEARISH — pause MSTR/IBIT entries</td>
+        </tr>
+        <tr>
+          <td class="bold">STABLE</td>
+          <td class="green">+1</td>
+          <td style="color:var(--muted);font-size:11px">RISK-ON — capital deploying</td>
+        </tr>
+        <tr>
+          <td class="bold">DXY</td>
+          <td class="red">-1</td>
+          <td style="color:var(--muted);font-size:11px">STRONG $ — headwind for risk assets</td>
+        </tr>
+        <tr>
+          <td class="bold">HYG</td>
+          <td class="green">+1</td>
+          <td style="color:var(--muted);font-size:11px">CREDIT HEALTHY — supportive</td>
+        </tr>
+        <tr>
+          <td class="bold">TLT</td>
+          <td class="green">+1</td>
+          <td style="color:var(--muted);font-size:11px">RATES FALLING — risk tailwind</td>
+        </tr>
+        <tr>
+          <td class="bold">STRC</td>
+          <td class="neutral">+0</td>
+          <td style="color:var(--muted);font-size:11px">NEUTRAL ($100)</td>
+        </tr>
+        <tr>
+          <td class="bold">VIX</td>
+          <td class="neutral">+0</td>
+          <td style="color:var(--muted);font-size:11px">NORMAL (20) — standard AB2 sizing</td>
+        </tr>
+        <tr>
+          <td class="bold">MSTR_IBIT</td>
+          <td class="neutral">+0</td>
+          <td style="color:var(--muted);font-size:11px">Vehicle: IBIT</td>
+        </tr>
+      </table>
+    </div>
+    </div>
+    <div class="right-col">
+      
+    <div class="panel">
+      <div class="panel-title">Layer 2 — Asset State (all 8)</div>
+      <table>
+        <tr>
+          <th>Asset</th><th>Price</th><th>Context</th>
+          <th>SRIBI V/S/L/VL</th><th>LOI</th><th>Zone</th>
+          <th>AB3 Last</th><th>AB1 Last</th><th>AB2 Open</th>
+        </tr>
+        
+        <tr>
+          <td class="bold">MSTR</td>
+          <td>$129.63</td>
+          <td><span class="tag tag-yellow">MIXED</span></td>
+          <td style="font-size:11px;color:var(--muted)">+10/+10/+10/-30</td>
+          <td class="neutral">-35.6</td>
+          <td>⚪ HOLD</td>
+          <td style="font-size:11px;color:var(--muted)">2026-02-25 14:30:00 TRIM_25%</td>
+          <td style="font-size:11px;color:var(--muted)">2025-10-03 70%</td>
+          <td style="font-size:11px;color:var(--muted)">—</td>
+        </tr>
+        <tr>
+          <td class="bold">IBIT</td>
+          <td>$37.20</td>
+          <td><span class="tag tag-red">HEADWIND</span></td>
+          <td style="font-size:11px;color:var(--muted)">-30/-15/-15/-55</td>
+          <td class="red">-75.3</td>
+          <td>🟠 ACC</td>
+          <td style="font-size:11px;color:var(--muted)">2026-01-23 14:30:00 TRIM_25%</td>
+          <td style="font-size:11px;color:var(--muted)">2025-04-29 80%</td>
+          <td style="font-size:11px;color:var(--muted)">—</td>
+        </tr>
+        <tr>
+          <td class="bold">TSLA</td>
+          <td>$402.42</td>
+          <td><span class="tag tag-yellow">MIXED</span></td>
+          <td style="font-size:11px;color:var(--muted)">-5/+10/-20/+10</td>
+          <td class="neutral">-2.5</td>
+          <td>⚪ HOLD</td>
+          <td style="font-size:11px;color:var(--muted)">2026-02-05 18:30:00 ACC</td>
+          <td style="font-size:11px;color:var(--muted)">2026-02-11 80%</td>
+          <td style="font-size:11px;color:var(--muted)">🟢 2026-02-13 (19b)</td>
+        </tr>
+        <tr>
+          <td class="bold">PURR</td>
+          <td>$4.10</td>
+          <td><span class="tag tag-yellow">MIXED</span></td>
+          <td style="font-size:11px;color:var(--muted)">-15/-15/+0/-15</td>
+          <td class="neutral">-26.2</td>
+          <td>⚪ HOLD</td>
+          <td style="font-size:11px;color:var(--muted)">—</td>
+          <td style="font-size:11px;color:var(--muted)">—</td>
+          <td style="font-size:11px;color:var(--muted)">—</td>
+        </tr>
+        <tr>
+          <td class="bold">SPY</td>
+          <td>$686.17</td>
+          <td><span class="tag tag-red">HEADWIND</span></td>
+          <td style="font-size:11px;color:var(--muted)">-5/-5/-10/-5</td>
+          <td class="neutral">-15.6</td>
+          <td>⚪ HOLD</td>
+          <td style="font-size:11px;color:var(--muted)">2026-02-09 14:30:00 TRIM_25%</td>
+          <td style="font-size:11px;color:var(--muted)">2026-02-25 70%</td>
+          <td style="font-size:11px;color:var(--muted)">🟢 2026-02-09 (27b)</td>
+        </tr>
+        <tr>
+          <td class="bold">QQQ</td>
+          <td>$607.38</td>
+          <td><span class="tag tag-red">HEADWIND</span></td>
+          <td style="font-size:11px;color:var(--muted)">-30/-15/-15/-15</td>
+          <td class="neutral">-29.1</td>
+          <td>⚪ HOLD</td>
+          <td style="font-size:11px;color:var(--muted)">2026-02-25 14:30:00 TRIM_25%</td>
+          <td style="font-size:11px;color:var(--muted)">2026-01-23 70%</td>
+          <td style="font-size:11px;color:var(--muted)">🟢 2026-02-25 (5b)</td>
+        </tr>
+        <tr>
+          <td class="bold">IWM</td>
+          <td>$261.43</td>
+          <td><span class="tag tag-yellow">MIXED</span></td>
+          <td style="font-size:11px;color:var(--muted)">-5/-5/-5/+10</td>
+          <td class="neutral">+11.6</td>
+          <td>⚪ HOLD</td>
+          <td style="font-size:11px;color:var(--muted)">2026-02-27 18:30:00 TRIM_25%</td>
+          <td style="font-size:11px;color:var(--muted)">2026-01-05 70%</td>
+          <td style="font-size:11px;color:var(--muted)">—</td>
+        </tr>
+        <tr>
+          <td class="bold">GLD</td>
+          <td>$483.73</td>
+          <td><span class="tag tag-green">TAILWIND</span></td>
+          <td style="font-size:11px;color:var(--muted)">+70/+40/+40/+55</td>
+          <td class="green">+80.0</td>
+          <td>🟢 DIST</td>
+          <td style="font-size:11px;color:var(--muted)">2026-02-27 14:30:00 TRIM_25%</td>
+          <td style="font-size:11px;color:var(--muted)">2026-02-25 60%</td>
+          <td style="font-size:11px;color:var(--muted)">—</td>
+        </tr>
+      </table>
+    </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        
+    <div class="panel">
+      <div class="panel-title">AB2 — Open Spreads</div>
+      
+      <table>
+        <tr><th>Asset</th><th>Entry</th><th>Price</th><th>Context</th><th>Held</th><th>Status</th></tr>
+        
+            <tr>
+              <td class="bold">TSLA</td>
+              <td>2026-02-13</td>
+              <td>$420.62</td>
+              <td><span class="tag tag-yellow">MIXED</span></td>
+              <td>19b (3.2d)</td>
+              <td class="yellow">OPEN</td>
+            </tr>
+            <tr>
+              <td class="bold">SPY</td>
+              <td>2026-02-09</td>
+              <td>$694.23</td>
+              <td><span class="tag tag-yellow">MIXED</span></td>
+              <td>27b (4.5d)</td>
+              <td class="yellow">OPEN</td>
+            </tr>
+            <tr>
+              <td class="bold">QQQ</td>
+              <td>2026-02-25</td>
+              <td>$615.41</td>
+              <td><span class="tag tag-yellow">MIXED</span></td>
+              <td>5b (0.8d)</td>
+              <td class="yellow">OPEN</td>
+            </tr>
+      </table>
+    </div>
+        
+    <div class="panel">
+      <div class="panel-title">AB1 — Pre-Breakout Signals (recent)</div>
+      
+      <table>
+        <tr><th>Asset</th><th>Date</th><th>Price</th><th>Conf</th><th>LOI</th></tr>
+        
+            <tr>
+              <td class="bold">MSTR</td>
+              <td>2025-04-03</td>
+              <td>$281.84</td>
+              <td class="yellow">80%</td>
+              <td class="neutral">+6.9</td>
+            </tr>
+            <tr>
+              <td class="bold">MSTR</td>
+              <td>2025-10-03</td>
+              <td>$352.36</td>
+              <td class="yellow">70%</td>
+              <td class="neutral">+6.9</td>
+            </tr>
+            <tr>
+              <td class="bold">IBIT</td>
+              <td>2025-04-29</td>
+              <td>$54.16</td>
+              <td class="yellow">80%</td>
+              <td class="neutral">+9.4</td>
+            </tr>
+            <tr>
+              <td class="bold">TSLA</td>
+              <td>2025-04-25</td>
+              <td>$286.69</td>
+              <td class="yellow">80%</td>
+              <td class="neutral">+6.9</td>
+            </tr>
+            <tr>
+              <td class="bold">TSLA</td>
+              <td>2026-02-11</td>
+              <td>$424.76</td>
+              <td class="yellow">80%</td>
+              <td class="neutral">+1.9</td>
+            </tr>
+            <tr>
+              <td class="bold">SPY</td>
+              <td>2026-01-26</td>
+              <td>$693.79</td>
+              <td class="yellow">70%</td>
+              <td class="neutral">+21.9</td>
+            </tr>
+            <tr>
+              <td class="bold">SPY</td>
+              <td>2026-02-25</td>
+              <td>$692.31</td>
+              <td class="yellow">70%</td>
+              <td class="neutral">+25.6</td>
+            </tr>
+            <tr>
+              <td class="bold">QQQ</td>
+              <td>2025-11-28</td>
+              <td>$619.15</td>
+              <td class="yellow">80%</td>
+              <td class="neutral">+31.9</td>
+            </tr>
+            <tr>
+              <td class="bold">QQQ</td>
+              <td>2026-01-23</td>
+              <td>$623.20</td>
+              <td class="yellow">70%</td>
+              <td class="neutral">+21.9</td>
+            </tr>
+            <tr>
+              <td class="bold">IWM</td>
+              <td>2025-10-27</td>
+              <td>$249.90</td>
+              <td class="yellow">70%</td>
+              <td class="neutral">+8.1</td>
+            </tr>
+            <tr>
+              <td class="bold">IWM</td>
+              <td>2026-01-05</td>
+              <td>$253.05</td>
+              <td class="yellow">70%</td>
+              <td class="neutral">+21.9</td>
+            </tr>
+            <tr>
+              <td class="bold">GLD</td>
+              <td>2025-08-22</td>
+              <td>$310.60</td>
+              <td class="yellow">70%</td>
+              <td class="neutral">+29.4</td>
+            </tr>
+            <tr>
+              <td class="bold">GLD</td>
+              <td>2026-02-25</td>
+              <td>$473.38</td>
+              <td class="yellow">60%</td>
+              <td class="neutral">-2.5</td>
+            </tr>
+      </table>
+    </div>
+      </div>
+    </div>
+  </div>
+  
+    <div style="padding:12px 20px;border-top:1px solid var(--border);color:var(--muted);font-size:11px;text-align:center">
+      Generated 2026-03-01 22:54 UTC &nbsp;|&nbsp; SRI Engine v2.1 &nbsp;|&nbsp; Data: last CSV push
+    </div>
+</body>
+</html>
