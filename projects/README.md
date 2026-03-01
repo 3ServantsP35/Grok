@@ -181,19 +181,30 @@ P4 (RORO) ──→ P1 (Bucket Framework) ──→ P5 (Daily Alerts)
 ---
 
 ### P7: Framework Architecture Consolidation
-**Status:** 🟡 Draft Brief — Awaiting Gavin Review
+**Status:** ✅ Architecture Approved — Mar 5, 2026
 **Lead:** CIO (recommendation) + Gavin (approval) | **Approver:** Gavin
-**Brief:** `briefs/framework-architecture-consolidation.md`
+**Brief:** `briefs/SRI-Engine-Tutorial-v2.md` (v2.1 — canonical architecture document)
+
+**Architecture (final, 4 layers):**
+```
+Layer 0: GLI Engine  →  global liquidity probability adjusters (FRED proxy + GEGI)
+Layer 1: Regime Engine  →  8 market inputs → composite score + vehicle selection
+Layer 2: Signal Layer  →  AB1 / AB2 / AB3 per asset
+Layer 3: Allocation Engine  →  bucket tracking, floors, ceilings, transitions
+```
+
+Gavin review (Mar 5): *"Consider the architecture reviewed. The big missing piece has been filled (GLI/GEGI)."*
 
 | Milestone | Status | Date |
 |---|---|---|
 | Inventory all frameworks (10 identified) | ✅ Complete | Feb 27 |
 | Three-layer architecture proposed (Regime/Signal/Allocation) | ✅ Draft | Feb 27 |
 | Naming cleanup table | ✅ Draft | Feb 27 |
-| Gavin review & feedback | ⬜ Pending | — |
-| Merge/retire redundant frameworks | ⬜ Pending approval | — |
-| Formal architecture spec (v1.0) | ⬜ Pending | — |
-| Morning Brief restructure to match architecture | ⬜ Pending | — |
+| **Layer 0 (GLI/GEGI) identified as missing piece** | ✅ Built + wired | Mar 5 |
+| **Gavin review & approval** | ✅ Approved | Mar 5 |
+| Formal architecture spec — Tutorial v2.1 | ✅ Published | Mar 5 |
+| Merge/retire redundant frameworks | ⬜ Ongoing | — |
+| Morning Brief restructure to match 4-layer architecture | ⬜ Pending P5 | — |
 
 ---
 
@@ -489,6 +500,17 @@ CLOSE BPS MSTR Apr 17 $120/$110 @ $0.80 x10
 6. **VLT Stage 3→4 fired Feb 1** — Only 2nd time ever (first was FTX bottom Nov 2022). Current analog: 100% win rate at 20d (n=5).
 7. **BTC vs SPY behave opposite** — BTC trends with concordance, SPY mean-reverts. Different signal weights needed (P8 queued).
 8. **Framework architecture consolidation proposed** — Three layers: Regime Engine → Signal Layer → Allocation Engine. 10 frameworks mapped. P7 brief delivered.
+
+---
+
+## Session Highlights — Mar 5, 2026
+
+1. **Tutorial v2.1** — Added Section 6 (GLI Engine, Layer 0). Architecture updated to 4 layers. Commit `06b0dde4`.
+2. **BTC Outlook Brief** — `briefs/btc-outlook-30k-vs-55k.md`. Howell $30K vs CIO $55K base case. Saylor flywheel as Howell's blind spot. Commit `cf707a33`.
+3. **P14 created** — Bearish Bias Indicator Suite (Distribution Detection). DOI formula proposed. Design phase only.
+4. **GLI Engine built** — `gli_engine.py`. FRED proxy (6 components), GEGI (monetary/fiscal/external), SOFR-IORB stress indicator. Commit `e31e17af`.
+5. **Layer 0 wired** — `sri_engine.py` patched. `RegimeEngine._compute_raw()` + `compute(gli_state=)` + `SRIEngineV2.run_all()` all updated. Commit `879b2919`.
+6. **P7 Architecture approved** — Gavin: *"The big missing piece has been filled (GLI/GEGI)."* 4-layer architecture canonical.
 
 ---
 
