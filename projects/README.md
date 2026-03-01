@@ -21,10 +21,10 @@
 | **Multi-asset rotation discovery** | ✅ Backtested | Feb 27 |
 | All assets compete for AB1-3 by CT signal quality | ✅ Proven | Feb 27 |
 | P3 (Alt Framework) consolidated into P1 | ✅ Done | Feb 27 |
-| v2.0 brief: multi-asset rotation rules, asset pools per bucket | ⬜ Next | — |
-| Tiered CT gates per asset class (quality CT3+, risk CT4) | ⬜ To codify | — |
-| Greg + Gavin sign-off on v2.0 | ⬜ Pending | — |
-| Production integration (Morning Brief, alerts) | ⬜ Pending | — |
+| v2.0 brief: multi-asset rotation rules, asset pools per bucket | ✅ Written — four-bucket-framework-v2.0.md | Mar 5 |
+| Tiered CT gates per asset class (quality CT3+, risk CT4) | ✅ Codified in v2.0 brief | Mar 5 |
+| Greg + Gavin sign-off on v2.0 | ⬜ Pending review | — |
+| Production integration (Morning Brief, alerts) | ⬜ Pending sign-off | — |
 
 **Key decisions needed:**
 - [ ] Greg/Gavin sign-off on multi-asset rotation (AB1-3 open to all assets)
@@ -90,12 +90,14 @@
 | **Deliverable B: GLI Forecast** | | |
 | GLI proxy validated (4-bank) | ✅ Built | Feb 22 |
 | BTC-GLI lead/lag backtest (BTC leads 6mo) | ✅ Complete | Feb 25 |
-| GLI forecast model (leading indicators → 6mo horizon) | ⬜ Pending | — |
-| GLI confidence bands (80%/95%) | ⬜ Pending | — |
-| Peak/trough calling | ⬜ Pending | — |
+| GLI forecast model (leading indicators → 13w horizon) | ✅ Built — GLIForecaster class | Mar 5 |
+| GLI confidence bands (±1σ) | ✅ Built | Mar 5 |
+| Peak/trough calling | ✅ Built (4w consecutive momentum) | Mar 5 |
+| BTC 13w directional signal from GLI | ✅ Built | Mar 5 |
+| Forecast slope/direction reconciliation | 🔄 Calibration needed | Mar 5 |
 | **Deliverable C: Howell Integration** | | |
 | Howell charts analyzed | ⬜ Blocked (image permissions) | — |
-| Howell thesis vs our RORO findings comparison | ⬜ Pending | — |
+| Howell thesis vs our RORO findings comparison | ✅ Done — btc-outlook-30k-vs-55k.md | Mar 5 |
 
 ---
 
@@ -153,9 +155,9 @@ P4 (RORO) ──→ P1 (Bucket Framework) ──→ P5 (Daily Alerts)
 ---
 
 ### P6: Multi-TF SRI Integration & Concordance System
-**Status:** 🟡 Active — Backtest Complete, Codification Pending
+**Status:** 🟡 Active — MSTR backtested, TSLA/GLD pending
 **Lead:** Gavin + CIO | **Approver:** Gavin
-**Brief:** `briefs/multi-tf-backtest-btc-spy.md`
+**Brief:** `briefs/multi-tf-backtest-btc-spy.md`, `briefs/mstr-concordance-backtest.md`
 
 | Milestone | Status | Date |
 |---|---|---|
@@ -164,9 +166,13 @@ P4 (RORO) ──→ P1 (Bucket Framework) ──→ P5 (Daily Alerts)
 | Multi-TF backtest (BTC + SPY) | ✅ Complete | Feb 27 |
 | **4-Tier Concordance Entry System discovered** | ✅ Backtested | Feb 27 |
 | BTC ST timeframe data gap identified | 🔴 Gavin investigating | Feb 27 |
-| Codify Concordance Tiers into formal spec | ⬜ Pending | — |
-| MSTR multi-TF data backtest | ⬜ Waiting on export | — |
-| Rebuild RORO with multi-TF SRIBI | ⬜ Pending all exports | — |
+| **MSTR concordance backtest** | ✅ Complete — CT1=78% bull regime | Mar 5 |
+| Key finding: CT1 regime-dependent (0% bear, 95% bull) — GLI required | ✅ Documented | Mar 5 |
+| Key finding: CT4 = distribution signal on MSTR (-32% at 20d, Dec 24) | ✅ Documented | Mar 5 |
+| Codify Concordance Tiers into formal spec | 🔄 In progress — P1 v2.0 has CT gates | Mar 5 |
+| TSLA concordance backtest | ⬜ Pending CSV | — |
+| GLD concordance backtest | ⬜ Pending CSV | — |
+| Rebuild RORO with multi-TF SRIBI | ⬜ Pending remaining exports | — |
 | Retire Three-Tier FTL/STL framework | ⬜ Pending Gavin approval | — |
 
 **Key findings (to codify):**
@@ -252,32 +258,40 @@ Gavin review (Mar 5): *"Consider the architecture reviewed. The big missing piec
 
 ---
 
-### P12: Python Decision Engine + Automated TV Webhook
-**Status:** 🟢 Active — Phase 1 (CSV ingest) starting now
+### P12: Python Decision Engine + Web Dashboard + Automated Feed
+**Status:** 🟢 Phase 1 complete. Phase 2 pivoted to web dashboard (Gavin approved Mar 5).
 **Lead:** CIO | **Approver:** Gavin
 **Brief:** TBD
 
-**Architecture:** TradingView = sensor layer (raw data). Python = brain (signal logic, alerts, trade tracking). Pine scripts = mirrors (visualization for coaching/diagnosis).
+**Architecture (revised):** TradingView = sensor. Python = brain. **Web dashboard** = primary mirror (all-asset view, all layers). Pine scripts = minimal chart overlays only (context shading, S/R, LOI panel).
 
 | Milestone | Status | Date |
 |---|---|---|
-| **Phase 1: CSV Ingest Engine** | | |
-| CSV data spec defined (8 assets, 4 TFs, 40 cols each) | ✅ Complete | Mar 1 |
-| Gavin daily CSV upload workflow (GitHub) | 🟡 Starting | Mar 1 |
-| Python CSV ingest + SRIBI parser | ⬜ Building | — |
-| ST-primary signal logic (entry/exit) in Python | ⬜ Next | — |
-| Context classification (Headwind/Mixed/Tailwind) | ⬜ Next | — |
-| Backtest validation vs TV export signals | ⬜ Next | — |
-| Discord/Telegram alert output | ⬜ Pending | — |
-| **Phase 2: Pine Mirror Scripts** | | |
-| "SRI Dashboard" Pine script (shows what engine sees) | ⬜ Pending | — |
-| Engine signal markers reflected on TV chart | ⬜ Pending | — |
-| Gavin coaching/diagnosis workflow validated | ⬜ Pending | — |
+| **Phase 1: CSV Ingest + Full Engine** | | |
+| CSV data spec defined | ✅ Complete | Mar 1 |
+| Python CSV ingest + SRIBI parser | ✅ Complete | Mar 1 |
+| ST-primary signal logic in Python | ✅ Complete | Mar 1 |
+| Regime Engine (8 inputs, vehicle, VIX) | ✅ Complete | Mar 1 |
+| AB1 Pre-Breakout Engine | ✅ Complete | Mar 1 |
+| AB2 Credit Spread Engine (v2, MIXED gate) | ✅ Complete | Mar 3 |
+| AB3 State Machine (NEUTRAL/ACC/HOLD/TRIM) | ✅ Complete | Mar 1 |
+| Allocation Engine (25/25/25/25, floors/ceilings) | ✅ Complete | Mar 1 |
+| GLI Engine Layer 0 (FRED proxy + GEGI) | ✅ Complete | Mar 5 |
+| Layer 0 → Layer 1 wiring (RegimeEngine.compute) | ✅ Complete | Mar 5 |
+| GLI Forecaster (13w horizon, peak/trough) | ✅ Complete | Mar 5 |
+| All 4 layers running end-to-end | ✅ Tested | Mar 5 |
+| **Phase 2: Web Dashboard (pivot from Pine mirror)** | | |
+| Architecture decision: web > Pine for operational mirror | ✅ Gavin approved | Mar 5 |
+| generate_dashboard.py — self-contained HTML generator | ✅ Built + tested | Mar 5 |
+| Layer 0 panel (GLI Z, GEGI, components) | ✅ Complete | Mar 5 |
+| Layer 1 panel (regime score, inputs, vehicle) | ✅ Complete | Mar 5 |
+| Layer 2 asset grid (all 8, LOI, context, signals) | ✅ Complete | Mar 5 |
+| AB1/AB2 signal detail panels | ✅ Complete | Mar 5 |
+| Pine chart overlays (context shading, S/R, LOI panel) | ⬜ Pending — minimal scope | — |
 | **Phase 3: Automated Feed** | | |
-| TradingView webhook on 4H bar close | ⬜ Research | — |
-| Webhook → engine pipeline | ⬜ Pending | — |
-| OR: Native SRIBI computation from price APIs | ⬜ Alternative | — |
-| Eliminate manual CSV dependency | ⬜ Goal | — |
+| Cron: daily CSV pull → engine → dashboard refresh | ⬜ Next | — |
+| Discord post of regime + signals on daily run | ⬜ Pending | — |
+| TradingView webhook (eliminate manual CSV) | ⬜ Research | — |
 
 **CSV Requirements (Phase 1):**
 - **Assets:** MSTR, BTC, SPY, QQQ, GLD, IWM, TSLA, IBIT (+ BLOK optional)
@@ -505,12 +519,16 @@ CLOSE BPS MSTR Apr 17 $120/$110 @ $0.80 x10
 
 ## Session Highlights — Mar 5, 2026
 
-1. **Tutorial v2.1** — Added Section 6 (GLI Engine, Layer 0). Architecture updated to 4 layers. Commit `06b0dde4`.
-2. **BTC Outlook Brief** — `briefs/btc-outlook-30k-vs-55k.md`. Howell $30K vs CIO $55K base case. Saylor flywheel as Howell's blind spot. Commit `cf707a33`.
-3. **P14 created** — Bearish Bias Indicator Suite (Distribution Detection). DOI formula proposed. Design phase only.
-4. **GLI Engine built** — `gli_engine.py`. FRED proxy (6 components), GEGI (monetary/fiscal/external), SOFR-IORB stress indicator. Commit `e31e17af`.
-5. **Layer 0 wired** — `sri_engine.py` patched. `RegimeEngine._compute_raw()` + `compute(gli_state=)` + `SRIEngineV2.run_all()` all updated. Commit `879b2919`.
-6. **P7 Architecture approved** — Gavin: *"The big missing piece has been filled (GLI/GEGI)."* 4-layer architecture canonical.
+1. **Tutorial v2.1** — Section 6 (GLI Layer 0), 4-layer architecture. Commit `06b0dde4`.
+2. **BTC Outlook Brief** — `btc-outlook-30k-vs-55k.md`. Commit `cf707a33`.
+3. **P14 created** — Bearish Bias Indicator Suite. Design phase.
+4. **GLI Engine** — `gli_engine.py`. FRED proxy (6 components), GEGI, SOFR-IORB. Commit `e31e17af`.
+5. **Layer 0 wired** — `sri_engine.py` RegimeEngine.compute(gli_state=). Commit `879b2919`.
+6. **P7 approved** — Gavin: *"The big missing piece has been filled."* 4-layer canonical.
+7. **Web Dashboard** — `generate_dashboard.py`. Self-contained HTML, all 4 layers. Commit `fb599f35`.
+8. **MSTR Concordance** — `mstr-concordance-backtest.md`. CT1=78% bull regime, 0% bear. GLI is non-optional filter. Commit `306d2477`.
+9. **P1 v2.0 brief** — `four-bucket-framework-v2.0.md`. Multi-asset rotation, CT gates, all rules. Commit `fa1550c9`.
+10. **GLI Forecaster** — `GLIForecaster` class in `gli_engine.py`. 13w horizon, peak/trough, BTC signal. Commit `47c9e02c`.
 
 ---
 
