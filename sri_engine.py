@@ -22,7 +22,7 @@ Date: 2026-03-01
 import pandas as pd
 import numpy as np
 from dataclasses import dataclass, field
-from typing import Optional, List, Dict, Tuple
+from typing import Optional, List, Dict, Tuple, Any
 from datetime import datetime, timedelta
 from enum import Enum
 import json
@@ -2033,21 +2033,27 @@ class SRIEngineV2:
             results[asset] = machine.scan(df)
         return results
     
-    def run_ab2(self, regime: RegimeState = None) -> Dict[str, List[Dict]]:
-        """Run AB2 credit spread scan on all assets"""
-        results = {}
-        reg = regime or self.regime_engine.compute()
-        ab2 = AB2EngineV2()
-        
+    def run_ab2(self, regime: RegimeState = None) -> Dict[str, Any]:
+        """
+        Run AB2 PMCC gate scan on all assets (Framework v3.0).
+        Returns per-asset gate state + income window summary.
+        """
+        results   = {}
+        reg       = regime or self.regime_engine.compute()
+        pmcc      = AB2PMCCEngine()
+
         for asset in self.TRADING_ASSETS:
             df = self._dfs.get(asset)
-            if df is None:
+            if df is None or len(df) == 0:
                 continue
-            sigs = ab2.scan(df, asset,
-                            regime_score=reg.composite_score,
-                            vix_level=reg.vix_level)
-            if sigs:
-                results[asset] = sigs
+            signals = pmcc.scan(df, asset, regime_score=reg.composite_score)
+            windows = pmcc.income_windows(signals)
+            current = pmcc.current_signal(df, asset)
+            results[asset] = {
+                'current':  current,
+                'windows':  windows,
+                'signals':  signals,   # full history — omit in prod if too large
+            }
         return results
     
     def run_all(self, verbose: bool = True, skip_gli: bool = False) -> Dict:
@@ -2375,3 +2381,218 @@ class AB2EngineV2:
         
         return None
 
+
+
+# ════════════════════════════════════════════════════════════════════
+# AB2 PMCC ENGINE v1  (Framework v3.0 — 2026-03-02)
+# Replaces: AB2EngineV2 (Bull Put Spreads)
+# Reference: briefs/four-bucket-framework-v3.0.md
+# ════════════════════════════════════════════════════════════════════
+
+class PMCCGateState(Enum):
+    NO_POSITION = "NO_POSITION"  # No AB3 LEAP to write against
+    NO_CALLS    = "NO_CALLS"     # LOI < -20: accumulation — preserve upside
+    OTM_INCOME  = "OTM_INCOME"   # LOI -20 to +20: standard income mode, δ ≤ 0.25
+    DELTA_MGMT  = "DELTA_MGMT"   # LOI > +20 + CT ≥ 3: trim via calls, δ ≤ 0.40
+    PAUSED_AB1  = "PAUSED_AB1"   # AB1 breakout active: don't cap the move
+
+
+class AB2PMCCEngine:
+    """
+    PMCC Income Engine — Framework v3.0
+
+    Architecture
+    ────────────
+    AB3  →  2-year LEAPs (synthetic long stock)
+    AB2  →  short calls <90 DTE sold against AB3 LEAPs (income overlay)
+
+    Gate states (LOI + CT tier → max short call delta):
+      NO_CALLS   : LOI < -20                  → δ = 0.00  (accumulation — preserve upside)
+      OTM_INCOME : LOI -20 to +20             → δ ≤ 0.25  (income mode)
+      DELTA_MGMT : LOI > +20  AND  CT ≥ 3    → δ ≤ 0.40  (trim exposure via calls)
+      PAUSED_AB1 : AB1 signal active          → δ = 0.00  (don't cap the breakout)
+
+    Upside protection (OTM_INCOME): never sell calls within 20% of spot.
+    Income target: 2–5%/month of LEAP cost basis (cycle average, not monthly floor).
+    IBIT re-enabled — prior restriction was specific to Bull Put Spreads.
+    """
+
+    LOI_NO_CALL_FLOOR  = -20.0  # Below: no calls
+    LOI_TRIM_THRESHOLD = +20.0  # Above (+ CT ≥ 3): delta management mode
+    CT_DELTA_MGMT_MIN  =  3     # CT tier required to enter DELTA_MGMT
+
+    DELTA_LIMITS: Dict[PMCCGateState, float] = {
+        PMCCGateState.NO_POSITION: 0.00,
+        PMCCGateState.NO_CALLS:    0.00,
+        PMCCGateState.OTM_INCOME:  0.25,
+        PMCCGateState.DELTA_MGMT:  0.40,
+        PMCCGateState.PAUSED_AB1:  0.00,
+    }
+
+    # ── helpers ────────────────────────────────────────────────────
+
+    def _get_loi(self, row: pd.Series) -> float:
+        v = row.get('LOI')
+        try:
+            return float(v) if v is not None and str(v).strip() else 0.0
+        except:
+            return 0.0
+
+    def _get_ct_tier(self, row: pd.Series) -> int:
+        return sum(
+            1 for col in ('VST SRI Bias Histogram', 'ST SRI Bias Histogram',
+                          'LT SRI Bias Histogram',  'VLT SRI Bias Histogram')
+            if (lambda v: bool(v and float(v) > 0))(row.get(col, 0))
+        )
+
+    def _check_ab1_active(self, row: pd.Series) -> bool:
+        for col in ('CT1 Cross', 'CT2 Cross', 'BP Entry', 'AB1 Active'):
+            try:
+                if row.get(col) and float(row[col]) > 0:
+                    return True
+            except:
+                pass
+        return False
+
+    def _context(self, row: pd.Series) -> str:
+        lt  = float(row.get('LT SRI Bias Histogram',  0) or 0)
+        vlt = float(row.get('VLT SRI Bias Histogram', 0) or 0)
+        if lt > 0 and vlt > 0:  return "TAILWIND"
+        if lt <= 0 and vlt <= 0: return "HEADWIND"
+        return "MIXED"
+
+    # ── gate logic ─────────────────────────────────────────────────
+
+    def gate_state(self, loi: float, ct_tier: int,
+                   ab1_active: bool = False,
+                   has_position: bool = True) -> PMCCGateState:
+        if not has_position:
+            return PMCCGateState.NO_POSITION
+        if ab1_active:
+            return PMCCGateState.PAUSED_AB1
+        if loi < self.LOI_NO_CALL_FLOOR:
+            return PMCCGateState.NO_CALLS
+        if loi >= self.LOI_TRIM_THRESHOLD and ct_tier >= self.CT_DELTA_MGMT_MIN:
+            return PMCCGateState.DELTA_MGMT
+        return PMCCGateState.OTM_INCOME
+
+    def _rationale(self, state: PMCCGateState, loi: float, ct_tier: int) -> str:
+        d = self.DELTA_LIMITS[state]
+        return {
+            PMCCGateState.NO_POSITION: "No AB3 LEAP — nothing to write against",
+            PMCCGateState.NO_CALLS:    f"LOI {loi:.1f} < {self.LOI_NO_CALL_FLOOR:.0f} — accumulation, preserve upside",
+            PMCCGateState.OTM_INCOME:  f"LOI {loi:.1f} in neutral zone, CT{ct_tier} — OTM calls δ≤{d}",
+            PMCCGateState.DELTA_MGMT:  f"LOI {loi:.1f} > {self.LOI_TRIM_THRESHOLD:.0f}, CT{ct_tier} — delta reduction δ≤{d}",
+            PMCCGateState.PAUSED_AB1:  "AB1 breakout active — call selling paused",
+        }.get(state, "")
+
+    # ── main scan ──────────────────────────────────────────────────
+
+    def scan(self, df: pd.DataFrame, asset: str,
+             regime_score: int = 0) -> List[Dict]:
+        """
+        Per-bar PMCC gate state across the full history.
+        Returns list of signal dicts (one per bar).
+        """
+        df = df.copy().reset_index(drop=True)
+        if 'date' not in df.columns:
+            df['date'] = pd.to_datetime(df['time'], unit='s')
+
+        signals   = []
+        prev_state: Optional[PMCCGateState] = None
+
+        for i, row in df.iterrows():
+            loi_val    = self._get_loi(row)
+            ct_tier    = self._get_ct_tier(row)
+            ab1_active = self._check_ab1_active(row)
+            price      = float(row['close'])
+            state      = self.gate_state(loi_val, ct_tier, ab1_active)
+
+            signals.append({
+                'bar':          i,
+                'date':         row['date'],
+                'price':        price,
+                'loi':          loi_val,
+                'ct_tier':      ct_tier,
+                'context':      self._context(row),
+                'gate_state':   state.value,
+                'max_delta':    self.DELTA_LIMITS[state],
+                'rationale':    self._rationale(state, loi_val, ct_tier),
+                'state_changed': state != prev_state,
+                'ab1_active':   ab1_active,
+            })
+            prev_state = state
+
+        return signals
+
+    def current_signal(self, df: pd.DataFrame, asset: str) -> Dict:
+        """Gate state for the most recent bar."""
+        if len(df) < 1:
+            return {'gate_state': PMCCGateState.NO_POSITION.value, 'max_delta': 0.0}
+        row     = df.iloc[-1]
+        loi_val = self._get_loi(row)
+        ct_tier = self._get_ct_tier(row)
+        ab1_act = self._check_ab1_active(row)
+        state   = self.gate_state(loi_val, ct_tier, ab1_act)
+        return {
+            'asset':       asset,
+            'gate_state':  state.value,
+            'max_delta':   self.DELTA_LIMITS[state],
+            'loi':         loi_val,
+            'ct_tier':     ct_tier,
+            'context':     self._context(row),
+            'price':       float(row['close']),
+            'ab1_active':  ab1_act,
+            'rationale':   self._rationale(state, loi_val, ct_tier),
+        }
+
+    # ── window summary ─────────────────────────────────────────────
+
+    def income_windows(self, signals: List[Dict]) -> List[Dict]:
+        """
+        Collapse per-bar signals into contiguous income windows
+        (gate = OTM_INCOME or DELTA_MGMT). Returns window summaries.
+        """
+        ACTIVE = {PMCCGateState.OTM_INCOME.value, PMCCGateState.DELTA_MGMT.value}
+        windows: List[Dict] = []
+        cur: Optional[Dict] = None
+
+        for s in signals:
+            active = s['gate_state'] in ACTIVE
+            if active and cur is None:
+                cur = {
+                    'start_bar':   s['bar'],
+                    'start_date':  s['date'],
+                    'start_price': s['price'],
+                    'start_loi':   s['loi'],
+                    'peak_delta':  s['max_delta'],
+                    '_bars':       [s],
+                }
+            elif active and cur is not None:
+                cur['_bars'].append(s)
+                cur['peak_delta'] = max(cur['peak_delta'], s['max_delta'])
+            elif not active and cur is not None:
+                windows.append(self._close_window(cur, s))
+                cur = None
+
+        if cur and cur['_bars']:
+            windows.append(self._close_window(cur, signals[-1], open_ended=True))
+
+        return windows
+
+    def _close_window(self, w: Dict, last: Dict, open_ended: bool = False) -> Dict:
+        bars = w.pop('_bars')
+        n    = len(bars)
+        w.update({
+            'end_bar':       last['bar'],
+            'end_date':      last['date'],
+            'end_price':     last['price'],
+            'end_loi':       last['loi'],
+            'duration_bars': n,
+            'duration_days': round(n / 6, 1),
+            'avg_loi':       round(sum(b['loi'] for b in bars) / n, 1),
+            'avg_ct':        round(sum(b['ct_tier'] for b in bars) / n, 1),
+            'price_chg_pct': round((last['price'] - w['start_price']) / w['start_price'] * 100, 1),
+            'status':        'OPEN' if open_ended else 'CLOSED',
+        })
+        return w
