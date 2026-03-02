@@ -2033,26 +2033,34 @@ class SRIEngineV2:
             results[asset] = machine.scan(df)
         return results
     
-    def run_ab2(self, regime: RegimeState = None) -> Dict[str, Any]:
+    def run_ab2(self, regime: RegimeState = None,
+                gli_state=None) -> Dict[str, Any]:
         """
         Run AB2 PMCC gate scan on all assets (Framework v3.0).
+        GLI state (Layer 0) adjusts the DELTA_MGMT LOI threshold per asset.
         Returns per-asset gate state + income window summary.
         """
-        results   = {}
-        reg       = regime or self.regime_engine.compute()
-        pmcc      = AB2PMCCEngine()
+        results = {}
+        reg     = regime or self.regime_engine.compute()
+        pmcc    = AB2PMCCEngine()
+
+        # Extract GLI inputs for threshold adjustment
+        gli_z  = getattr(gli_state, 'z_score', 0.0) or 0.0
+        gegi   = getattr(gli_state, 'gegi',    0.0) or 0.0
 
         for asset in self.TRADING_ASSETS:
             df = self._dfs.get(asset)
             if df is None or len(df) == 0:
                 continue
-            signals = pmcc.scan(df, asset, regime_score=reg.composite_score)
+            signals = pmcc.scan(df, asset,
+                                regime_score=reg.composite_score,
+                                gli_z=gli_z, gegi=gegi)
             windows = pmcc.income_windows(signals)
-            current = pmcc.current_signal(df, asset)
+            current = pmcc.current_signal(df, asset, gli_z=gli_z, gegi=gegi)
             results[asset] = {
-                'current':  current,
-                'windows':  windows,
-                'signals':  signals,   # full history — omit in prod if too large
+                'current': current,
+                'windows': windows,
+                'signals': signals,
             }
         return results
     
@@ -2076,7 +2084,7 @@ class SRIEngineV2:
         # Layer 1: Regime Engine (with GLI adjustment)
         reg = self.regime_engine.compute(gli_state=gli_state)
         ab1_sigs = self.run_ab1(reg)
-        ab2_sigs = self.run_ab2(reg)
+        ab2_sigs = self.run_ab2(reg, gli_state=gli_state)
         ab3_sigs = self.run_ab3()
         
         # Current state summary
@@ -2417,8 +2425,10 @@ class AB2PMCCEngine:
     IBIT re-enabled — prior restriction was specific to Bull Put Spreads.
     """
 
-    LOI_NO_CALL_FLOOR  = -20.0  # Below: no calls
-    LOI_TRIM_THRESHOLD = +20.0  # Above (+ CT ≥ 3): delta management mode
+    LOI_NO_CALL_FLOOR  = -20.0  # Below: no calls (accumulation — preserve upside)
+    LOI_TRIM_BASE      = +20.0  # Default DELTA_MGMT threshold (GLI-adjusted at runtime)
+    LOI_TRIM_BULL      = +40.0  # GLI bullish (Z>0.5 or GEGI>1.0): delay delta reduction
+    LOI_TRIM_BEAR      = +10.0  # GLI bearish (Z<-0.5): start reducing exposure earlier
     CT_DELTA_MGMT_MIN  =  3     # CT tier required to enter DELTA_MGMT
 
     DELTA_LIMITS: Dict[PMCCGateState, float] = {
@@ -2463,87 +2473,124 @@ class AB2PMCCEngine:
 
     # ── gate logic ─────────────────────────────────────────────────
 
+    def _trim_threshold(self, gli_z: float = 0.0, gegi: float = 0.0) -> float:
+        """
+        GLI-adjusted DELTA_MGMT threshold.
+
+        Insight (Gavin, 2026-03-02): monster bull runs on Momentum assets are
+        driven by optimal liquidity conditions. When GLI is in expansion, the
+        cycle likely has more to run — delay delta reduction to avoid capping it.
+        When GLI is contracting, start reducing exposure earlier.
+
+          GLI Z > +0.5  OR  GEGI > 1.0  →  +40  (delay — liquidity-driven run)
+          -0.5 ≤ GLI Z ≤ +0.5           →  +20  (base — neutral liquidity)
+          GLI Z < -0.5                  →  +10  (earlier reduction — contraction)
+        """
+        if gli_z > 0.5 or gegi > 1.0:
+            return self.LOI_TRIM_BULL   # +40 — don't cap a liquidity-driven rally
+        if gli_z < -0.5:
+            return self.LOI_TRIM_BEAR   # +10 — reduce early in contraction
+        return self.LOI_TRIM_BASE       # +20 — default
+
     def gate_state(self, loi: float, ct_tier: int,
                    ab1_active: bool = False,
-                   has_position: bool = True) -> PMCCGateState:
+                   has_position: bool = True,
+                   gli_z: float = 0.0,
+                   gegi: float = 0.0) -> PMCCGateState:
         if not has_position:
             return PMCCGateState.NO_POSITION
         if ab1_active:
             return PMCCGateState.PAUSED_AB1
         if loi < self.LOI_NO_CALL_FLOOR:
             return PMCCGateState.NO_CALLS
-        if loi >= self.LOI_TRIM_THRESHOLD and ct_tier >= self.CT_DELTA_MGMT_MIN:
+        trim_thresh = self._trim_threshold(gli_z, gegi)
+        if loi >= trim_thresh and ct_tier >= self.CT_DELTA_MGMT_MIN:
             return PMCCGateState.DELTA_MGMT
         return PMCCGateState.OTM_INCOME
 
-    def _rationale(self, state: PMCCGateState, loi: float, ct_tier: int) -> str:
-        d = self.DELTA_LIMITS[state]
+    def _rationale(self, state: PMCCGateState, loi: float, ct_tier: int,
+                   gli_z: float = 0.0, gegi: float = 0.0) -> str:
+        d      = self.DELTA_LIMITS[state]
+        thresh = self._trim_threshold(gli_z, gegi)
+        gli_tag = (f" [GLI Z={gli_z:+.2f}, GEGI={gegi:.2f} → thresh={thresh:.0f}]"
+                   if gli_z != 0.0 or gegi != 0.0 else "")
         return {
             PMCCGateState.NO_POSITION: "No AB3 LEAP — nothing to write against",
             PMCCGateState.NO_CALLS:    f"LOI {loi:.1f} < {self.LOI_NO_CALL_FLOOR:.0f} — accumulation, preserve upside",
-            PMCCGateState.OTM_INCOME:  f"LOI {loi:.1f} in neutral zone, CT{ct_tier} — OTM calls δ≤{d}",
-            PMCCGateState.DELTA_MGMT:  f"LOI {loi:.1f} > {self.LOI_TRIM_THRESHOLD:.0f}, CT{ct_tier} — delta reduction δ≤{d}",
+            PMCCGateState.OTM_INCOME:  f"LOI {loi:.1f} in neutral zone, CT{ct_tier} — OTM calls δ≤{d}{gli_tag}",
+            PMCCGateState.DELTA_MGMT:  f"LOI {loi:.1f} ≥ {thresh:.0f} (GLI-adj), CT{ct_tier} — delta reduction δ≤{d}{gli_tag}",
             PMCCGateState.PAUSED_AB1:  "AB1 breakout active — call selling paused",
         }.get(state, "")
 
     # ── main scan ──────────────────────────────────────────────────
 
     def scan(self, df: pd.DataFrame, asset: str,
-             regime_score: int = 0) -> List[Dict]:
+             regime_score: int = 0,
+             gli_z: float = 0.0,
+             gegi: float = 0.0) -> List[Dict]:
         """
         Per-bar PMCC gate state across the full history.
+        gli_z / gegi adjust the DELTA_MGMT LOI threshold (Layer 0 integration).
         Returns list of signal dicts (one per bar).
         """
         df = df.copy().reset_index(drop=True)
         if 'date' not in df.columns:
             df['date'] = pd.to_datetime(df['time'], unit='s')
 
-        signals   = []
+        signals    = []
         prev_state: Optional[PMCCGateState] = None
+        trim_thresh = self._trim_threshold(gli_z, gegi)
 
         for i, row in df.iterrows():
             loi_val    = self._get_loi(row)
             ct_tier    = self._get_ct_tier(row)
             ab1_active = self._check_ab1_active(row)
             price      = float(row['close'])
-            state      = self.gate_state(loi_val, ct_tier, ab1_active)
-
+            state      = self.gate_state(loi_val, ct_tier, ab1_active,
+                                         gli_z=gli_z, gegi=gegi)
             signals.append({
-                'bar':          i,
-                'date':         row['date'],
-                'price':        price,
-                'loi':          loi_val,
-                'ct_tier':      ct_tier,
-                'context':      self._context(row),
-                'gate_state':   state.value,
-                'max_delta':    self.DELTA_LIMITS[state],
-                'rationale':    self._rationale(state, loi_val, ct_tier),
+                'bar':           i,
+                'date':          row['date'],
+                'price':         price,
+                'loi':           loi_val,
+                'ct_tier':       ct_tier,
+                'context':       self._context(row),
+                'gate_state':    state.value,
+                'max_delta':     self.DELTA_LIMITS[state],
+                'trim_threshold': trim_thresh,
+                'gli_z':         gli_z,
+                'gegi':          gegi,
+                'rationale':     self._rationale(state, loi_val, ct_tier, gli_z, gegi),
                 'state_changed': state != prev_state,
-                'ab1_active':   ab1_active,
+                'ab1_active':    ab1_active,
             })
             prev_state = state
 
         return signals
 
-    def current_signal(self, df: pd.DataFrame, asset: str) -> Dict:
-        """Gate state for the most recent bar."""
+    def current_signal(self, df: pd.DataFrame, asset: str,
+                       gli_z: float = 0.0, gegi: float = 0.0) -> Dict:
+        """Gate state for the most recent bar (GLI-adjusted)."""
         if len(df) < 1:
             return {'gate_state': PMCCGateState.NO_POSITION.value, 'max_delta': 0.0}
         row     = df.iloc[-1]
         loi_val = self._get_loi(row)
         ct_tier = self._get_ct_tier(row)
         ab1_act = self._check_ab1_active(row)
-        state   = self.gate_state(loi_val, ct_tier, ab1_act)
+        state   = self.gate_state(loi_val, ct_tier, ab1_act, gli_z=gli_z, gegi=gegi)
         return {
-            'asset':       asset,
-            'gate_state':  state.value,
-            'max_delta':   self.DELTA_LIMITS[state],
-            'loi':         loi_val,
-            'ct_tier':     ct_tier,
-            'context':     self._context(row),
-            'price':       float(row['close']),
-            'ab1_active':  ab1_act,
-            'rationale':   self._rationale(state, loi_val, ct_tier),
+            'asset':          asset,
+            'gate_state':     state.value,
+            'max_delta':      self.DELTA_LIMITS[state],
+            'loi':            loi_val,
+            'ct_tier':        ct_tier,
+            'context':        self._context(row),
+            'price':          float(row['close']),
+            'ab1_active':     ab1_act,
+            'trim_threshold': self._trim_threshold(gli_z, gegi),
+            'gli_z':          gli_z,
+            'gegi':           gegi,
+            'rationale':      self._rationale(state, loi_val, ct_tier, gli_z, gegi),
         }
 
     # ── window summary ─────────────────────────────────────────────
