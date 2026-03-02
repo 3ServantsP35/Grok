@@ -269,7 +269,8 @@ def build_brief():
     # 4. GLI & MACRO
     # ============================================
     gli = conn.execute(
-        "SELECT timestamp, gli_value, gli_zscore, gegi_estimate FROM gli_proxy ORDER BY timestamp DESC LIMIT 1"
+        "SELECT timestamp, fed_bs_trillions, gli_score, macro_score, "
+        "grid_regime, paradigm, gli_trend FROM gli_proxy ORDER BY timestamp DESC LIMIT 1"
     ).fetchone()
 
     fred_latest = {}
@@ -282,8 +283,12 @@ def build_brief():
             fred_latest[series] = r[0]
 
     if gli:
-        zscore = gli[2]
-        gegi = gli[3]
+        fed_bs   = gli[1] or 0.0   # Fed balance sheet $T
+        zscore   = gli[2] or 0.0   # GLI Z-score
+        macro_sc = gli[3] or 0      # macro_score (+1/-1/0)
+        grid     = gli[4] or ""
+        paradigm = gli[5] or ""
+        trend    = gli[6] or ""
 
         if zscore > 0.5:
             regime = "🟢 EXPANSIONARY"
@@ -293,8 +298,8 @@ def build_brief():
             regime = "🟡 NEUTRAL"
 
         section = f"**🌍 Global Liquidity**\n"
-        section += f"GLI: ${gli[1]:.2f}T | Z-Score: **{zscore:+.3f}** | GEGI: {gegi:+.3f}\n"
-        section += f"Regime: {regime}\n\n"
+        section += f"Fed BS: ${fed_bs:.2f}T | Z-Score: **{zscore:+.3f}** | Macro: {macro_sc:+d}\n"
+        section += f"Regime: {regime} | GRID: {grid} | Paradigm: {paradigm} | Trend: {trend}\n\n"
 
         # Macro
         dgs10 = fred_latest.get("DGS10", 0)
@@ -456,12 +461,12 @@ def build_brief():
             "IWM":  [f"{DATA_DIR}/BATS_IWM, 240_cfcaf.csv"],
         }
 
-        # Load GLI for threshold adjustment
+        # Load GLI for threshold adjustment (gli_proxy table; no gegi column — use 0.0)
         gli_row = conn.execute(
-            "SELECT z_score, gegi FROM gli ORDER BY timestamp DESC LIMIT 1"
+            "SELECT gli_score FROM gli_proxy ORDER BY timestamp DESC LIMIT 1"
         ).fetchone()
         gli_z   = float(gli_row[0]) if gli_row else 0.0
-        gegi    = float(gli_row[1]) if gli_row else 0.0
+        gegi    = 0.0   # gegi not stored in gli_proxy; GLI Z-score is the primary adjuster
 
         pmcc_eng = AB2PMCCEngine()
         gate_rows = []
