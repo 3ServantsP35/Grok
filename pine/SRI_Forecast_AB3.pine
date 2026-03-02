@@ -32,6 +32,12 @@ string grp_core = "Core Settings"
 int at_period   = input.int(14, "Trackline ATR Period", group=grp_core)
 float at_coeff  = input.float(1.0, "Trackline ATR Coefficient", group=grp_core)
 
+string grp_thresh = "Threshold Overrides"
+float custom_acc      = input.float(0.0,  "Custom Acc Level (0 = use default)",      group=grp_thresh, tooltip="Override the accumulation threshold. Default: BTC-proxy=-45, MR=-40. Data analysis showed MSTR LOI min was -52.2 at $107 bottom — original -60 never triggered in Jul25-Feb26.")
+float custom_deep_acc = input.float(0.0,  "Custom Deep Acc Level (0 = use default)", group=grp_thresh)
+float custom_trim1    = input.float(0.0,  "Custom Trim 1 Level (0 = use default)",   group=grp_thresh)
+float bounce_depth    = input.float(-35.0,"Min LOI Depth to Qualify Bounce",         group=grp_thresh, tooltip="LOI must reach this level before a bounce signal fires. Prevents false bounces in shallow dips. Data: Oct 2025 head-fakes were at LOI -22 to -26; Feb 2026 real bottom reached -52.")
+
 string grp_loi = "LOI Weights"
 float w_vlt  = input.float(40.0, "VLT SRIBI Weight",       group=grp_loi, minval=0, maxval=100)
 float w_roc  = input.float(30.0, "VLT Acceleration Weight", group=grp_loi, minval=0, maxval=100)
@@ -82,10 +88,15 @@ bool is_iwm       = resolved_class == "MR-Small (IWM)"
 bool is_mr        = is_mr_large or is_iwm
 bool is_momentum  = is_btc_proxy or is_tsla
 
-// Per-asset LOI thresholds
-float acc_level      = is_mr ? -40.0 : -60.0
-float deep_acc_level = is_mr ? -60.0 : -80.0
-float trim1_level    = is_mr ? 10.0  : 40.0
+// Per-asset LOI thresholds (with user override)
+// BTC-proxy default lowered from -60 to -45 — data analysis (Jul25-Feb26) showed
+// MSTR LOI min was -52.2 at the $106.96 absolute bottom; -60 never triggered.
+float _def_acc      = is_mr ? -40.0 : -45.0
+float _def_deep_acc = is_mr ? -60.0 : -65.0
+float _def_trim1    = is_mr ? 10.0  : 40.0
+float acc_level      = custom_acc      != 0.0 ? custom_acc      : _def_acc
+float deep_acc_level = custom_deep_acc != 0.0 ? custom_deep_acc : _def_deep_acc
+float trim1_level    = custom_trim1    != 0.0 ? custom_trim1    : _def_trim1
 float trim2_level    = is_mr ? 30.0  : 60.0
 float trim3_level    = is_mr ? 50.0  : 80.0
 float trim_reset     = is_mr ? -10.0 : -20.0
@@ -245,11 +256,30 @@ bool in_deep_zone = loi < deep_acc_level
 bool acc_enter  = ta.crossunder(loi, acc_level)
 bool deep_enter = ta.crossunder(loi, deep_acc_level)
 
-// Stage 2: bottom confirmation — first bar LOI turns up from within the zone
-bool loi_was_falling = nz(loi[1]) <= nz(loi[2])   // previous bar was falling or flat
-bool loi_now_rising  = loi > nz(loi[1])            // current bar is rising
-bool acc_bounce  = in_acc_zone  and loi_now_rising and loi_was_falling
-bool deep_bounce = in_deep_zone and loi_now_rising and loi_was_falling
+// Stage 2: bottom confirmation — 2-bar confirmed bounce with LOI depth filter
+// Data finding: shallow bounces at LOI -22 to -26 (Oct 2025) were head-fakes;
+// real bottom (Feb 2026, LOI -52) gave clean +25% recovery. Depth filter prevents noise.
+
+// Track the lowest LOI reached while in the zone (resets when zone exits)
+var float zone_loi_low = 0.0
+if in_acc_zone and not nz(in_acc_zone[1])
+    zone_loi_low := loi
+else if in_acc_zone
+    zone_loi_low := math.min(zone_loi_low, loi)
+else
+    zone_loi_low := 0.0
+
+bool depth_ok = zone_loi_low <= bounce_depth     // zone must have reached min depth
+
+// 2-bar rising confirmation: LOI rose on both this bar AND the previous bar,
+// but 2 bars ago was still falling (genuine turn, not continuation of an existing rise)
+bool loi_was_falling = nz(loi[2]) <= nz(loi[3])  // falling before the turn
+bool loi_rose_bar1   = nz(loi[1]) > nz(loi[2])   // first rising bar
+bool loi_rose_bar2   = loi > nz(loi[1])           // second rising bar (confirmation)
+bool confirmed_bounce = loi_was_falling and loi_rose_bar1 and loi_rose_bar2
+
+bool acc_bounce  = in_acc_zone  and confirmed_bounce and depth_ok
+bool deep_bounce = in_deep_zone and confirmed_bounce and depth_ok
 
 // IWM CT3 warning cross (signal fire even without LOI threshold)
 bool iwm_ct3_cross = is_iwm and ct_tier >= 3 and nz(ct_tier[1]) < 3
