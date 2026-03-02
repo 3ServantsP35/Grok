@@ -236,10 +236,14 @@ var bool in_deep_zone = false
 bool acc_new  = loi < acc_level  and loi_decelerating and not in_acc_zone
 bool deep_new = loi < deep_acc_level and loi_decelerating and not in_deep_zone
 
-if loi < acc_level       : in_acc_zone  := true
-if loi >= acc_level      : in_acc_zone  := false
-if loi < deep_acc_level  : in_deep_zone := true
-if loi >= deep_acc_level : in_deep_zone := false
+if loi < acc_level
+    in_acc_zone  := true
+if loi >= acc_level
+    in_acc_zone  := false
+if loi < deep_acc_level
+    in_deep_zone := true
+if loi >= deep_acc_level
+    in_deep_zone := false
 
 // IWM CT3 warning cross (signal fire even without LOI threshold)
 bool iwm_ct3_cross = is_iwm and ct_tier >= 3 and nz(ct_tier[1]) < 3
