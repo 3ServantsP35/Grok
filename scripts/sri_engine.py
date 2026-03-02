@@ -2105,8 +2105,10 @@ class SRIEngineV2:
         pmcc    = AB2PMCCEngine()
 
         # Extract GLI inputs for threshold adjustment
-        gli_z  = getattr(gli_state, 'z_score', 0.0) or 0.0
-        gegi   = getattr(gli_state, 'gegi',    0.0) or 0.0
+        # gli_state.gegi is a GEGIState object — extract scalar composite value
+        gli_z  = float(getattr(gli_state, 'z_score',  0.0) or 0.0)
+        _gegi  = getattr(gli_state, 'gegi', None)
+        gegi   = float(_gegi.composite if hasattr(_gegi, 'composite') else (_gegi or 0.0))
 
         for asset in self.TRADING_ASSETS:
             df = self._dfs.get(asset)
