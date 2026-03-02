@@ -461,6 +461,66 @@ def compute_loi(sribi: SRIBIState, prev_vlt: float = 0.0) -> float:
     return (vlt_norm * 40 + roc_norm * 30 + lt_norm * 15 + conc_norm * 15) / 100
 
 # ═══════════════════════════════════════════════════════════════
+# SRIBI ROC (Rate-of-Change) DERIVATIVE — ENGINE SYNC
+# ═══════════════════════════════════════════════════════════════
+#
+# Mirrors the SRIBI_VST/ST/LT/VLT Pine indicators' ROC wave line.
+# Lookbacks calibrated per timeframe's natural periodicity (4H bars):
+#   VST lb=5 (20h), ST lb=6 (24h), LT lb=7 (28h), VLT lb=8 (32h)
+# EMA smoothing = 3 bars (same as Pine).
+#
+# ROC states (used in dashboard Panel 2 and PMCC gate output):
+#   Accel Bull    : ROC > 0 AND SRIBI > 0  — momentum building
+#   Decel Bull    : ROC < 0 AND SRIBI > 0  — early warning, still positive
+#   Drag Diffusing: ROC > 0 AND SRIBI < 0  — ★ bottom signal, momentum turning
+#   Accel Bear    : ROC < 0 AND SRIBI < 0  — full momentum to downside
+
+_SRIBI_ROC_PARAMS = {
+    'vst': ('VST SRI Bias Histogram', 5),
+    'st':  ('ST SRI Bias Histogram',  6),
+    'lt':  ('LT SRI Bias Histogram',  7),
+    'vlt': ('VLT SRI Bias Histogram', 8),
+}
+
+def add_sribi_roc_columns(df: 'pd.DataFrame', smooth: int = 3) -> 'pd.DataFrame':
+    """
+    Add vst_roc / st_roc / lt_roc / vlt_roc columns to a DataFrame in-place.
+
+    Formula (matches Pine exactly):
+      roc_raw  = bias_score - bias_score[lb]   (difference, not %)
+      roc_line = EMA(roc_raw, smooth)
+
+    Call this once on any CSV DataFrame before passing to PMCC engine or
+    dashboard to ensure ROC columns are available.
+    """
+    import pandas as pd
+    for tf, (col, lb) in _SRIBI_ROC_PARAMS.items():
+        roc_col = f'{tf}_roc'
+        if col not in df.columns:
+            df[roc_col] = 0.0
+            continue
+        vals    = pd.to_numeric(df[col], errors='coerce').fillna(0.0)
+        roc_raw = vals - vals.shift(lb).fillna(0.0)
+        df[roc_col] = roc_raw.ewm(span=smooth, adjust=False).mean()
+    return df
+
+
+def roc_state_label(roc: float, sribi: float) -> str:
+    """
+    Classify a single bar's ROC + SRIBI into a human-readable state.
+
+    Mirrors the four Pine SRIBI indicator label states.
+    The 'Drag Diffusing' state is the primary bottom-detection signal —
+    momentum turns positive before the zero-line cross (100% lead rate
+    at 27 MSTR cycle bottoms, lb=7, 2022-2026 backtest).
+    """
+    if roc >= 0 and sribi >= 0:  return "Accel Bull"
+    if roc <  0 and sribi >= 0:  return "Decel Bull"
+    if roc >= 0 and sribi <  0:  return "Drag Diffusing"   # ★ bottom signal
+    return "Accel Bear"
+
+
+# ═══════════════════════════════════════════════════════════════
 # ST-PRIMARY SIGNAL ENGINE
 # ═══════════════════════════════════════════════════════════════
 
@@ -2554,6 +2614,9 @@ class AB2PMCCEngine:
         if 'date' not in df.columns:
             df['date'] = pd.to_datetime(df['time'], unit='s')
 
+        # Add SRIBI ROC derivative columns (mirrors Pine SRIBI_VST/ST/LT/VLT wave lines)
+        df = add_sribi_roc_columns(df)
+
         signals    = []
         prev_state: Optional[PMCCGateState] = None
         trim_thresh = self._trim_threshold(asset, gli_z, gegi)
@@ -2565,6 +2628,17 @@ class AB2PMCCEngine:
             price      = float(row['close'])
             state      = self.gate_state(loi_val, ct_tier, ab1_active,
                                          asset=asset, gli_z=gli_z, gegi=gegi)
+
+            # ROC values + state labels
+            lt_roc  = float(row.get('lt_roc',  0) or 0)
+            st_roc  = float(row.get('st_roc',  0) or 0)
+            vst_roc = float(row.get('vst_roc', 0) or 0)
+            vlt_roc = float(row.get('vlt_roc', 0) or 0)
+            lt_sribi  = float(row.get('LT SRI Bias Histogram',  0) or 0)
+            st_sribi  = float(row.get('ST SRI Bias Histogram',  0) or 0)
+            vst_sribi = float(row.get('VST SRI Bias Histogram', 0) or 0)
+            vlt_sribi = float(row.get('VLT SRI Bias Histogram', 0) or 0)
+
             signals.append({
                 'bar':            i,
                 'date':           row['date'],
@@ -2581,6 +2655,15 @@ class AB2PMCCEngine:
                 'rationale':      self._rationale(state, loi_val, ct_tier, asset, gli_z, gegi),
                 'state_changed':  state != prev_state,
                 'ab1_active':     ab1_active,
+                # ROC derivative (mirrors Pine SRIBI indicator wave lines)
+                'lt_roc':         lt_roc,
+                'st_roc':         st_roc,
+                'vst_roc':        vst_roc,
+                'vlt_roc':        vlt_roc,
+                'lt_roc_state':   roc_state_label(lt_roc,  lt_sribi),
+                'st_roc_state':   roc_state_label(st_roc,  st_sribi),
+                'vst_roc_state':  roc_state_label(vst_roc, vst_sribi),
+                'vlt_roc_state':  roc_state_label(vlt_roc, vlt_sribi),
             })
             prev_state = state
 
@@ -2588,14 +2671,26 @@ class AB2PMCCEngine:
 
     def current_signal(self, df: pd.DataFrame, asset: str,
                        gli_z: float = 0.0, gegi: float = 0.0) -> Dict:
-        """Gate state for the most recent bar (asset-class + GLI-adjusted)."""
+        """Gate state for the most recent bar (asset-class + GLI-adjusted, with ROC)."""
         if len(df) < 1:
             return {'gate_state': PMCCGateState.NO_POSITION.value, 'max_delta': 0.0}
+        # Enrich with ROC columns before reading last bar
+        df = add_sribi_roc_columns(df.copy())
         row     = df.iloc[-1]
         loi_val = self._get_loi(row)
         ct_tier = self._get_ct_tier(row)
         ab1_act = self._check_ab1_active(row)
         state   = self.gate_state(loi_val, ct_tier, ab1_act, asset=asset, gli_z=gli_z, gegi=gegi)
+
+        lt_roc   = float(row.get('lt_roc',  0) or 0)
+        st_roc   = float(row.get('st_roc',  0) or 0)
+        vst_roc  = float(row.get('vst_roc', 0) or 0)
+        vlt_roc  = float(row.get('vlt_roc', 0) or 0)
+        lt_sribi = float(row.get('LT SRI Bias Histogram',  0) or 0)
+        st_sribi = float(row.get('ST SRI Bias Histogram',  0) or 0)
+        vst_sribi= float(row.get('VST SRI Bias Histogram', 0) or 0)
+        vlt_sribi= float(row.get('VLT SRI Bias Histogram', 0) or 0)
+
         return {
             'asset':          asset,
             'gate_state':     state.value,
@@ -2610,6 +2705,15 @@ class AB2PMCCEngine:
             'gli_z':          gli_z,
             'gegi':           gegi,
             'rationale':      self._rationale(state, loi_val, ct_tier, asset, gli_z, gegi),
+            # ROC derivative (mirrors Pine SRIBI indicator wave lines)
+            'lt_roc':         lt_roc,
+            'st_roc':         st_roc,
+            'vst_roc':        vst_roc,
+            'vlt_roc':        vlt_roc,
+            'lt_roc_state':   roc_state_label(lt_roc,  lt_sribi),
+            'st_roc_state':   roc_state_label(st_roc,  st_sribi),
+            'vst_roc_state':  roc_state_label(vst_roc, vst_sribi),
+            'vlt_roc_state':  roc_state_label(vlt_roc, vlt_sribi),
         }
 
     # ── window summary ─────────────────────────────────────────────
