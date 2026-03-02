@@ -1,5 +1,5 @@
 # SRI Decision Engine — Complete Methodology Tutorial
-**Version 2.1 | Date: 2026-03-05 | Author: CIO Engine**
+**Version 2.2 | Date: 2026-03-05 | Author: CIO Engine**
 
 ---
 
@@ -14,10 +14,12 @@
 7. [Regime Engine — Layer 1](#7-regime-engine--layer-1)
 8. [LOI — LEAP Opportunity Index](#8-loi--leap-opportunity-index)
 9. [AB1 — Tactical LEAP Engine](#9-ab1--tactical-leap-engine)
-10. [AB2 — Credit Spread Engine](#10-ab2--credit-spread-engine)
+10. [AB2 — PMCC Income Engine](#10-ab2--pmcc-income-engine)
 11. [AB3 — Strategic LEAP Accumulation](#11-ab3--strategic-leap-accumulation)
-12. [AB4 — Cash & STRC Reserve](#12-ab4--cash--strc-reserve)
+12. [AB4 — Capital Reserve & Deployment Ruleset](#12-ab4--capital-reserve--deployment-ruleset)
 13. [Capital Allocation Engine](#13-capital-allocation-engine)
+13a. [SRIBI ROC Derivative](#13a-sribi-roc-derivative)
+13b. [Alert System](#13b-alert-system)
 14. [PC Val — MSTR Perpetual Call Valuation](#14-pc-val--mstr-perpetual-call-valuation)
 15. [Asset Classification](#15-asset-classification)
 16. [Signal Cross-Reference & Priority Rules](#16-signal-cross-reference--priority-rules)
@@ -612,51 +614,84 @@ If the breakout fails:
 
 ---
 
-## 10. AB2 — Credit Spread Engine
+## 10. AB2 — PMCC Income Engine
+
+> **Framework v3.0 (approved 2026-03-02, Gavin).** Bull Put Spreads are retired. AB2 is now exclusively a PMCC (Poor Man's Covered Call) income overlay running against AB3 LEAPs. No new capital required.
 
 ### 10.1 Philosophy
 
-AB2 sells premium INTO structural divergence. When the market shows ST recovery but LT is still lagging (MIXED context), the spread premium decays as LT catches up. This is a mean-reversion premium capture play.
+AB2 harvests time decay from the AB3 position without requiring additional capital. The AB3 LEAP is the long leg. Short calls (<90 DTE) are sold against it to generate monthly income while the underlying cycles through recovery.
 
-**The divergence thesis:** MIXED context (LT-, VLT+) = LT hasn't confirmed the recovery yet. Short-duration Bull Put spreads benefit from the passage of time as the structural recovery matures. LT turning positive = catch-up complete = exit the spread and capture theta.
+**Core principle:** The short call delta is controlled by where we are in the LOI cycle. Early in recovery (LOI < -20), full upside must be preserved — no calls. Mid-cycle (LOI -20 to threshold), sell OTM calls for income. Late-cycle (LOI > threshold), sell closer-to-the-money calls to intentionally reduce delta as the position matures.
 
-### 10.2 Entry Conditions
+**IBIT re-enabled.** The prior IBIT restriction applied only to Bull Put Spreads (MIXED context unreliable for crypto LT catch-up). PMCC structure is context-independent — if you hold an IBIT AB3 LEAP, you can sell calls against it.
 
-```
-C1: ST crosses positive (ST SRIBI crosses from below zero to above)
-C2: VST positive (VST SRIBI > 0) — entry timing confirmed
-C3: MIXED context (LT < 0 AND VLT > 0) — structural divergence active
-C4: Regime score ≥ -1 (not in risk-off regime)
-C5: VIX > 18 (premium worth selling)
-```
+### 10.2 Gate States
 
-**Critical:** MIXED context is the non-negotiable gate. This is what distinguishes AB2 v2 from v1, and why win rates improved dramatically across all assets.
+The LOI + CT Tier combination determines which calls, if any, can be sold:
 
-### 10.3 Strategy Type
+| Gate State | LOI Condition | CT Required | Max Delta | Action |
+|---|---|---|---|---|
+| 🔴 NO_CALLS | LOI < -20 | Any | 0.00 | Accumulation zone — preserve all upside |
+| 🟢 OTM_INCOME | -20 ≤ LOI < threshold | CT2+ | 0.25 | Sell OTM calls; never within 20% of spot |
+| 🟠 DELTA_MGMT | LOI ≥ threshold + CT3+ | CT3+ | 0.40 | Sell ATM/ITM calls — intentional delta reduction |
+| ⏸️ PAUSED_AB1 | AB1 active on same asset | — | 0.00 | Don't cap the breakout |
 
-**Bull Put Spread:** Sell a put, buy a put further OTM. Profits from upward movement or neutral price action while LT recovers.
+### 10.3 DELTA_MGMT Threshold by Asset Class
 
-Spreads currently validated on: MSTR, TSLA, SPY, QQQ, GLD, IWM  
-**IBIT is disabled for AB2** — MIXED context does not predict reliable LT catch-up timing on crypto-adjacent assets.
+Momentum assets (MSTR, TSLA, IBIT) can run 40–60%/month during Saylor/FOMO cycles. Switching to delta reduction at LOI +20 would cap them prematurely.
 
-### 10.4 Exit Rules
+| Asset Class | Assets | DELTA_MGMT Threshold |
+|---|---|---|
+| Momentum | MSTR, TSLA, IBIT | LOI > **+40** |
+| Mean-Reverting | SPY, QQQ, GLD, IWM | LOI > **+20** |
 
-| Trigger | Priority |
+**Rationale:** MSTR ran +152% between LOI +20 and +60 during Sep'24–Jan'25. Capping at +20 would have forfeited most of that gain on the LEAP.
+
+**GLI adjustment:** When GLI Z-score > +0.5 or GEGI > 1.0, the Momentum threshold rises to min(base+20, 40). When GLI Z < -0.5, it falls to max(base-10, 10). This reflects liquidity-driven cycle timing.
+
+### 10.4 Strike Selection Rules
+
+- **OTM_INCOME mode:** Select strike at delta ≤ 0.25. Never within 20% of current spot (protects against MSTR gap moves).
+- **DELTA_MGMT mode:** Select strike at delta ≤ 0.40. This is deliberate delta reduction, not income maximization.
+- **Duration:** Target 30–45 DTE sweet spot for time decay. Hard maximum 90 DTE.
+- **Income target:** 2–5%/month of LEAP cost basis (cycle average, not monthly floor).
+
+### 10.5 IV Regime — When to Be Aggressive
+
+| IV Percentile | Action |
 |---|---|
-| **LT turns positive** | Primary — structural divergence resolved, exit immediately |
-| 90-bar time stop (~15 trading days) | Secondary — if LT hasn't confirmed, cut the position |
+| 90th+ (Ultra-High) | Maximum aggression — sell at top of delta range; LEAP entry also ideal |
+| 70–90th (High) | Standard cycle — full premium harvest, target 3–5%/month |
+| 30–70th (Normal) | Conservative — OTM only, delta ≤ 0.20; skip if premium < 0.83%/month hurdle |
+| <30th (Low) | Pause AB2; focus on AB3 LEAP accumulation if LOI signals present |
 
-### 10.5 VIX Scaling
+### 10.6 AB1 Interaction
 
-| VIX | Action |
-|---|---|
-| > 25 | +25% position size (high premium = favorable) |
-| 18-25 | Standard sizing |
-| < 18 | -50% position size (low premium = unfavorable) |
+When an AB1 breakout signal fires on an asset where you hold an AB3 LEAP + open short call:
+1. **Pause** new short call sales immediately.
+2. **Evaluate** existing open short call — if breakout confirmed, consider closing to free delta.
+3. **Resume** call sales when AB1 completes (LT turns positive or 90-bar time stop).
 
-### 10.6 Validated Performance (v2)
+Never sell calls during an active AB1 window. You don't cap a breakout.
 
-| Asset | N | Win% | Avg Underlying P&L | Avg Hold |
+### 10.7 Current Gate States (as of Feb 27, 2026)
+
+| Asset | LOI | CT | Gate | Threshold |
+|---|---|---|---|---|
+| MSTR | -30.5 | CT3 | 🔴 NO_CALLS | LOI > -20 to open |
+| IBIT | -20.5 | CT2 | 🔴 NO_CALLS | 0.5 pts from open |
+| TSLA | -3.5 | CT0 | 🟢 OTM_INCOME | Open (CT0 caution) |
+| SPY | +17.4 | CT3 | 🟢 OTM_INCOME | Open |
+| QQQ | +2.5 | CT2 | 🟢 OTM_INCOME | Open |
+| GLD | +23.3 | CT4 | 🟠 DELTA_MGMT | Active trim mode |
+| IWM | +5.0 | CT3 | 🟢 OTM_INCOME | Open |
+
+### 10.8 Validated Entry-Timing Performance (Legacy AB2 — Bull Put Spreads)
+
+The underlying entry-timing signals are unchanged. These win rates apply to the LOI/CT entry gates that now control PMCC call-selling timing:
+
+| Asset | N | Win% | Avg Underlying Move | Avg Hold |
 |---|---|---|---|---|
 | **QQQ** | 25 | **84%** | +1.8% | 4 days |
 | MSTR | 18 | **72%** | +4.7% | 4 days |
@@ -665,18 +700,29 @@ Spreads currently validated on: MSTR, TSLA, SPY, QQQ, GLD, IWM
 | SPY | 27 | 67% | +0.1% | 4 days |
 | TSLA | 18 | 61% | -0.7% | 5 days |
 
-Note: P&L shown is underlying % change from entry to exit. Actual spread P&L will differ based on strike selection, premium received, and IV at entry. Use as timing signal — selection details handled by portfolio owner.
+**PMCC income window availability** (% of bars in OTM_INCOME or DELTA_MGMT gate):
 
-**Exit breakdown:** ~90% of exits are LT_POSITIVE; <10% are TIME_STOP. TIME_STOP exits average -8 to -17% underlying — this is the tail risk.
+| Asset | Income-Available % | Threshold |
+|---|---|---|
+| GLD | 97.2% | LOI > +20 (MR) |
+| SPY | 95.5% | LOI > +20 (MR) |
+| QQQ | 91.1% | LOI > +20 (MR) |
+| IBIT | 89.8% | LOI > +40 (Momentum) |
+| IWM | 86.6% | LOI > +20 (MR) |
+| TSLA | 78.7% | LOI > +40 (Momentum) |
+| MSTR | **76.8%** | LOI > +40 (Momentum) |
 
-### 10.7 What Changed from v1 to v2
+MSTR has 23.2% NO_CALLS time — concentrated in deep accumulation cycles. Those are exactly the windows when you want to preserve LEAP upside, so this is correct behavior.
 
-| Parameter | v1 | v2 | Impact |
-|---|---|---|---|
-| Entry context | Any | MIXED only | +13% win rate on MSTR |
-| Bear Call | MR assets only | Removed for now | Simplification — insufficient signals |
-| Iron Condor | GLD/QQQ/IWM | Removed for now | Needs VIX gate before re-enabling |
-| IBIT | Enabled (67%) | Disabled | MIXED context doesn't predict LT on IBIT |
+### 10.9 Framework Evolution
+
+| Version | AB2 Structure | Status |
+|---|---|---|
+| v1.0 | Bull Put Spreads (any context) | Retired |
+| v2.0 | Bull Put Spreads (MIXED context only) | Retired |
+| **v3.0** | **PMCC income overlay on AB3 LEAPs** | **Active** |
+
+Iron Condors and Bear Call Spreads remain retired (pending P14 reactivation — Gavin to sequence).
 
 ---
 
@@ -684,7 +730,9 @@ Note: P&L shown is underlying % change from entry to exit. Actual spread P&L wil
 
 ### 11.1 Philosophy
 
-AB3 is the long-duration LEAP bucket. It identifies major cycle bottoms using the LOI oscillator and enters with the explicit expectation of holding through the full cycle (months to a year+). Exits are phased — it never tries to pick a top; it trims in tranches as LOI confirms distribution.
+AB3 is the long-duration core bucket. It buys **2-year OTM LEAPs** at deep structural discounts — identified by the LOI oscillator crossing below the accumulation threshold with a confirmed Stage 2 bounce. The 2-year duration provides full cycle runway without expiry pressure, and creates the long leg for the AB2 PMCC income overlay.
+
+Exits are phased — AB3 never tries to pick a top. It trims in 25% tranches as LOI confirms distribution. Baseline allocation: **50% of portfolio** (absorbs former AB2 independent allocation).
 
 ### 11.2 State Machine
 
@@ -764,72 +812,277 @@ When AB3 exits at +80 LOI, the full cycle from accumulation to distribution has 
 
 ---
 
-## 12. AB4 — Cash & STRC Reserve
+## 12. AB4 — Capital Reserve & Deployment Ruleset
+
+> **Fully codified 2026-03-05 (Gavin).** This section supersedes all prior AB4 descriptions.
 
 ### 12.1 Purpose
 
-AB4 is the capital preservation bucket. When signals are absent or regime is bearish, capital sits here rather than being deployed into lower-probability trades.
+AB4 is the yield-bearing capital staging area. It earns income while waiting for LEAP entry signals. All-cash (100% AB4) is a valid posture — no forced deployment ever.
 
-### 12.2 STRC as the Hurdle Rate
+### 12.2 Composition
 
-STRC (Strategy Credit — Saylor's preferred share series) yields approximately **10% annual (~0.83%/month)**. This is the risk-free rate for this system.
+All of the following count as AB4:
+- **STRC** (primary staging vehicle — preferred stock, ~10% annual)
+- **STRK** (acceptable alternative)
+- **STRF** (acceptable alternative)
+- **True cash** (T-bills, money market)
 
-**Decision rule:** Any AB1/AB2 trade must beat 0.83%/month expected return, or the capital stays in STRC.
+**Hard floor rule:** The 10% hard floor must be satisfied by **true cash only**. Preferreds do not count toward the floor. A portfolio that is 15% STRC + 0% cash is violating the floor.
 
-### 12.3 STRC as a Regime Indicator
+### 12.3 Boundaries
 
-STRC price < $97 = credit stress signal. Saylor's funding engine is under pressure. This typically precedes BTC weakness and MSTR drawdowns.
+| Boundary | Value | Type | Notes |
+|---|---|---|---|
+| Hard floor | 10% | **HARD** | True cash only. Never breached under any circumstance. |
+| Hard upper | 100% | **HARD** | All-cash is valid. No forced deployment. |
+| Soft upper | 25% | Soft | Target ceiling. Above this = actively seek qualifying deployments. |
 
-STRC SRI state is included in the regime composite score.
+### 12.4 STRC as Hurdle Rate
 
-### 12.4 Floor
+**Capital only leaves AB4 if the expected return on the target position exceeds STRC yield (~0.83%/month).**
 
-**AB4 minimum: 10%.** Regardless of opportunity set, 10% of each portfolio stays in AB4 at all times. This ensures liquidity for emerging opportunities and prevents full deployment at cycle peaks.
+This is the single decision rule that governs all deployment. If no open signal clears this bar, stay in STRC. Do not deploy into cash drag.
+
+STRC yield also benchmarks AB2: if monthly call premium available is < 0.83%/month of LEAP cost basis, skip the cycle.
+
+### 12.5 STRC as Regime Signal
+
+STRC price is included in the regime composite score and also interpreted directly:
+
+| STRC Price | Signal | Action |
+|---|---|---|
+| ≥ $97 | Saylor engine healthy | Full deployment eligible |
+| $90–$97 | Stress building | Reduce new AB3 entries |
+| < $97 | Credit stress signal | ⚠️ Bearish divergence vs BTC |
+| < $90 | Flywheel impaired | Defensive posture, maximize AB4 |
+
+The preferred stock suite (STRC/STRK/STRF) is a **3–7 day leading indicator** for BTC bottoms. Preferred spreads widening (prices dropping) often precede MSTR weakness. Preferred spreads healthy while BTC is weak = bullish divergence.
+
+### 12.6 Staging Flow
+
+```
+Free cash (AB4 above hard floor)
+    │
+    ▼
+STRC (default) or STRK (alternative)
+    │
+    ├─ Stage 1 fires (LOI crosses threshold) ──► Begin gradual STRC reduction
+    │                                            Don't wait for Stage 2 — preferred
+    │                                            stocks can be thin intraday
+    │
+    ├─ Stage 2 confirmed ─────────────────────► Execute LEAP buy; STRC proceeds
+    │                                            fund the position
+    │
+    └─ No signal / signal below hurdle ────────► Stay in STRC. Wait.
+```
+
+### 12.7 Per-Asset Concentration
+
+**Normal mode (AB4 ≤ 25%):**
+- Soft cap: 20% of total portfolio in any single asset across all buckets combined.
+- This is a soft constraint — it bends when signal landscape demands.
+
+**Excess cash mode (AB4 > 25%):**
+- 20% cap **suspends**.
+- Allocate to the best available signal regardless of concentration.
+- Concentration is acceptable when the entry is prudent (expected return > hurdle, signal quality confirmed).
+- If only one asset is showing an entry, overweight it. The system is not afraid of concentration.
+- Cap reinstates once AB4 returns to ≤ 25%.
+
+**The only constraint that never bends:** 10% AB4 hard floor.
+
+### 12.8 Deployment Priority
+
+When multiple signals are active simultaneously:
+
+| Priority | Signal | Sizing |
+|---|---|---|
+| 1 | AB3 Stage 2 bounce | Full sizing — deploy promptly from STRC |
+| 2 | AB1 pre-breakout (CT2+) | Deploy promptly; shorter hold period |
+| 3 | AB3 Stage 1 watch | Partial — begin STRC reduction; wait for Stage 2 |
+| 4 | AB2 PMCC | No new capital; income overlay only |
 
 ---
 
 ## 13. Capital Allocation Engine
 
-### 13.1 Baseline Allocation
+### 13.1 Baseline Allocation (v3.0)
 
-| Bucket | Purpose | Target % | Floor | Ceiling |
+> **Major change from v2.0:** AB2 no longer consumes independent capital. Its 25% allocation is absorbed into AB3. AB3 is now the dominant bucket.
+
+| Bucket | Purpose | Baseline | Floor | Ceiling |
 |---|---|---|---|---|
-| AB1 | Tactical LEAPs | 25% | None | None |
-| AB2 | Credit spreads | 25% | None | None |
-| AB3 | Strategic LEAPs | 25% | None | **35%** |
-| AB4 | Cash/STRC | 25% | **10%** | None |
+| AB3 | 2-year LEAP accumulation | **50%** | None | 35% (soft alert) |
+| AB1 | Tactical pre-breakout LEAPs | **25%** | None | None |
+| AB4 | Yield-bearing cash reserve | **25%** | **10% true cash** | 100% |
+| AB2 | PMCC income overlay | **0% additional** | — | — |
 
 ### 13.2 AB1 → AB3 Transition
 
 When an AB1 LEAP fails to break out within the failure window:
 
 1. **Trigger:** ST turns negative within 40 bars AND underlying gain < 5%
-2. **Action:** Tag the LEAP as AB3 (accounting change only — LEAP stays open)
-3. **Rationale:** If the LEAP was entered at a genuine accumulation bottom, the long-term thesis holds even if the short-term breakout failed
-4. **Capital flow:** AB1 bucket shrinks, AB3 bucket grows by the same amount
-5. **Alert:** If AB3 would exceed 35%, engine alerts portfolio owner for guidance
-
-**Key:** This is never a forced close. It is a reclassification of intent and accounting.
+2. **Action:** Reclassify the LEAP as AB3 (accounting change only — position stays open)
+3. **Rationale:** If the LEAP was entered at a genuine structural bottom, the long-term thesis holds even if the short-term breakout failed. No forced close.
+4. **Capital flow:** AB1 bucket shrinks; AB3 bucket grows by equivalent amount.
+5. **Alert:** If AB3 mark-to-market would exceed 35% ceiling, engine alerts owner for guidance.
 
 ### 13.3 AB3 Ceiling Enforcement
 
-- **35% ceiling is mark-to-market**, not deployment-based
-- If AB3 positions appreciate past 35% (e.g., MSTR doubles), an alert fires
-- Engine does NOT automatically trim — it alerts the portfolio owner
-- Owner may instruct a rebalance, or override and allow AB3 to stay above 35%
+- 35% ceiling is **mark-to-market** (not deployment-based) — it accounts for position appreciation
+- If AB3 grows past 35% due to price appreciation (e.g., MSTR doubles), an alert fires
+- Engine does NOT auto-trim — owner decides whether to rebalance or override
+- AB2 call sales continue regardless of ceiling breach (income optimization, no new capital)
 
-### 13.4 Portfolio Independence
+### 13.4 Regime Gates
 
-Three portfolios are tracked independently:
-- **Greg** ($5M, live trading)
-- **Gavin** ($1M, paper trading)  
-- **Gary** (TBD, educational)
+| Regime Score | AB3 New Entries | AB1 | AB2 (PMCC) | AB4 |
+|---|---|---|---|---|
+| +4 to +7 (RISK-ON) | Full | Full | Full | 10% |
+| +2 to +3 (BULL) | Full | Full | Full | Normal |
+| 0 to +1 (NEUTRAL) | Full | 75% size | Full | Normal |
+| -1 (CAUTIOUS BEAR) | Pause new | 50% size | OTM only (δ≤0.20) | Build |
+| ≤ -2 (RISK-OFF) | Existing only | No new | Pause | Max |
+
+AB3 existing positions are **never force-closed** by regime. Only new entries are gated.
+
+### 13.5 Multi-Asset Signal Priority
+
+When multiple AB3 entry signals fire simultaneously:
+1. Deepest LOI (most negative = most structurally cheap) gets priority
+2. Strongest Stage 2 confirmation (2-bar confirmed bounce with depth filter)
+3. GLI alignment (bullish GLI → prefer Momentum assets)
+
+When AB4 is overallocated (> 25%) and no signal clearly dominates, concentrate into the best available signal regardless of diversification.
+
+### 13.6 AB1 Multi-Signal Priority
+
+When multiple AB1 pre-breakout signals fire:
+1. Deepest LOI anchor
+2. Higher CT confidence score
+3. GLI Z-score alignment
+
+### 13.7 AB2 Multi-Asset Priority
+
+All AB3 positions with open gates are PMCC candidates. Sort by:
+1. Highest IV / premium relative to LEAP cost basis
+2. LOI position (OTM_INCOME zone preferred over DELTA_MGMT for fresh cycles)
+3. Avoid writing calls during AB1 signal windows on same asset
+
+### 13.8 Portfolio Independence
+
+Three portfolios tracked fully independently:
+
+| Portfolio | Owner | Capital | Mode |
+|---|---|---|---|
+| Greg | Greg McKelvey | $5M | Live execution |
+| Gavin | Gavin | $1M | Paper trading |
+| Gary | Gary | TBD | Educational |
 
 Allocation decisions in one portfolio have zero implications for others.
 
-### 13.5 Bucket Compression Priority
+---
 
-When AB3 receives capital via AB1 transitions, AB1 compresses automatically. If further adjustment is needed, the engine asks the portfolio owner for guidance. AB4 (cash) is the last resort and never goes below 10%.
+## 13a. SRIBI ROC Derivative
+
+### 13a.1 What It Is
+
+The SRIBI ROC (Rate-of-Change) derivative is a momentum wave added to all four SRIBI indicators. It measures how fast the SRIBI is moving, not just where it is.
+
+**Formula (identical across all four timeframes):**
+```python
+roc_raw  = bias_score - bias_score[lookback]   # difference, not %
+roc_line = EMA(roc_raw, smooth=3)              # 3-bar EMA smoothing
+```
+
+**Lookbacks calibrated to each timeframe's natural periodicity:**
+| TF | Lookback | Equivalent Period |
+|---|---|---|
+| VST | 5 bars | 20 hours |
+| ST | 6 bars | 24 hours |
+| LT | 7 bars | 28 hours |
+| VLT | 8 bars | 32 hours |
+
+### 13a.2 Four ROC States
+
+| ROC | SRIBI | State | Meaning |
+|---|---|---|---|
+| > 0 | > 0 | **Accel Bull** | Momentum building — trend strengthening |
+| < 0 | > 0 | **Decel Bull** | Early warning — trend still positive but slowing |
+| > 0 | < 0 | ★ **Drag Diffusing** | **Primary bottom signal** — momentum turning before zero cross |
+| < 0 | < 0 | **Accel Bear** | Full downside momentum |
+
+### 13a.3 Why Drag Diffusing Matters
+
+Backtest (LT ROC-7, MSTR, 27 cycle bottoms 2022–2026):
+- **100% lead rate** at all 27 bottoms — zero lags
+- **60–120 hour lead time** before price bottoms
+- Correctly maintained "Drag Diffusing" through 4 of 5 false LT flips in Feb 2026
+
+The VLT Drag Diffusing signal is the earliest available bottom detection. When VLT ROC turns positive while VLT SRIBI is still negative, the structural downtrend is losing force. This is the first signal to watch before Stage 1 fires.
+
+### 13a.4 Engine Integration
+
+The Python engine computes ROC columns automatically via `add_sribi_roc_columns(df)` before any analysis. All `scan()` and `current_signal()` outputs include:
+- `vst_roc`, `st_roc`, `lt_roc`, `vlt_roc` (float values)
+- `vst_roc_state`, `st_roc_state`, `lt_roc_state`, `vlt_roc_state` (string labels)
+
+**Current MSTR state (Feb 27, 2026):**
+- LT ROC: +21.72 → **Accel Bull** ✅
+- VLT ROC: +3.40 → **Drag Diffusing** ⭐ (VLT still negative — bottom detection active)
+
+---
+
+## 13b. Alert System
+
+### 13b.1 Architecture
+
+The alert system (`pmcc_alerts.py`) runs as Step 5 of the daily pipeline. It compares current PMCC gate states against the previous day's stored states, detects transitions, and fires Discord alerts.
+
+State persistence: `mstr.db` table `pmcc_gate_state`. Every daily run updates the stored state.
+
+### 13b.2 Gate Transition Alerts
+
+| Alert Type | Trigger | Emoji | Color |
+|---|---|---|---|
+| GATE_OPEN | NO_CALLS → OTM_INCOME | 🟢 | Green |
+| GATE_UPGRADE | OTM_INCOME → DELTA_MGMT | 🟠 | Orange |
+| GATE_DOWNGRADE | DELTA_MGMT → OTM_INCOME | 🟡 | Yellow |
+| GATE_CLOSE | Any → NO_CALLS | 🔴 | Red |
+| AB1_PAUSE | Any → PAUSED_AB1 | ⏸️ | Yellow |
+| AB1_RESUME | PAUSED_AB1 → any | ▶️ | Varies |
+
+### 13b.3 Position Action Alerts
+
+| Alert Type | Trigger | Emoji |
+|---|---|---|
+| AB3_BUY | Stage 2 bounce signal (< 48h) | 🎯 |
+| AB3_TRIM | Any trim tranche fires (< 48h) | ⚠️ |
+| AB1_ENTRY | New pre-breakout signal fires | 🚀 |
+
+Every alert footer includes LT + VLT ROC state for immediate context.
+
+### 13b.4 Daily Embed
+
+The daily engine run posts a gate-state column alongside each asset's LOI and context:
+```
+MSTR  $129.63  MIXE  LOI=-30.5⚪  S=+10 L=+10 VL=-30  🔴NOCALLS
+GLD   $283.10  TAIL  LOI=+23.3🟡  S=+10 L=+10 VL=+30  🟠DELTAMGMT
+```
+
+### 13b.5 What Is Not Yet Implemented
+
+- **AB3_WATCH** (Stage 1 zone entry alert) — fires when LOI first crosses below accumulation threshold. Not yet built; only Stage 2 alerts are live.
+- **Per-asset concentration check** — checks 20% cap at recommendation time. Planned for trade recommendation layer.
+
+### 13b.6 Alert Log
+
+All alerts are logged to `pmcc_alert_log` table in `mstr.db`:
+```sql
+SELECT timestamp, asset, alert_type, prev_state, new_state, loi, price, sent
+FROM pmcc_alert_log ORDER BY timestamp DESC LIMIT 20;
+```
 
 ---
 
