@@ -30,6 +30,9 @@ string asset_class = input.string("Auto-Detect", "Asset Class",
 string grp_core = "Core Settings"
 int at_period   = input.int(14, "Trackline ATR Period", group=grp_core)
 float at_coeff  = input.float(1.0, "Trackline ATR Coefficient", group=grp_core)
+float loi_min_for_bp = input.float(-30.0, "LOI Floor for Bull Put (LOI must be above this)",
+    group=grp_core,
+    tooltip="AB2 data finding (Jul25-Feb26): All 29 MIXED+ST+ windows with LOI below -20 led to 15-51% drawdowns. LOI below this level = structural decline, not a MIXED recovery setup. Default -30 filters out the worst entries.")
 
 string grp_disp = "Display"
 bool show_table   = input.bool(true,  "Show Info Table",          group=grp_disp)
@@ -106,6 +109,16 @@ float vlt_sribi = vlt_stl != 0 ? (vlt_ftl - vlt_stl) / vlt_stl * 100 : 0
 int bull_count  = (vst_sribi > 0 ? 1 : 0) + (st_sribi > 0 ? 1 : 0) + (lt_sribi > 0 ? 1 : 0) + (vlt_sribi > 0 ? 1 : 0)
 float sribi_avg = (vst_sribi + st_sribi + lt_sribi + vlt_sribi) / 4.0
 
+// Inline LOI (for structural decline filter — mirrors AB3 formula)
+// Data finding: all MIXED+ST+ windows with LOI below -20 (Jul25-Feb26) led to 15-51% drawdowns.
+float _vlt_n   = math.max(-100, math.min(100, vlt_sribi / 80 * 100))
+float _lt_n    = math.max(-100, math.min(100, lt_sribi  / 80 * 100))
+float _conc_n  = (bull_count - 2.0) / 2.0 * 100
+float _roc     = vlt_sribi - nz(vlt_sribi[10])
+float _roc_n   = math.max(-100, math.min(100, _roc / 40 * 100))
+float loi_ab2  = (_vlt_n * 40 + _roc_n * 30 + _lt_n * 15 + _conc_n * 15) / 100
+bool  loi_ok   = loi_ab2 >= loi_min_for_bp  // structural decline filter
+
 // ═══════════════════════════════════════════════════════════════
 // CONTEXT CLASSIFICATION
 // ═══════════════════════════════════════════════════════════════
@@ -139,8 +152,8 @@ bool st_cross_bear = st_sribi < 0 and nz(st_sribi[1]) >= 0
 // ═══════════════════════════════════════════════════════════════
 
 // Spread window open: MIXED context with ST+ and VST confirming
-bool window_open    = is_mixed and st_pos and vst_pos
-bool window_crossed = is_mixed and st_cross_bull and vst_pos
+bool window_open    = is_mixed and st_pos and vst_pos and loi_ok
+bool window_crossed = is_mixed and st_cross_bull and vst_pos and loi_ok
 
 // Context crossing into MIXED (regardless of ST — useful for alert)
 bool mixed_entry    = is_mixed and context[1] != "MIXED"
@@ -169,11 +182,12 @@ bool ibit_override = is_ibit
 // Gray   = no clear signal
 // ═══════════════════════════════════════════════════════════════
 
-color bg_col = ibit_override     ? color.new(color.purple, 92) :
-     window_open    ? color.new(color.green,  87) :
-     is_mixed and not st_pos ? color.new(color.orange, 90) :
-     is_tailwind    ? color.new(color.red, 94)    :
-     is_headwind    ? color.new(color.gray, 97)   : na
+color bg_col = ibit_override                  ? color.new(color.purple, 92) :
+     window_open                   ? color.new(color.green,  87) :
+     is_mixed and st_pos and not loi_ok ? color.new(color.red, 92) :
+     is_mixed and not st_pos       ? color.new(color.orange, 90) :
+     is_tailwind                   ? color.new(color.red, 94)    :
+     is_headwind                   ? color.new(color.gray, 97)   : na
 
 bgcolor(show_bg ? bg_col : na)
 
@@ -275,7 +289,7 @@ if barstate.islast and show_ribbon
 // INFO TABLE
 // ═══════════════════════════════════════════════════════════════
 
-var table t = table.new(position.bottom_right, 2, 13,
+var table t = table.new(position.bottom_right, 2, 14,
     bgcolor=color.new(color.black, 30), border_width=1, border_color=color.new(color.gray, 60))
 
 if barstate.islast and show_table
@@ -284,13 +298,17 @@ if barstate.islast and show_table
          resolved_class == "Trending (GLD)" ? "GLD" :
          resolved_class == "MR-Small (IWM)" ? "IWM" : "MR"
 
-    color hdr_bg = ibit_override ? color.new(color.purple, 40) :
-         window_open ? color.new(color.green, 30) :
+    bool loi_blocking = is_mixed and st_pos and not loi_ok  // context + ST ok but LOI too deep
+
+    color hdr_bg = ibit_override  ? color.new(color.purple, 40) :
+         window_open   ? color.new(color.green, 30) :
+         loi_blocking  ? color.new(color.red, 45) :
          is_mixed and not st_pos ? color.new(color.orange, 40) :
          is_tailwind ? color.new(color.red, 40) : color.new(color.gray, 40)
 
-    string hdr_str = ibit_override ? "DISABLED (crypto)" :
-         window_open ? "WINDOW OPEN" :
+    string hdr_str = ibit_override  ? "DISABLED (crypto)" :
+         window_open   ? "WINDOW OPEN" :
+         loi_blocking  ? str.format("LOI BLOCKED ({0})", str.tostring(loi_ab2, "#.#")) :
          is_mixed and not st_pos ? "MIXED — WAIT ST" :
          is_tailwind ? "LT+ — WINDOW CLOSED" : "HEADWIND — AVOID"
 
@@ -339,10 +357,17 @@ if barstate.islast and show_table
     table.cell(t, 0, 9, "SRIBI Zone", text_color=color.gray, text_size=size.tiny)
     table.cell(t, 1, 9, str.format("{0} ({1})", zone_str, str.tostring(sribi_avg,"#.#")), text_color=zone_color, text_size=size.tiny)
 
+    // LOI filter status
+    color loi_clr2 = loi_ok ? color.green : color.red
+    string loi_str2 = loi_ok ? str.format("PASS ({0} ≥ {1})", str.tostring(loi_ab2,"#.#"), str.tostring(loi_min_for_bp,"#")) :
+         str.format("BLOCKED ({0} < {1}) — structural decline", str.tostring(loi_ab2,"#.#"), str.tostring(loi_min_for_bp,"#"))
+    table.cell(t, 0, 10, "LOI Filter", text_color=color.gray, text_size=size.tiny)
+    table.cell(t, 1, 10, loi_str2, text_color=loi_clr2, text_size=size.tiny)
+
     // IBIT disabled warning
     if ibit_override
-        table.cell(t, 0, 10, "⛔ IBIT", text_color=color.purple, text_size=size.tiny)
-        table.cell(t, 1, 10, "AB2 disabled — MIXED ctx unreliable on crypto-adjacent", text_color=color.purple, text_size=size.tiny)
+        table.cell(t, 0, 11, "⛔ IBIT", text_color=color.purple, text_size=size.tiny)
+        table.cell(t, 1, 11, "AB2 disabled — MIXED ctx unreliable on crypto-adjacent", text_color=color.purple, text_size=size.tiny)
 
 // ═══════════════════════════════════════════════════════════════
 // LEGEND
