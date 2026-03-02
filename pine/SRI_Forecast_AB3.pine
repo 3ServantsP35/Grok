@@ -169,19 +169,13 @@ color zone_bg = ct4_active                     ? color.new(color.red, 80)    :
      loi < deep_acc_level           ? color.new(#00FF00, 72)      :
      loi < acc_level                ? color.new(color.green, 80)  :
      loi < (is_mr ? -10.0 : -20.0) ? color.new(color.green, 92)  :
-     loi < trim1_level              ? na                          :
+     loi < trim1_level              ? color(na)                   :
      loi < trim2_level              ? color.new(color.orange, 92) :
      loi < trim3_level              ? color.new(color.orange, 82) :
                                       color.new(color.red, 80)
 
 // LOI line color
-color loi_color = ct4_active           ? color.new(color.red, 20)     :
-     loi < deep_acc_level ? color.new(#00FF00, 0)       :
-     loi < acc_level      ? color.new(color.green, 0)   :
-     loi < trim1_level    ? color.new(color.gray, 30)   :
-     loi < trim2_level    ? color.new(color.orange, 30) :
-     loi < trim3_level    ? color.new(color.orange, 0)  :
-                            color.new(color.red, 0)
+color loi_color = ct4_active ? color.new(color.red, 20) : loi < deep_acc_level ? color.new(#00FF00, 0) : loi < acc_level ? color.new(color.green, 0) : loi < trim1_level ? color.new(color.gray, 30) : loi < trim2_level ? color.new(color.orange, 30) : loi < trim3_level ? color.new(color.orange, 0) : color.new(color.red, 0)
 
 // ═══════════════════════════════════════════════════════════════
 // TRIM CYCLE TRACKING (state machine mirror)
