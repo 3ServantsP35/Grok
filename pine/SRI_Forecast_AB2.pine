@@ -143,7 +143,7 @@ bool window_open    = is_mixed and st_pos and vst_pos
 bool window_crossed = is_mixed and st_cross_bull and vst_pos
 
 // Context crossing into MIXED (regardless of ST — useful for alert)
-bool mixed_entry    = is_mixed and nz(context[1]) != "MIXED"
+bool mixed_entry    = is_mixed and context[1] != "MIXED"
 
 // LT turning positive = spread exit signal
 bool lt_positive_cross = lt_pos and nz(lt_sribi[1]) <= 0  // close the spread
@@ -234,29 +234,42 @@ f_get_pct(int z, int di, int p) =>
 if barstate.islast and show_ribbon
     float bp = close
     int[] offs = array.from(0, 5, 10, 15, 20)
-    var line[] blines = array.new<line>(), mlines = array.new<line>(), slines = array.new<line>()
+    var line[] blines = array.new<line>()
+    var line[] mlines = array.new<line>()
+    var line[] slines = array.new<line>()
     var linefill[] fills = array.new<linefill>()
     if array.size(blines)>0
-        for i=0 to array.size(blines)-1 ; line.delete(array.get(blines,i))
+        for i=0 to array.size(blines)-1
+            line.delete(array.get(blines,i))
         array.clear(blines)
     if array.size(mlines)>0
-        for i=0 to array.size(mlines)-1 ; line.delete(array.get(mlines,i))
+        for i=0 to array.size(mlines)-1
+            line.delete(array.get(mlines,i))
         array.clear(mlines)
     if array.size(slines)>0
-        for i=0 to array.size(slines)-1 ; line.delete(array.get(slines,i))
+        for i=0 to array.size(slines)-1
+            line.delete(array.get(slines,i))
         array.clear(slines)
     if array.size(fills)>0
-        for i=0 to array.size(fills)-1 ; linefill.delete(array.get(fills,i))
+        for i=0 to array.size(fills)-1
+            linefill.delete(array.get(fills,i))
         array.clear(fills)
     for seg=0 to 3
-        int bs = bar_index+array.get(offs,seg), be = bar_index+array.get(offs,seg+1)
-        float p25s = seg==0?0.0:f_get_pct(zone,seg-1,0), p50s = seg==0?0.0:f_get_pct(zone,seg-1,1), p75s = seg==0?0.0:f_get_pct(zone,seg-1,2)
-        float p25e = f_get_pct(zone,seg,0), p50e = f_get_pct(zone,seg,1), p75e = f_get_pct(zone,seg,2)
-        line bl = line.new(bs,bp*(1+p75s/100),be,bp*(1+p75e/100),color=color.new(zone_color,50),width=1,style=line.style_dashed)
-        line ml = line.new(bs,bp*(1+p50s/100),be,bp*(1+p50e/100),color=zone_color,width=2)
-        line sl = line.new(bs,bp*(1+p25s/100),be,bp*(1+p25e/100),color=color.new(zone_color,50),width=1,style=line.style_dashed)
-        array.push(blines,bl); array.push(mlines,ml); array.push(slines,sl)
-        array.push(fills, linefill.new(bl,sl,ribbon_fill))
+        int bs = bar_index + array.get(offs, seg)
+        int be = bar_index + array.get(offs, seg+1)
+        float p25s = seg==0 ? 0.0 : f_get_pct(zone, seg-1, 0)
+        float p50s = seg==0 ? 0.0 : f_get_pct(zone, seg-1, 1)
+        float p75s = seg==0 ? 0.0 : f_get_pct(zone, seg-1, 2)
+        float p25e = f_get_pct(zone, seg, 0)
+        float p50e = f_get_pct(zone, seg, 1)
+        float p75e = f_get_pct(zone, seg, 2)
+        line bl = line.new(bs, bp*(1+p75s/100), be, bp*(1+p75e/100), color=color.new(zone_color,50), width=1, style=line.style_dashed)
+        line ml = line.new(bs, bp*(1+p50s/100), be, bp*(1+p50e/100), color=zone_color, width=2)
+        line sl = line.new(bs, bp*(1+p25s/100), be, bp*(1+p25e/100), color=color.new(zone_color,50), width=1, style=line.style_dashed)
+        array.push(blines, bl)
+        array.push(mlines, ml)
+        array.push(slines, sl)
+        array.push(fills, linefill.new(bl, sl, ribbon_fill))
 
 // ═══════════════════════════════════════════════════════════════
 // INFO TABLE
