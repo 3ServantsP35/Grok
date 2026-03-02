@@ -261,8 +261,10 @@ bool deep_enter = ta.crossunder(loi, deep_acc_level)
 // real bottom (Feb 2026, LOI -52) gave clean +25% recovery. Depth filter prevents noise.
 
 // Track the lowest LOI reached while in the zone (resets when zone exits)
+// Uses loi[1] < acc_level instead of nz(in_acc_zone[1]) — nz() rejects series bool
 var float zone_loi_low = 0.0
-if in_acc_zone and not nz(in_acc_zone[1])
+bool was_in_acc_zone = loi[1] < acc_level
+if in_acc_zone and not was_in_acc_zone
     zone_loi_low := loi
 else if in_acc_zone
     zone_loi_low := math.min(zone_loi_low, loi)
@@ -270,6 +272,9 @@ else
     zone_loi_low := 0.0
 
 bool depth_ok = zone_loi_low <= bounce_depth     // zone must have reached min depth
+
+// General rising flag (used in table display + as component of 2-bar confirmation)
+bool loi_now_rising = loi > nz(loi[1])
 
 // 2-bar rising confirmation: LOI rose on both this bar AND the previous bar,
 // but 2 bars ago was still falling (genuine turn, not continuation of an existing rise)
@@ -299,9 +304,9 @@ plot(trim3_level,    "Trim 75%", color=color.new(color.red, 40),    linewidth=1,
 bgcolor(show_zones ? zone_bg : na)
 
 // Signal markers
-// Stage 1: Zone entry markers (triangle — awareness, not yet actionable)
-plot(show_signals and acc_enter  and not deep_enter ? loi : na, "Acc Enter",  style=plot.style_triangledown, color=color.new(color.green, 20),  linewidth=2)
-plot(show_signals and deep_enter                    ? loi : na, "Deep Enter", style=plot.style_triangledown, color=color.new(#00FF00, 10),       linewidth=2)
+// Stage 1: Zone entry markers (triangle at LOI level — awareness, not yet actionable)
+plotshape(show_signals and acc_enter  and not deep_enter ? loi : na, title="Acc Enter",  location=location.absolute, style=shape.triangledown, color=color.new(color.green, 20), size=size.small)
+plotshape(show_signals and deep_enter                    ? loi : na, title="Deep Enter", location=location.absolute, style=shape.triangledown, color=color.new(#00FF00, 10),      size=size.normal)
 // Stage 2: Bottom confirmation (circle — actionable buy signal)
 plot(show_signals and acc_bounce  and not deep_bounce ? loi : na, "Acc Bounce",  style=plot.style_circles, color=color.green, linewidth=3)
 plot(show_signals and deep_bounce                     ? loi : na, "Deep Bounce", style=plot.style_circles, color=#00FF00,     linewidth=5)
