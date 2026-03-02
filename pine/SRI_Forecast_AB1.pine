@@ -1,7 +1,13 @@
-// SRI Forecast AB1 — Directional Trade Signals (v5)
-// ST-Primary Framework: ST = Decision | VST = Timing | LT/VLT = Context
-// Entry: ST SRIBI crosses positive + VST positive (precision)
-// Exit: LT confirms positive (mixed/headwind) or trailing stop (tailwind)
+// SRI Forecast AB1 — Pre-Breakout LEAP Conditions (v6)
+// P6 Framework: CT gate is asset-type-dependent
+//   BTC-proxy (MSTR, IBIT, PURR): CT1 = sweet spot (MIXED context = room to run)
+//   Business Momentum (TSLA):     CT3 required (LT must confirm thesis)
+//   Trending (GLD):               CT1+ viable, all tiers work
+//   MR-Large (SPY, QQQ):          CT2+ marginally best
+//   MR-Small (IWM):               CT1 entry; CT3 = distribution, not entry
+//
+// Visual: Background shows current CT tier. Green = favorable for this asset type.
+// Alerts: Confirmation ladder steps only (CT tier crossings).
 // © RizenShine — Forecast engine by CIO
 
 //@version=6
@@ -10,27 +16,57 @@ indicator(title="SRI Forecast AB1", shorttitle="SRI AB1", overlay=true, max_labe
 // ═══════════════════════════════════════════════════════════════
 // INPUTS
 // ═══════════════════════════════════════════════════════════════
-string grp_mode   = "Asset Mode"
-string asset_mode = input.string("Auto-Detect", "Asset Behavior", options=["Auto-Detect", "Momentum", "Mean-Reverting"], group=grp_mode)
 
-f_is_momentum() =>
-    string t = str.upper(syminfo.ticker)
-    syminfo.type == "crypto" or str.contains(t, "BTC") or str.contains(t, "ETH") or str.contains(t, "SOL") or str.contains(t, "XRP") or str.contains(t, "MSTR") or str.contains(t, "TSLA") or str.contains(t, "IBIT") or str.contains(t, "GBTC") or str.contains(t, "BITO")
+string grp_mode = "Asset Classification"
+string asset_class = input.string("Auto-Detect", "Asset Class",
+    options=["Auto-Detect", "BTC-Proxy (MSTR/IBIT)", "Business Momentum (TSLA)", "Trending (GLD)", "MR-Large (SPY/QQQ)", "MR-Small (IWM)"],
+    tooltip="P6 validated: TSLA requires CT3; MSTR/IBIT use CT1; IWM CT3 is a trim signal, not entry.",
+    group=grp_mode)
 
-string resolved_mode = asset_mode == "Auto-Detect" ? (f_is_momentum() ? "Momentum" : "Mean-Reverting") : asset_mode
-bool is_mr = resolved_mode == "Mean-Reverting"
-
-string grp_core   = "Core Settings"
+string grp_core = "Core Settings"
 int at_period     = input.int(14, "Trackline ATR Period", group=grp_core)
 float at_coeff    = input.float(1.0, "Trackline ATR Coefficient", group=grp_core)
-int cooldown_bars = input.int(18, "Cooldown Between Entries (bars)", group=grp_core, tooltip="Min bars between entries. 18 bars ≈ 3 days on 4H.")
-float trail_hw    = input.float(8.0, "Trailing Stop — Headwind/Mixed (%)", group=grp_core)
-float trail_tw    = input.float(10.0, "Trailing Stop — Tailwind (%)", group=grp_core)
 
-string grp_disp   = "Display"
+string grp_disp = "Display"
 bool show_table   = input.bool(true, "Show Info Table", group=grp_disp)
 bool show_legend  = input.bool(true, "Show Legend", group=grp_disp)
-bool show_context = input.bool(true, "Show Context Background", group=grp_disp)
+bool show_bg      = input.bool(true, "Show CT Tier Background", group=grp_disp)
+bool show_tracklines = input.bool(true, "Show LT Tracklines", group=grp_disp)
+
+// ═══════════════════════════════════════════════════════════════
+// ASSET CLASS AUTO-DETECT
+// ═══════════════════════════════════════════════════════════════
+
+f_is_btc_proxy() =>
+    string t = str.upper(syminfo.ticker)
+    syminfo.type == "crypto" or
+    str.contains(t, "BTC") or str.contains(t, "MSTR") or str.contains(t, "IBIT") or
+    str.contains(t, "GBTC") or str.contains(t, "BITO") or str.contains(t, "PURR")
+
+f_is_tsla() =>
+    str.upper(syminfo.ticker) == "TSLA"
+
+f_is_gld() =>
+    string t = str.upper(syminfo.ticker)
+    str.contains(t, "GLD") or str.contains(t, "IAU") or str.contains(t, "GOLD") or str.contains(t, "XAUUSD")
+
+f_is_iwm() =>
+    string t = str.upper(syminfo.ticker)
+    str.contains(t, "IWM") or str.contains(t, "RUT") or str.contains(t, "TNA") or str.contains(t, "TZA")
+
+string auto_class = f_is_tsla() ? "Business Momentum (TSLA)" :
+     f_is_btc_proxy() ? "BTC-Proxy (MSTR/IBIT)" :
+     f_is_gld() ? "Trending (GLD)" :
+     f_is_iwm() ? "MR-Small (IWM)" : "MR-Large (SPY/QQQ)"
+
+string resolved_class = asset_class == "Auto-Detect" ? auto_class : asset_class
+
+bool is_btc_proxy  = resolved_class == "BTC-Proxy (MSTR/IBIT)"
+bool is_tsla       = resolved_class == "Business Momentum (TSLA)"
+bool is_gld        = resolved_class == "Trending (GLD)"
+bool is_mr_large   = resolved_class == "MR-Large (SPY/QQQ)"
+bool is_iwm        = resolved_class == "MR-Small (IWM)"
+bool is_momentum   = is_btc_proxy or is_tsla
 
 // ═══════════════════════════════════════════════════════════════
 // TRACKLINES + SRIBI (4 Timeframes)
@@ -38,223 +74,267 @@ bool show_context = input.bool(true, "Show Context Background", group=grp_disp)
 
 f_trackline(int period, float coeff) =>
     atr = ta.rma(ta.tr(true), period)
-    upT = low - atr * coeff
+    upT  = low  - atr * coeff
     downT = high + atr * coeff
     cond = ta.rsi(close, period) >= 50
     var float track = 0.0
     track := cond ? math.max(upT, nz(track[1])) : math.min(downT, nz(track[1]))
     track
 
-// VST: RB=2H, FTL=2H, STL=1D
-float vst_ftl = request.security(syminfo.tickerid, "120", f_trackline(at_period, at_coeff))
-float vst_stl = request.security(syminfo.tickerid, "D",   f_trackline(at_period, at_coeff))
+// VST: FTL=2H, STL=1D
+float vst_ftl  = request.security(syminfo.tickerid, "120", f_trackline(at_period, at_coeff))
+float vst_stl  = request.security(syminfo.tickerid, "D",   f_trackline(at_period, at_coeff))
 float vst_sribi = vst_stl != 0 ? (vst_ftl - vst_stl) / vst_stl * 100 : 0
 
-// ST: RB=4H, FTL=2H, STL=1D
-float st_ftl = request.security(syminfo.tickerid, "120", f_trackline(at_period, at_coeff))
-float st_stl = request.security(syminfo.tickerid, "D",   f_trackline(at_period, at_coeff))
-float st_sribi = st_stl != 0 ? (st_ftl - st_stl) / st_stl * 100 : 0
+// ST: FTL=4H, STL=1D
+float st_ftl   = request.security(syminfo.tickerid, "240", f_trackline(at_period, at_coeff))
+float st_stl   = request.security(syminfo.tickerid, "D",   f_trackline(at_period, at_coeff))
+float st_sribi  = st_stl != 0 ? (st_ftl - st_stl) / st_stl * 100 : 0
 
-// LT: RB=1D, FTL=4H, STL=1W
-float lt_ftl = request.security(syminfo.tickerid, "240", f_trackline(at_period, at_coeff))
-float lt_stl = request.security(syminfo.tickerid, "W",   f_trackline(at_period, at_coeff))
-float lt_sribi = lt_stl != 0 ? (lt_ftl - lt_stl) / lt_stl * 100 : 0
+// LT: FTL=4H, STL=1W
+float lt_ftl   = request.security(syminfo.tickerid, "240", f_trackline(at_period, at_coeff))
+float lt_stl   = request.security(syminfo.tickerid, "W",   f_trackline(at_period, at_coeff))
+float lt_sribi  = lt_stl != 0 ? (lt_ftl - lt_stl) / lt_stl * 100 : 0
 
-// VLT: RB=2D, FTL=8H, STL=2W
-float vlt_ftl = request.security(syminfo.tickerid, "480", f_trackline(at_period, at_coeff))
-float vlt_stl = request.security(syminfo.tickerid, "2W",  f_trackline(at_period, at_coeff))
+// VLT: FTL=8H, STL=2W
+float vlt_ftl  = request.security(syminfo.tickerid, "480", f_trackline(at_period, at_coeff))
+float vlt_stl  = request.security(syminfo.tickerid, "2W",  f_trackline(at_period, at_coeff))
 float vlt_sribi = vlt_stl != 0 ? (vlt_ftl - vlt_stl) / vlt_stl * 100 : 0
 
-float sribi_avg = (vst_sribi + st_sribi + lt_sribi + vlt_sribi) / 4.0
-
 // ═══════════════════════════════════════════════════════════════
-// CONTEXT CLASSIFICATION
-// LT/VLT tell you the structural environment, not whether to trade
+// CONCORDANCE TIER CLASSIFICATION
+// CT0: no alignment
+// CT1: VST+ and ST+, LT<0, VLT>0  (MIXED context — sweet spot for BTC-proxy)
+// CT2: VST+ and LT+, VLT>-20       (early structural — sweet spot for MR-Large)
+// CT3: all four TFs positive        (full alignment — required for TSLA)
+// CT4: all four TFs+ and VLT>+20   (overextended — distribution warning on Momentum)
 // ═══════════════════════════════════════════════════════════════
 
-bool lt_neg  = lt_sribi < 0
+bool vst_pos = vst_sribi > 0
+bool st_pos  = st_sribi > 0
 bool lt_pos  = lt_sribi > 0
-bool vlt_neg = vlt_sribi < 0
+bool lt_neg  = lt_sribi < 0
 bool vlt_pos = vlt_sribi > 0
+bool vlt_neg = vlt_sribi < 0
+bool all_pos = vst_pos and st_pos and lt_pos and vlt_pos
 
+int ct_tier = all_pos and vlt_sribi > 20 ? 4 :
+     all_pos                              ? 3 :
+     vst_pos and lt_pos and vlt_sribi > -20 ? 2 :
+     vst_pos and st_pos and lt_neg and vlt_pos ? 1 : 0
+
+// Crossings (confirmation ladder steps)
+int prev_ct = nz(ct_tier[1])
+bool ct_stepped_up   = ct_tier > prev_ct and prev_ct < ct_tier
+bool ct_stepped_down = ct_tier < prev_ct
+bool ct1_cross = ct_tier >= 1 and prev_ct < 1
+bool ct2_cross = ct_tier >= 2 and prev_ct < 2
+bool ct3_cross = ct_tier >= 3 and prev_ct < 3
+bool ct4_cross = ct_tier >= 4 and prev_ct < 4
+bool ct_drop   = ct_tier < prev_ct  // ladder step lost
+
+// ═══════════════════════════════════════════════════════════════
+// PRESCRIBED TRADE CONDITION
+// Determines whether this bar shows favorable conditions for an AB1 LEAP entry
+// Green  = favorable for this asset class
+// Yellow = building / watch closely
+// Gray   = not yet / neutral
+// Red    = avoid (CT4 distribution on Momentum, or CT3 on IWM)
+// ═══════════════════════════════════════════════════════════════
+
+// BTC-proxy: CT1 is the sweet spot. CT3 is still ok but LT already caught up.
+// TSLA: CT3 required — LT must be positive.
+// GLD: CT1 or better. All tiers are viable.
+// MR-Large (SPY/QQQ): CT2 marginally best. CT1 ok.
+// IWM: CT1 is entry. CT3 is a warning (late cycle small-cap trap).
+
+bool cond_favorable = is_btc_proxy ? ct_tier == 1 :
+     is_tsla         ? ct_tier == 3 :
+     is_gld          ? ct_tier >= 1 :
+     is_mr_large     ? ct_tier >= 2 :
+     is_iwm          ? ct_tier == 1 : ct_tier >= 1
+
+bool cond_watch = is_btc_proxy ? ct_tier == 2 :   // CT2: early structural, still ok but LT catching up
+     is_tsla     ? ct_tier == 2 :   // CT2: LT not yet + but getting close
+     is_gld      ? ct_tier == 0 :   // GLD CT0: just watching
+     is_mr_large ? ct_tier == 1 :   // CT1: suboptimal but not bad
+     is_iwm      ? ct_tier == 2 : false
+
+bool cond_avoid = is_btc_proxy ? ct_tier == 4 :   // CT4: distribution warning on Momentum
+     is_tsla     ? ct_tier == 4 :
+     is_iwm      ? ct_tier == 3 or ct_tier == 4 :   // IWM: CT3 is a late-cycle trap (30% win)
+     false
+
+bool cond_tailwind_trap = ct_tier == 3 and is_btc_proxy  // CT3 = LT already caught up — not optimal AB1 timing
+
+// Context string
 string context = lt_neg and vlt_neg ? "HEADWIND" : lt_pos and vlt_pos ? "TAILWIND" : "MIXED"
 
-color ctx_bg = context == "HEADWIND" ? color.new(color.red, 94) : context == "TAILWIND" ? color.new(color.green, 94) : color.new(color.yellow, 95)
-bgcolor(show_context ? ctx_bg : na)
-
 // ═══════════════════════════════════════════════════════════════
-// ST-PRIMARY ENTRY SIGNAL
-//
-// Alert: ST SRIBI crosses positive (the DECISION)
-// Entry: VST SRIBI also positive (precision TIMING)
-// Context modulates exit strategy, not entry decision
+// COLORS & BACKGROUND
 // ═══════════════════════════════════════════════════════════════
 
-bool st_cross_bull = st_sribi > 0 and nz(st_sribi[1]) <= 0
-bool vst_confirms  = vst_sribi > 0
+color c_favorable = color.new(color.green,  88)
+color c_watch     = color.new(color.yellow, 92)
+color c_avoid     = color.new(color.red,    88)
+color c_trap      = color.new(color.orange, 90)
+color c_neutral   = na
 
-bool raw_entry = st_cross_bull and vst_confirms
-
-// Cooldown
-var int last_entry_bar = -999
-bool entry_signal = raw_entry and (bar_index - last_entry_bar) > cooldown_bars
-
-if entry_signal
-    last_entry_bar := bar_index
-
-// ST bearish cross (potential short on MR, or contrarian buy signal)
-bool st_cross_bear = st_sribi < 0 and nz(st_sribi[1]) >= 0
+color bg_color = cond_avoid ? c_avoid : cond_favorable ? c_favorable : cond_watch ? c_watch : cond_tailwind_trap ? c_trap : c_neutral
+bgcolor(show_bg ? bg_color : na)
 
 // ═══════════════════════════════════════════════════════════════
-// EXIT TRACKING
-// Mixed/Headwind: exit when LT confirms positive OR trailing stop
-// Tailwind: ride with wider trailing stop
+// CT TIER MARKERS (below bar — no noise, just crossings)
 // ═══════════════════════════════════════════════════════════════
 
-var bool in_trade = false
-var int trade_bar = 0
-var float trade_entry = 0.0
-var float trade_peak = 0.0
-var string trade_context = ""
-var float active_trail_pct = 0.0
+plotshape(ct1_cross and not cond_avoid, title="CT1 Cross", location=location.belowbar,
+    style=shape.circle, color=color.yellow,     size=size.tiny)
+plotshape(ct2_cross and not cond_avoid, title="CT2 Cross", location=location.belowbar,
+    style=shape.circle, color=color.orange,     size=size.small)
+plotshape(ct3_cross,                    title="CT3 Cross", location=location.belowbar,
+    style=shape.diamond, color=is_tsla ? color.new(#39FF14, 0) : color.new(color.teal, 30), size=size.small)
+plotshape(ct4_cross and is_momentum,    title="CT4 Distribution", location=location.abovebar,
+    style=shape.xcross,  color=color.red,       size=size.small)
+plotshape(is_iwm and ct3_cross,         title="IWM CT3 Warning", location=location.abovebar,
+    style=shape.xcross,  color=color.orange,    size=size.tiny)
 
-if entry_signal
-    in_trade := true
-    trade_bar := bar_index
-    trade_entry := close
-    trade_peak := close
-    trade_context := context
-    active_trail_pct := (context == "TAILWIND") ? trail_tw : trail_hw
-
-if in_trade
-    trade_peak := math.max(trade_peak, close)
-
-// Exit conditions
-bool exit_lt_confirm = in_trade and trade_context != "TAILWIND" and lt_sribi > 0 and nz(lt_sribi[1]) <= 0
-bool exit_trail = in_trade and close < trade_peak * (1 - active_trail_pct / 100)
-
-bool exit_signal = exit_lt_confirm or exit_trail
-string exit_reason = exit_lt_confirm ? "LT Confirm" : exit_trail ? "Trail Stop" : ""
-
-if exit_signal
-    in_trade := false
-
-// Trade P&L for display
-float trade_pnl = in_trade ? (close - trade_entry) / trade_entry * 100 : 0
-float trail_level = in_trade ? trade_peak * (1 - active_trail_pct / 100) : na
-int bars_held = in_trade ? bar_index - trade_bar : 0
-
-// ═══════════════════════════════════════════════════════════════
-// PLOTS
-// ═══════════════════════════════════════════════════════════════
-
-// LT backbone for reference
+// LT Tracklines (reference — helps Gavin read structure)
 bool lt_bullish = lt_ftl > lt_stl
-color ftl_color = lt_ftl > nz(lt_ftl[1]) ? color.new(color.teal, 30) : color.new(color.maroon, 30)
-plot(lt_ftl, "LT Fast Trackline", color=ftl_color, linewidth=2, style=plot.style_circles)
-plot(lt_stl, "LT Slow Trackline", color=lt_bullish ? color.new(color.teal, 40) : color.new(color.maroon, 40), linewidth=2)
+color ltf_color = lt_ftl > nz(lt_ftl[1]) ? color.new(color.teal, 35) : color.new(color.maroon, 35)
+plot(show_tracklines ? lt_ftl : na, "LT Fast TL", color=ltf_color, linewidth=2, style=plot.style_circles)
+plot(show_tracklines ? lt_stl : na, "LT Slow TL", color=lt_bullish ? color.new(color.teal, 45) : color.new(color.maroon, 45), linewidth=2)
 
-// Trailing stop level
-plot(trail_level, "Trail Stop", color=color.new(color.orange, 50), linewidth=1, style=plot.style_stepline)
+// ═══════════════════════════════════════════════════════════════
+// LOI (inline — for anchor reference in table)
+// ═══════════════════════════════════════════════════════════════
 
-// Entry markers
-color fluorescent_green = #39FF14
-plotshape(entry_signal and context == "HEADWIND", title="Entry Headwind", location=location.belowbar, style=shape.diamond, color=color.red, size=size.small)
-plotshape(entry_signal and context == "MIXED", title="Entry Mixed", location=location.belowbar, style=shape.diamond, color=color.yellow, size=size.small)
-plotshape(entry_signal and context == "TAILWIND", title="Entry Tailwind", location=location.belowbar, style=shape.diamond, color=fluorescent_green, size=size.small)
+int bull_count  = (vst_pos ? 1 : 0) + (st_pos ? 1 : 0) + (lt_pos ? 1 : 0) + (vlt_pos ? 1 : 0)
+float vlt_norm  = math.max(-100, math.min(100, vlt_sribi / 80 * 100))
+float lt_norm   = math.max(-100, math.min(100, lt_sribi  / 80 * 100))
+float conc_norm = (bull_count - 2.0) / 2.0 * 100
+float vlt_roc   = vlt_sribi - nz(vlt_sribi[10])
+float roc_norm  = math.max(-100, math.min(100, vlt_roc / 40 * 100))
+float loi       = (vlt_norm * 40 + roc_norm * 30 + lt_norm * 15 + conc_norm * 15) / 100
 
-// Exit markers
-plotshape(exit_lt_confirm, title="Exit LT Confirm", location=location.abovebar, style=shape.xcross, color=color.new(color.blue, 20), size=size.tiny)
-plotshape(exit_trail, title="Exit Trail Stop", location=location.abovebar, style=shape.xcross, color=color.new(color.orange, 20), size=size.tiny)
-
-// ST alert (not yet confirmed by VST — watch for entry)
-plotshape(st_cross_bull and not vst_confirms and not raw_entry, title="ST Alert (VST pending)", location=location.belowbar, style=shape.circle, color=color.new(color.gray, 50), size=size.tiny)
+// LOI anchor: was LOI below accumulation threshold in the last 120 bars?
+float acc_thresh = (is_btc_proxy or is_tsla or is_gld) ? -60.0 : -40.0
+float deep_thresh = (is_btc_proxy or is_tsla or is_gld) ? -80.0 : -60.0
+float loi_min_120 = ta.lowest(loi, 120)
+bool anchor_set  = loi_min_120 < acc_thresh
+bool deep_anchor = loi_min_120 < deep_thresh
 
 // ═══════════════════════════════════════════════════════════════
 // INFO TABLE
 // ═══════════════════════════════════════════════════════════════
 
-var table info_tbl = table.new(position.bottom_right, 2, 12, bgcolor=color.new(color.black, 30), border_width=1, border_color=color.new(color.gray, 60))
+var table t = table.new(position.bottom_right, 2, 13,
+    bgcolor=color.new(color.black, 30), border_width=1, border_color=color.new(color.gray, 60))
 
 if barstate.islast and show_table
-    string mode_tag = is_mr ? "MR" : "TR"
-    string auto_tag = asset_mode == "Auto-Detect" ? "⚡" : ""
+    string class_short = is_btc_proxy ? "BTC-Proxy" : is_tsla ? "TSLA" : is_gld ? "GLD" : is_iwm ? "IWM" : "MR"
+    string auto_tag    = asset_class == "Auto-Detect" ? "⚡" : ""
 
+    // Header: color by condition
+    color hdr_bg = cond_avoid ? color.new(color.red, 30) : cond_favorable ? color.new(color.green, 30) : cond_watch ? color.new(color.yellow, 40) : color.new(color.gray, 40)
+    string cond_str = cond_avoid ? "AVOID" : cond_favorable ? "FAVORABLE" : cond_watch ? "WATCH" : cond_tailwind_trap ? "LT CAUGHT UP" : "NOT YET"
+    table.cell(t, 0, 0, str.format("AB1 {0}{1}", class_short, auto_tag), text_color=color.white, text_size=size.small, bgcolor=hdr_bg)
+    table.cell(t, 1, 0, cond_str, text_color=color.white, text_size=size.small, bgcolor=hdr_bg)
+
+    // CT Tier
+    color ct_clr = ct_tier == 0 ? color.gray : ct_tier == 1 ? color.yellow : ct_tier == 2 ? color.orange : ct_tier == 3 ? color.green : color.red
+    table.cell(t, 0, 1, "CT Tier", text_color=color.gray, text_size=size.tiny)
+    table.cell(t, 1, 1, str.format("CT{0}", ct_tier), text_color=ct_clr, text_size=size.small)
+
+    // Context
     color ctx_clr = context == "HEADWIND" ? color.red : context == "TAILWIND" ? color.green : color.yellow
-    string ctx_icon = context == "HEADWIND" ? "🔴" : context == "TAILWIND" ? "🟢" : "🟡"
-    
-    color hdr_clr = in_trade ? color.new(color.teal, 20) : color.new(color.gray, 30)
-    table.cell(info_tbl, 0, 0, str.format("AB1 [{0}]{1}", mode_tag, auto_tag), text_color=color.white, text_size=size.small, bgcolor=hdr_clr)
-    table.cell(info_tbl, 1, 0, in_trade ? "IN TRADE" : "Watching", text_color=color.white, text_size=size.small, bgcolor=hdr_clr)
+    table.cell(t, 0, 2, "Context", text_color=color.gray, text_size=size.tiny)
+    table.cell(t, 1, 2, context, text_color=ctx_clr, text_size=size.tiny)
 
-    table.cell(info_tbl, 0, 1, "Context", text_color=color.gray, text_size=size.tiny)
-    table.cell(info_tbl, 1, 1, str.format("{0} {1}", ctx_icon, context), text_color=ctx_clr, text_size=size.tiny)
+    // 4 TFs
+    table.cell(t, 0, 3, "VST", text_color=color.gray, text_size=size.tiny)
+    table.cell(t, 1, 3, str.format("{0} {1}", vst_pos ? "●" : "○", str.tostring(vst_sribi, "#.#")),
+        text_color=vst_pos ? color.teal : color.red, text_size=size.tiny)
+    table.cell(t, 0, 4, "ST  (Decision)", text_color=color.white, text_size=size.tiny)
+    table.cell(t, 1, 4, str.format("{0} {1}", st_pos ? "●" : "○", str.tostring(st_sribi, "#.#")),
+        text_color=st_pos ? color.teal : color.red, text_size=size.tiny)
+    table.cell(t, 0, 5, "LT  (Context)", text_color=color.gray, text_size=size.tiny)
+    table.cell(t, 1, 5, str.format("{0} {1}", lt_pos ? "▲" : "▼", str.tostring(lt_sribi, "#.#")),
+        text_color=lt_pos ? color.teal : color.red, text_size=size.tiny)
+    table.cell(t, 0, 6, "VLT (Context)", text_color=color.gray, text_size=size.tiny)
+    table.cell(t, 1, 6, str.format("{0} {1}", vlt_pos ? "▲" : "▼", str.tostring(vlt_sribi, "#.#")),
+        text_color=vlt_pos ? color.teal : color.red, text_size=size.tiny)
 
-    // TF Hierarchy
-    table.cell(info_tbl, 0, 2, "ST (Decision)", text_color=color.white, text_size=size.tiny)
-    table.cell(info_tbl, 1, 2, str.format("{0} {1}", st_sribi > 0 ? "●" : "○", str.tostring(st_sribi, "#.#")), text_color=st_sribi > 0 ? color.teal : color.red, text_size=size.tiny)
+    // LOI anchor
+    color anchor_clr = deep_anchor ? #00FF00 : anchor_set ? color.green : color.gray
+    string anchor_str = deep_anchor ? str.format("DEEP ({0})", str.tostring(loi_min_120, "#.#")) :
+         anchor_set ? str.format("Set ({0})", str.tostring(loi_min_120, "#.#")) : "Not set"
+    table.cell(t, 0, 7, "LOI Anchor", text_color=color.gray, text_size=size.tiny)
+    table.cell(t, 1, 7, anchor_str, text_color=anchor_clr, text_size=size.tiny)
+    table.cell(t, 0, 8, "LOI Now",   text_color=color.gray, text_size=size.tiny)
+    table.cell(t, 1, 8, str.tostring(loi, "#.#"),
+        text_color=loi < acc_thresh ? color.green : loi > 60 ? color.red : color.gray, text_size=size.tiny)
 
-    table.cell(info_tbl, 0, 3, "VST (Timing)", text_color=color.white, text_size=size.tiny)
-    table.cell(info_tbl, 1, 3, str.format("{0} {1}", vst_sribi > 0 ? "●" : "○", str.tostring(vst_sribi, "#.#")), text_color=vst_sribi > 0 ? color.teal : color.red, text_size=size.tiny)
+    // Prescribed entry for this asset
+    string entry_rule = is_btc_proxy ? "CT1 (MIXED): best 78% win" :
+         is_tsla    ? "CT3 (TAILWIND): LT+ req'd" :
+         is_gld     ? "CT1+: all tiers viable" :
+         is_mr_large ? "CT2+: slight edge" :
+         is_iwm     ? "CT1 only; CT3=trap" : "CT1+"
+    table.cell(t, 0, 9, "Entry Rule", text_color=color.gray, text_size=size.tiny)
+    table.cell(t, 1, 9, entry_rule, text_color=color.white, text_size=size.tiny)
 
-    table.cell(info_tbl, 0, 4, "LT (Context)", text_color=color.gray, text_size=size.tiny)
-    table.cell(info_tbl, 1, 4, str.format("{0} {1}", lt_sribi > 0 ? "▲" : "▼", str.tostring(lt_sribi, "#.#")), text_color=lt_sribi > 0 ? color.teal : color.red, text_size=size.tiny)
-
-    table.cell(info_tbl, 0, 5, "VLT (Context)", text_color=color.gray, text_size=size.tiny)
-    table.cell(info_tbl, 1, 5, str.format("{0} {1}", vlt_sribi > 0 ? "▲" : "▼", str.tostring(vlt_sribi, "#.#")), text_color=vlt_sribi > 0 ? color.teal : color.red, text_size=size.tiny)
-
-    table.cell(info_tbl, 0, 6, "SRIBI Avg", text_color=color.gray, text_size=size.tiny)
-    table.cell(info_tbl, 1, 6, str.tostring(sribi_avg, "#.#"), text_color=sribi_avg > 0 ? color.teal : color.red, text_size=size.tiny)
-
-    // Trade status
-    if in_trade
-        color pnl_clr = trade_pnl > 0 ? color.green : color.red
-        table.cell(info_tbl, 0, 7, "P&L", text_color=color.gray, text_size=size.tiny)
-        table.cell(info_tbl, 1, 7, str.format("{0}% ({1}b)", str.tostring(trade_pnl, "+#.#;-#.#"), bars_held), text_color=pnl_clr, text_size=size.tiny)
-        
-        table.cell(info_tbl, 0, 8, "Trail @", text_color=color.gray, text_size=size.tiny)
-        table.cell(info_tbl, 1, 8, str.format("${0} ({1}%)", str.tostring(trail_level, "#.##"), str.tostring(active_trail_pct, "#")), text_color=color.orange, text_size=size.tiny)
-        
-        table.cell(info_tbl, 0, 9, "Entry Ctx", text_color=color.gray, text_size=size.tiny)
-        table.cell(info_tbl, 1, 9, trade_context, text_color=color.gray, text_size=size.tiny)
-        
-        string exit_hint = trade_context != "TAILWIND" ? "LT turns + or trail" : str.format("{0}% trail", trail_tw)
-        table.cell(info_tbl, 0, 10, "Exit Rule", text_color=color.gray, text_size=size.tiny)
-        table.cell(info_tbl, 1, 10, exit_hint, text_color=color.gray, text_size=size.tiny)
+    // CT4 note for Momentum assets
+    if is_momentum and ct_tier == 4
+        table.cell(t, 0, 10, "CT4 ⚠", text_color=color.red, text_size=size.tiny)
+        table.cell(t, 1, 10, "Distribution — do not enter", text_color=color.red, text_size=size.tiny)
+    else if is_iwm and ct_tier >= 3
+        table.cell(t, 0, 10, "CT3 IWM ⚠", text_color=color.orange, text_size=size.tiny)
+        table.cell(t, 1, 10, "Late-cycle trap — trim AB3", text_color=color.orange, text_size=size.tiny)
     else
-        string next_str = st_sribi <= 0 ? "Waiting for ST+" : not vst_confirms ? "ST+ ✓ — waiting VST+" : "Ready"
-        table.cell(info_tbl, 0, 7, "Next", text_color=color.gray, text_size=size.tiny)
-        table.cell(info_tbl, 1, 7, next_str, text_color=color.gray, text_size=size.tiny)
+        table.cell(t, 0, 10, "Next", text_color=color.gray, text_size=size.tiny)
+        string nxt = ct_tier == 0 ? "Wait for CT1" : ct_tier == 1 ? "CT1 ✓ — watch for CT2" :
+             ct_tier == 2 ? "CT2 ✓ — watching CT3" : ct_tier == 3 ? "CT3 ✓ — watch VLT for CT4" : "CT4 reached"
+        table.cell(t, 1, 10, nxt, text_color=color.gray, text_size=size.tiny)
 
 // ═══════════════════════════════════════════════════════════════
 // LEGEND
 // ═══════════════════════════════════════════════════════════════
 
-var table legend_tbl = table.new(position.bottom_left, 2, 8, bgcolor=color.new(color.black, 20), border_width=1, border_color=color.new(color.gray, 70))
+var table leg = table.new(position.bottom_left, 2, 8,
+    bgcolor=color.new(color.black, 25), border_width=1, border_color=color.new(color.gray, 70))
 
 if barstate.islast and show_legend
-    table.cell(legend_tbl, 0, 0, "AB1 v5", text_color=color.white, text_size=size.tiny, bgcolor=color.new(color.gray, 50))
-    table.cell(legend_tbl, 1, 0, "ST-Primary", bgcolor=color.new(color.gray, 50), text_color=color.white, text_size=size.tiny)
-    table.cell(legend_tbl, 0, 1, "◆ green", text_color=fluorescent_green, text_size=size.tiny)
-    table.cell(legend_tbl, 1, 1, "Entry — Tailwind (ride)", text_color=color.white, text_size=size.tiny)
-    table.cell(legend_tbl, 0, 2, "◆ yellow", text_color=color.yellow, text_size=size.tiny)
-    table.cell(legend_tbl, 1, 2, "Entry — Mixed (LT exit)", text_color=color.white, text_size=size.tiny)
-    table.cell(legend_tbl, 0, 3, "◆ red", text_color=color.red, text_size=size.tiny)
-    table.cell(legend_tbl, 1, 3, "Entry — Headwind (tight)", text_color=color.white, text_size=size.tiny)
-    table.cell(legend_tbl, 0, 4, "○ gray", text_color=color.gray, text_size=size.tiny)
-    table.cell(legend_tbl, 1, 4, "ST alert, VST not yet +", text_color=color.gray, text_size=size.tiny)
-    table.cell(legend_tbl, 0, 5, "✕ blue", text_color=color.blue, text_size=size.tiny)
-    table.cell(legend_tbl, 1, 5, "Exit — LT confirmed +", text_color=color.white, text_size=size.tiny)
-    table.cell(legend_tbl, 0, 6, "✕ orange", text_color=color.orange, text_size=size.tiny)
-    table.cell(legend_tbl, 1, 6, "Exit — Trail stop hit", text_color=color.white, text_size=size.tiny)
-    table.cell(legend_tbl, 0, 7, "Background", text_color=color.gray, text_size=size.tiny)
-    table.cell(legend_tbl, 1, 7, "🔴Head 🟡Mix 🟢Tail", text_color=color.gray, text_size=size.tiny)
+    table.cell(leg, 0, 0, "AB1 v6", text_color=color.white, text_size=size.tiny, bgcolor=color.new(color.gray, 50))
+    table.cell(leg, 1, 0, "CT-Aware", text_color=color.white, text_size=size.tiny, bgcolor=color.new(color.gray, 50))
+    table.cell(leg, 0, 1, "█ Green",  text_color=color.green, text_size=size.tiny)
+    table.cell(leg, 1, 1, "Favorable — enter zone",  text_color=color.white, text_size=size.tiny)
+    table.cell(leg, 0, 2, "█ Yellow", text_color=color.yellow, text_size=size.tiny)
+    table.cell(leg, 1, 2, "Building — watch", text_color=color.white, text_size=size.tiny)
+    table.cell(leg, 0, 3, "█ Orange", text_color=color.orange, text_size=size.tiny)
+    table.cell(leg, 1, 3, "LT catching up / CT trap", text_color=color.white, text_size=size.tiny)
+    table.cell(leg, 0, 4, "█ Red",   text_color=color.red, text_size=size.tiny)
+    table.cell(leg, 1, 4, "Avoid — distribution or IWM trap", text_color=color.white, text_size=size.tiny)
+    table.cell(leg, 0, 5, "○ CT1",   text_color=color.yellow, text_size=size.tiny)
+    table.cell(leg, 1, 5, "CT1 cross (MIXED entry ladder)", text_color=color.gray, text_size=size.tiny)
+    table.cell(leg, 0, 6, "◆ CT3",   text_color=color.green, text_size=size.tiny)
+    table.cell(leg, 1, 6, "CT3 cross (TSLA entry / full align)", text_color=color.gray, text_size=size.tiny)
+    table.cell(leg, 0, 7, "✕ CT4/IWM", text_color=color.red, text_size=size.tiny)
+    table.cell(leg, 1, 7, "Distribution / IWM late-cycle warn", text_color=color.gray, text_size=size.tiny)
 
 // ═══════════════════════════════════════════════════════════════
-// ALERTS
+// ALERTS — CONFIRMATION LADDER ONLY
 // ═══════════════════════════════════════════════════════════════
 
-alertcondition(entry_signal, title="AB1 Entry", message="SRI AB1: ST crossed bullish + VST confirms. Context: {{plot(\"Context\")}}. Entry signal.")
-alertcondition(st_cross_bull, title="AB1 ST Alert", message="SRI AB1: ST SRIBI crossed positive — watch for VST confirmation.")
-alertcondition(exit_lt_confirm, title="AB1 Exit LT", message="SRI AB1: EXIT — LT SRIBI turned positive. Structural catch-up complete.")
-alertcondition(exit_trail, title="AB1 Exit Trail", message="SRI AB1: EXIT — Trailing stop hit.")
+alertcondition(ct1_cross, title="AB1 — CT1 Step",
+    message="AB1 Ladder: CT1 reached (MIXED context, VST+ST+). BTC-proxy sweet spot.")
+alertcondition(ct2_cross, title="AB1 — CT2 Step",
+    message="AB1 Ladder: CT2 reached (early structural, LT turning). MR-Large entry zone.")
+alertcondition(ct3_cross, title="AB1 — CT3 Step",
+    message="AB1 Ladder: CT3 reached (all TFs+). TSLA entry confirmed. BTC-proxy LT has caught up.")
+alertcondition(ct4_cross and is_momentum, title="AB1 — CT4 Distribution",
+    message="AB1 WARNING: CT4 on Momentum asset. VLT extended — distribution signal. Do not enter; consider AB3 trim.")
+alertcondition(is_iwm and ct3_cross, title="AB1 — IWM CT3 Warning",
+    message="AB1 IWM: CT3 reached — late-cycle small-cap trap (30% win). Not an AB1 entry. Check AB3 trim schedule.")
+bool was_favorable = cond_favorable[1]
+alertcondition(ct_stepped_down and was_favorable, title="AB1 — Condition Lost",
+    message="AB1: Favorable CT level dropped. Reassess entry.")
