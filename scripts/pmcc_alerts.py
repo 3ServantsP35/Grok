@@ -195,8 +195,15 @@ TRANSITIONS: Dict[Tuple[str, str], Dict] = {
 }
 
 # AB3 signal types that trigger alerts
-AB3_BUY_SIGNALS  = {"ACCUMULATE", "DEEP_ACCUMULATE", "STAGE2_BOUNCE", "BOUNCE"}
-AB3_TRIM_SIGNALS = {"TRIM_25", "TRIM_50", "TRIM_75", "EXIT_100", "DISTRIBUTE"}
+AB3_WATCH_SIGNALS = {"ACC_ENTER", "STAGE1_ENTER", "WATCH"}    # Stage 1: zone entered — prepare STRC
+AB3_BUY_SIGNALS   = {"ACCUMULATE", "DEEP_ACCUMULATE", "STAGE2_BOUNCE", "BOUNCE"}  # Stage 2: act now
+AB3_TRIM_SIGNALS  = {"TRIM_25", "TRIM_50", "TRIM_75", "EXIT_100", "DISTRIBUTE"}
+
+# AB3_WATCH: LOI threshold per asset class (same as AB3 entry thresholds from AGENTS.md)
+AB3_WATCH_THRESHOLD = {
+    "MSTR": -45.0, "TSLA": -45.0, "IBIT": -45.0, "PURR": -45.0,  # Momentum
+    "SPY":  -40.0, "QQQ":  -40.0, "GLD":  -40.0, "IWM":  -40.0,  # MR
+}
 
 COLOR_MAP = {"green": 0x238636, "orange": 0xE3B341, "red": 0xF85149,
              "yellow": 0xD29922, "blue": 0x1F6FEB}
@@ -345,6 +352,60 @@ def detect_gate_transitions(
     return alerts
 
 
+def detect_ab3_watch(
+    prev_states: Dict[str, Dict],
+    current_states: Dict[str, Dict],
+) -> List[Dict]:
+    """
+    Detect when LOI first crosses below the AB3 accumulation threshold (Stage 1).
+    Fires AB3_WATCH alert: "zone entered — begin sizing out of STRC gradually."
+
+    Thresholds: Momentum assets (MSTR/TSLA/IBIT/PURR) = -45; MR (SPY/QQQ/GLD/IWM) = -40.
+    Only fires on the crossing bar (prev ≥ threshold AND current < threshold).
+    """
+    alerts = []
+    for asset, curr in current_states.items():
+        prev     = prev_states.get(asset, {})
+        curr_loi = curr.get("loi", 0) or 0.0
+        prev_loi = prev.get("loi")
+        threshold = AB3_WATCH_THRESHOLD.get(asset.upper(), -45.0)
+
+        # Need previous LOI to detect crossing
+        if prev_loi is None:
+            continue
+
+        prev_loi = float(prev_loi)
+
+        # Only fire on the crossing: prev was above (or at) threshold, now below
+        if prev_loi >= threshold and curr_loi < threshold:
+            price = curr.get("price", 0) or 0
+            ctx   = curr.get("context", "") or ""
+            ct    = curr.get("ct_tier", 0) or 0
+            depth = threshold - curr_loi   # how far below threshold
+
+            alerts.append({
+                "asset":      asset,
+                "alert_type": "AB3_WATCH",
+                "prev_state": f"LOI {prev_loi:+.1f}",
+                "new_state":  f"LOI {curr_loi:+.1f} (below {threshold:+.0f})",
+                "color":      "orange",
+                "emoji":      "🔶",
+                "title":      f"AB3 Stage 1 Watch — {asset}",
+                "body": (
+                    f"**LOI entered accumulation zone — Stage 1 active.**\n"
+                    f"LOI `{curr_loi:+.1f}` crossed below `{threshold:+.0f}` threshold "
+                    f"({depth:.1f} pts below).\n"
+                    f"**CT{ct}** | {ctx} | Price: `${price:.2f}`\n\n"
+                    f"**Action:** Begin gradually reducing STRC exposure. "
+                    f"Do not wait for Stage 2 — preferred stocks can be thin intraday.\n"
+                    f"**Watch for:** 2-bar confirmed LOI bounce from this level = 🎯 AB3_BUY signal."
+                ),
+                "current": curr,
+            })
+
+    return alerts
+
+
 def detect_ab3_alerts(ab3_signals: Dict[str, List]) -> List[Dict]:
     """
     Scan today's AB3 signals for buy/trim events.
@@ -384,7 +445,25 @@ def detect_ab3_alerts(ab3_signals: Dict[str, List]) -> List[Dict]:
                     except Exception:
                         pass  # Can't parse date — include it
 
-                if sig_type in AB3_BUY_SIGNALS:
+                if sig_type in AB3_WATCH_SIGNALS:
+                    alerts.append({
+                        "asset":      asset,
+                        "alert_type": "AB3_WATCH",
+                        "prev_state": "",
+                        "new_state":  sig_type,
+                        "color":      "orange",
+                        "emoji":      "🔶",
+                        "title":      f"AB3 Stage 1 Watch — {asset}",
+                        "body": (
+                            f"**Accumulation zone entered — Stage 1 active.**\n"
+                            f"Signal: `{sig_type}` | LOI `{loi:+.1f}` | Price: `${price:.2f}`\n"
+                            f"**Action:** Begin gradual STRC reduction. "
+                            f"Watch for Stage 2 bounce confirmation → 🎯 AB3_BUY."
+                        ),
+                        "current": {"loi": loi, "price": price},
+                    })
+
+                elif sig_type in AB3_BUY_SIGNALS:
                     alerts.append({
                         "asset":      asset,
                         "alert_type": "AB3_BUY",
@@ -561,7 +640,8 @@ def run(engine_result: Dict, webhook_url: str, db_path: str = DB_PATH) -> int:
     # Detect all alert types
     all_alerts = []
     all_alerts += detect_gate_transitions(prev_states, current_states)
-    all_alerts += detect_ab3_alerts(ab3_signals)
+    all_alerts += detect_ab3_watch(prev_states, current_states)   # Stage 1 zone entry
+    all_alerts += detect_ab3_alerts(ab3_signals)                  # Stage 2 buy + trim
     all_alerts += detect_ab1_alerts(ab1_signals)
 
     # Send alerts and log
