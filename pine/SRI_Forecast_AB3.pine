@@ -16,7 +16,7 @@
 // © RizenShine — Forecast engine by CIO
 
 //@version=6
-indicator(title="SRI Forecast AB3", shorttitle="SRI AB3 LOI", overlay=false, format=format.price, precision=1)
+indicator(title="SRI Forecast AB3", shorttitle="SRI AB3", overlay=false, format=format.price, precision=1)
 
 // ═══════════════════════════════════════════════════════════════
 // INPUTS
@@ -155,18 +155,16 @@ bool iwm_ct3_warn = ct_tier >= 3 and is_iwm
 // ZONE CLASSIFICATION
 // ═══════════════════════════════════════════════════════════════
 
-string loi_zone =
-     loi < deep_acc_level ? "DEEP ACCUM" :
-     loi < acc_level       ? "ACCUMULATE" :
-     loi < (is_mr ? -10.0 : -20.0) ? "Mild Opp" :
-     loi < (is_mr ?   5.0 :   0.0) ? "Neutral"   :
-     loi < trim1_level ? "Hold" :
-     loi < trim2_level ? "Trim Watch" :
-     loi < trim3_level ? "Trim Active" : "DISTRIBUTE"
+string loi_zone = loi < deep_acc_level ? "DEEP ACCUM" :
+     loi < acc_level                ? "ACCUMULATE" :
+     loi < (is_mr ? -10.0 : -20.0) ? "Mild Opp"   :
+     loi < (is_mr ?   5.0 :   0.0) ? "Neutral"     :
+     loi < trim1_level              ? "Hold"        :
+     loi < trim2_level              ? "Trim Watch"  :
+     loi < trim3_level              ? "Trim Active" : "DISTRIBUTE"
 
 // Background color by zone (vivid at extremes, fades in middle)
-color zone_bg =
-     ct4_active                     ? color.new(color.red, 80)    :
+color zone_bg = ct4_active                     ? color.new(color.red, 80)    :
      iwm_ct3_warn                   ? color.new(color.orange, 82) :
      loi < deep_acc_level           ? color.new(#00FF00, 72)      :
      loi < acc_level                ? color.new(color.green, 80)  :
@@ -177,8 +175,7 @@ color zone_bg =
                                       color.new(color.red, 80)
 
 // LOI line color
-color loi_color =
-     ct4_active          ? color.new(color.red, 20)     :
+color loi_color = ct4_active           ? color.new(color.red, 20)     :
      loi < deep_acc_level ? color.new(#00FF00, 0)       :
      loi < acc_level      ? color.new(color.green, 0)   :
      loi < trim1_level    ? color.new(color.gray, 30)   :
@@ -304,17 +301,15 @@ if barstate.islast and show_table
     string class_short = is_btc_proxy ? "BTC-Proxy" : is_tsla ? "TSLA" : is_gld ? "GLD" : is_iwm ? "IWM" : "MR"
     string auto_tag    = asset_class == "Auto-Detect" ? "⚡" : ""
 
-    color hdr_bg =
-         ct4_active          ? color.new(color.red, 25)    :
-         iwm_ct3_warn        ? color.new(color.orange, 30) :
-         loi < deep_acc_level ? color.new(#00FF00, 25)     :
-         loi < acc_level      ? color.new(color.green, 30) :
-         loi > trim3_level    ? color.new(color.red, 30)   :
-         loi > trim2_level    ? color.new(color.orange, 30): color.new(color.gray, 40)
+    color hdr_bg = ct4_active           ? color.new(color.red, 25)    :
+         iwm_ct3_warn         ? color.new(color.orange, 30) :
+         loi < deep_acc_level ? color.new(#00FF00, 25)      :
+         loi < acc_level      ? color.new(color.green, 30)  :
+         loi > trim3_level    ? color.new(color.red, 30)    :
+         loi > trim2_level    ? color.new(color.orange, 30) : color.new(color.gray, 40)
 
-    string hdr_str =
-         ct4_active          ? "CT4 — DISTRIBUTION" :
-         iwm_ct3_warn        ? "IWM CT3 — TRIM" :
+    string hdr_str = ct4_active          ? "CT4 — DISTRIBUTION" :
+         iwm_ct3_warn        ? "IWM CT3 — TRIM"  :
          loi < deep_acc_level ? "DEEP ACCUMULATE" :
          loi < acc_level      ? "ACCUMULATE"      :
          loi > trim3_level    ? "DISTRIBUTE"      :
