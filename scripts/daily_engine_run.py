@@ -50,12 +50,12 @@ WEBHOOK_ALERTS = os.environ.get("DISCORD_WEBHOOK_ALERTS", "")
 CANONICAL_CSVS = {
     # Trading assets
     "BATS_MSTR, 240_7f820.csv":                    "BATS_MSTR, 240_7f820.csv",
-    "BATS_IBIT, 240_ccca2.csv":                    "BATS_IBIT, 240_ccca2.csv",
+    "BATS_IBIT, 240_86dc2.csv":                    "BATS_IBIT, 240_86dc2.csv",
     "BATS_SPY, 240_981cd.csv":                     "BATS_SPY, 240_981cd.csv",
     "BATS_QQQ, 240_21e37.csv":                     "BATS_QQQ, 240_21e37.csv",
     "BATS_GLD, 240_bfd71.csv":                     "BATS_GLD, 240_bfd71.csv",
     "BATS_IWM, 240_cfcaf.csv":                     "BATS_IWM, 240_cfcaf.csv",
-    "BATS_TSLA, 240_bdcd2.csv":                    "BATS_TSLA, 240_bdcd2.csv",
+    "BATS_TSLA, 240_1100b.csv":                    "BATS_TSLA, 240_1100b.csv",
     "BATS_PURR, 240_1fcfd.csv":                    "BATS_PURR, 240_1fcfd.csv",
     # Regime inputs
     "BITSTAMP_BTCUSD, 240_fe30c.csv":              "BITSTAMP_BTCUSD, 240_fe30c.csv",
