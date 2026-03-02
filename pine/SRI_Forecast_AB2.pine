@@ -1,8 +1,18 @@
-// SRI Forecast AB2 — Credit Spread Guidance (v3)
-// ST-Primary Framework: ST = Decision | VST = Timing | LT/VLT = Context
-// Spread Entry: ST crosses + with VST confirming → sell premium into divergence
-// Spread Exit: LT confirms + (structural catch-up) → close for profit
-// STL zone coloring + forecast ribbon retained for visual context
+// SRI Forecast AB2 — Credit Spread Conditions (v4)
+// P6/Engine Framework:
+//   Gate: MIXED context ONLY (LT<0, VLT>0). Validated across all eligible assets.
+//   Strategy: Bull Put Spread (sell puts into ST+ divergence).
+//   Exit: LT turns positive (structural catch-up complete = 90-bar max).
+//   IBIT disabled (MIXED ctx doesn't predict reliable LT catch-up on crypto-adjacent).
+//   Bear Call + Iron Condor disabled pending P14 (Bearish Bias Indicator Suite).
+//
+// Visual: Background shows MIXED opportunity clearly.
+//   Green   = MIXED + ST+ = window open — favorable for Bull Put
+//   Yellow  = ST+ but not MIXED (sub-optimal — note context)
+//   Orange  = MIXED but ST not yet + (wait for ST)
+//   Red/dim = TAILWIND (LT already +, spread window closed) or HEADWIND (avoid)
+//
+// Alerts: Confirmation ladder only (MIXED entry cross, LT exit cross).
 // © RizenShine — Forecast engine by CIO
 
 //@version=6
@@ -11,69 +21,90 @@ indicator(title="SRI Forecast AB2", shorttitle="SRI AB2", overlay=true, max_line
 // ═══════════════════════════════════════════════════════════════
 // INPUTS
 // ═══════════════════════════════════════════════════════════════
-string grp_mode   = "Asset Mode"
-string asset_mode = input.string("Auto-Detect", "Asset Behavior", options=["Auto-Detect", "Momentum", "Mean-Reverting"], group=grp_mode)
 
-f_is_momentum() =>
-    string t = str.upper(syminfo.ticker)
-    syminfo.type == "crypto" or str.contains(t, "BTC") or str.contains(t, "ETH") or str.contains(t, "SOL") or str.contains(t, "XRP") or str.contains(t, "MSTR") or str.contains(t, "TSLA") or str.contains(t, "IBIT") or str.contains(t, "GBTC") or str.contains(t, "BITO")
+string grp_mode = "Asset Classification"
+string asset_class = input.string("Auto-Detect", "Asset Class",
+    options=["Auto-Detect", "BTC-Proxy (MSTR/IBIT)", "Business Momentum (TSLA)", "Trending (GLD)", "MR-Large (SPY/QQQ)", "MR-Small (IWM)"],
+    group=grp_mode)
 
-string resolved_mode = asset_mode == "Auto-Detect" ? (f_is_momentum() ? "Momentum" : "Mean-Reverting") : asset_mode
-bool is_mr = resolved_mode == "Mean-Reverting"
-bool is_momentum = not is_mr
+string grp_core = "Core Settings"
+int at_period   = input.int(14, "Trackline ATR Period", group=grp_core)
+float at_coeff  = input.float(1.0, "Trackline ATR Coefficient", group=grp_core)
 
-string grp_core   = "Core Settings"
-int at_period     = input.int(14, "Trackline ATR Period", group=grp_core)
-float at_coeff    = input.float(1.0, "Trackline ATR Coefficient", group=grp_core)
-int cooldown_bars = input.int(12, "Cooldown Between Spreads (bars)", group=grp_core, tooltip="Min bars between new spread entries. 12 bars ≈ 2 days on 4H.")
-
-string grp_disp   = "Display"
-bool show_ribbon  = input.bool(true, "Show Forecast Ribbon", group=grp_disp)
-bool show_table   = input.bool(true, "Show Info Table", group=grp_disp)
-bool show_legend  = input.bool(true, "Show Legend", group=grp_disp)
-bool show_markers = input.bool(true, "Show AB2 Markers", group=grp_disp)
-bool show_stage_bg = input.bool(true, "Show LT Stage Background", group=grp_disp)
+string grp_disp = "Display"
+bool show_table   = input.bool(true,  "Show Info Table",          group=grp_disp)
+bool show_legend  = input.bool(true,  "Show Legend",              group=grp_disp)
+bool show_bg      = input.bool(true,  "Show Context Background",  group=grp_disp)
+bool show_ribbon  = input.bool(false, "Show Forecast Ribbon",     group=grp_disp)
+bool show_tracklines = input.bool(true, "Show LT Tracklines",     group=grp_disp)
 
 // ═══════════════════════════════════════════════════════════════
-// TRACKLINES + SRIBI (4 Timeframes)
+// ASSET CLASS AUTO-DETECT
+// ═══════════════════════════════════════════════════════════════
+
+f_is_ibit() =>
+    string t = str.upper(syminfo.ticker)
+    str.contains(t, "IBIT") or str.contains(t, "GBTC") or str.contains(t, "BITO")
+
+f_is_btc_proxy() =>
+    string t = str.upper(syminfo.ticker)
+    syminfo.type == "crypto" or str.contains(t, "BTC") or str.contains(t, "MSTR") or
+    str.contains(t, "IBIT") or str.contains(t, "GBTC") or str.contains(t, "BITO") or str.contains(t, "PURR")
+
+f_is_tsla() =>
+    str.upper(syminfo.ticker) == "TSLA"
+
+f_is_gld() =>
+    string t = str.upper(syminfo.ticker)
+    str.contains(t, "GLD") or str.contains(t, "IAU") or str.contains(t, "XAUUSD")
+
+f_is_iwm() =>
+    string t = str.upper(syminfo.ticker)
+    str.contains(t, "IWM") or str.contains(t, "RUT") or str.contains(t, "TNA")
+
+string auto_class = f_is_tsla() ? "Business Momentum (TSLA)" :
+     f_is_btc_proxy() ? "BTC-Proxy (MSTR/IBIT)" :
+     f_is_gld() ? "Trending (GLD)" :
+     f_is_iwm() ? "MR-Small (IWM)" : "MR-Large (SPY/QQQ)"
+
+string resolved_class = asset_class == "Auto-Detect" ? auto_class : asset_class
+
+bool is_btc_proxy = resolved_class == "BTC-Proxy (MSTR/IBIT)"
+bool is_ibit      = f_is_ibit()  // Flag IBIT specifically — disabled for AB2
+bool is_mr        = resolved_class == "MR-Large (SPY/QQQ)" or resolved_class == "MR-Small (IWM)"
+bool is_momentum  = is_btc_proxy or resolved_class == "Business Momentum (TSLA)"
+
+// ═══════════════════════════════════════════════════════════════
+// TRACKLINES + SRIBI
 // ═══════════════════════════════════════════════════════════════
 
 f_trackline(int period, float coeff) =>
     atr = ta.rma(ta.tr(true), period)
-    upT = low - atr * coeff
+    upT   = low  - atr * coeff
     downT = high + atr * coeff
-    cond = ta.rsi(close, period) >= 50
+    cond  = ta.rsi(close, period) >= 50
     var float track = 0.0
     track := cond ? math.max(upT, nz(track[1])) : math.min(downT, nz(track[1]))
     track
 
-// VST: FTL=2H, STL=1D
-float vst_ftl = request.security(syminfo.tickerid, "120", f_trackline(at_period, at_coeff))
-float vst_stl = request.security(syminfo.tickerid, "D",   f_trackline(at_period, at_coeff))
+float vst_ftl  = request.security(syminfo.tickerid, "120", f_trackline(at_period, at_coeff))
+float vst_stl  = request.security(syminfo.tickerid, "D",   f_trackline(at_period, at_coeff))
 float vst_sribi = vst_stl != 0 ? (vst_ftl - vst_stl) / vst_stl * 100 : 0
 
-// ST: FTL=2H, STL=1D (same resolution, different RB context)
-float st_ftl = request.security(syminfo.tickerid, "120", f_trackline(at_period, at_coeff))
-float st_stl = request.security(syminfo.tickerid, "D",   f_trackline(at_period, at_coeff))
-float st_sribi = st_stl != 0 ? (st_ftl - st_stl) / st_stl * 100 : 0
+float st_ftl   = request.security(syminfo.tickerid, "240", f_trackline(at_period, at_coeff))
+float st_stl   = request.security(syminfo.tickerid, "D",   f_trackline(at_period, at_coeff))
+float st_sribi  = st_stl != 0 ? (st_ftl - st_stl) / st_stl * 100 : 0
 
-// LT: FTL=4H, STL=1W
-float lt_ftl = request.security(syminfo.tickerid, "240", f_trackline(at_period, at_coeff))
-float lt_stl = request.security(syminfo.tickerid, "W",   f_trackline(at_period, at_coeff))
-float lt_sribi = lt_stl != 0 ? (lt_ftl - lt_stl) / lt_stl * 100 : 0
+float lt_ftl   = request.security(syminfo.tickerid, "240", f_trackline(at_period, at_coeff))
+float lt_stl   = request.security(syminfo.tickerid, "W",   f_trackline(at_period, at_coeff))
+float lt_sribi  = lt_stl != 0 ? (lt_ftl - lt_stl) / lt_stl * 100 : 0
 
-// VLT: FTL=8H, STL=2W
-float vlt_ftl = request.security(syminfo.tickerid, "480", f_trackline(at_period, at_coeff))
-float vlt_stl = request.security(syminfo.tickerid, "2W",  f_trackline(at_period, at_coeff))
+float vlt_ftl  = request.security(syminfo.tickerid, "480", f_trackline(at_period, at_coeff))
+float vlt_stl  = request.security(syminfo.tickerid, "2W",  f_trackline(at_period, at_coeff))
 float vlt_sribi = vlt_stl != 0 ? (vlt_ftl - vlt_stl) / vlt_stl * 100 : 0
 
+int bull_count  = (vst_sribi > 0 ? 1 : 0) + (st_sribi > 0 ? 1 : 0) + (lt_sribi > 0 ? 1 : 0) + (vlt_sribi > 0 ? 1 : 0)
 float sribi_avg = (vst_sribi + st_sribi + lt_sribi + vlt_sribi) / 4.0
-int bull_count = (vst_sribi > 0 ? 1 : 0) + (st_sribi > 0 ? 1 : 0) + (lt_sribi > 0 ? 1 : 0) + (vlt_sribi > 0 ? 1 : 0)
-
-int zone = sribi_avg < -25 ? 1 : sribi_avg < -5 ? 2 : sribi_avg < 5 ? 3 : sribi_avg < 25 ? 4 : 5
-string zone_name = zone == 1 ? "Very Bearish" : zone == 2 ? "Bearish" : zone == 3 ? "Neutral" : zone == 4 ? "Bullish" : "Very Bullish"
-color zone_color = zone == 1 ? color.new(color.red, 0) : zone == 2 ? color.new(color.orange, 0) : zone == 3 ? color.new(color.gray, 0) : zone == 4 ? color.new(color.teal, 0) : color.new(color.green, 0)
-color ribbon_fill = zone == 1 ? color.new(color.red, 80) : zone == 2 ? color.new(color.orange, 80) : zone == 3 ? color.new(color.gray, 85) : zone == 4 ? color.new(color.teal, 80) : color.new(color.green, 80)
 
 // ═══════════════════════════════════════════════════════════════
 // CONTEXT CLASSIFICATION
@@ -81,419 +112,270 @@ color ribbon_fill = zone == 1 ? color.new(color.red, 80) : zone == 2 ? color.new
 
 bool lt_neg  = lt_sribi < 0
 bool lt_pos  = lt_sribi > 0
-bool vlt_neg = vlt_sribi < 0
 bool vlt_pos = vlt_sribi > 0
+bool vlt_neg = vlt_sribi < 0
+bool st_pos  = st_sribi > 0
+bool vst_pos = vst_sribi > 0
 
 string context = lt_neg and vlt_neg ? "HEADWIND" : lt_pos and vlt_pos ? "TAILWIND" : "MIXED"
 
-// ═══════════════════════════════════════════════════════════════
-// LOI (inline for regime context)
-// ═══════════════════════════════════════════════════════════════
-
-float vlt_norm = math.max(-100, math.min(100, vlt_sribi / 80 * 100))
-float lt_norm  = math.max(-100, math.min(100, lt_sribi / 80 * 100))
-float conc_norm = (bull_count - 2.0) / 2.0 * 100
-float vlt_roc_raw = vlt_sribi - nz(vlt_sribi[10])
-float roc_norm = math.max(-100, math.min(100, vlt_roc_raw / 40 * 100))
-float loi = (vlt_norm * 40 + roc_norm * 30 + lt_norm * 15 + conc_norm * 15) / 100
+bool is_mixed    = context == "MIXED"
+bool is_tailwind = context == "TAILWIND"
+bool is_headwind = context == "HEADWIND"
 
 // ═══════════════════════════════════════════════════════════════
-// LT BACKBONE VISUAL
+// ST CROSSES (decision layer)
 // ═══════════════════════════════════════════════════════════════
 
-bool lt_bullish = lt_ftl > lt_stl
-bool lt_ftl_rising = lt_ftl > nz(lt_ftl[1])
-
-// ATR-based zone computation for STL coloring
-float lt_atr = ta.atr(14)
-float atr_pct = lt_stl != 0 ? (lt_atr / lt_stl) * 100 : 3.0
-float near_pct = math.min(atr_pct * 1.0, is_mr ? 3.0 : 8.0)
-float mid_pct  = math.min(atr_pct * 2.0, is_mr ? 8.0 : 15.0)
-
-float pct_from_stl = lt_stl != 0 ? (close - lt_stl) / lt_stl * 100 : 0
-float abs_pct_from_stl = math.abs(pct_from_stl)
-float pct_from_ftl = lt_ftl != 0 ? (close - lt_ftl) / lt_ftl * 100 : 0
-bool is_support_test = close > lt_stl
-float roc_5 = close[5] != 0 ? (close - close[5]) / close[5] * 100 : 0
-
-bool is_near = abs_pct_from_stl < near_pct
-bool is_mid  = abs_pct_from_stl >= near_pct and abs_pct_from_stl < mid_pct
-bool is_far  = abs_pct_from_stl >= mid_pct
-
-// Breach risk scoring (retained from v2)
-float breach_risk = 0.0
-if is_near
-    if is_support_test
-        breach_risk += lt_ftl < lt_stl ? 3.0 : -2.0
-        breach_risk += bull_count == 0 ? -3.0 : 0.0
-        breach_risk += sribi_avg > 0 ? 2.0 : 0.0
-        breach_risk += roc_5 < -5 ? -1.0 : roc_5 > -2 ? 1.0 : 0.0
-    else
-        breach_risk += lt_ftl > lt_stl ? 3.0 : -2.0
-        breach_risk += bull_count == 0 ? -2.0 : 0.0
-        breach_risk += sribi_avg > 0 ? 2.0 : 0.0
-        breach_risk += roc_5 < -5 ? 1.0 : roc_5 > -2 ? -1.0 : 0.0
-
-int risk_class = breach_risk <= -2 ? 0 : breach_risk >= 2 ? 2 : 1
-
-int spread_zone = 0
-if is_far
-    spread_zone := 0
-else if is_mid
-    spread_zone := 1
-else if is_near
-    if risk_class == 2
-        spread_zone := 4
-    else if risk_class == 0
-        spread_zone := 3
-    else
-        spread_zone := 2
-
-string zone_action = spread_zone == 0 ? "STRC" : spread_zone == 1 ? "Conservative" : spread_zone == 2 ? "Standard" : spread_zone == 3 ? "Overweight" : "Avoid"
-
-color stl_color = switch spread_zone
-    0 => color.new(color.gray, 20)
-    1 => color.new(color.yellow, 0)
-    2 => color.new(#90EE90, 0)
-    3 => color.new(color.green, 0)
-    4 => color.new(color.red, 0)
-    => color.new(color.gray, 20)
-
-color ftl_color = lt_ftl_rising ? color.new(color.teal, 30) : color.new(color.maroon, 30)
-plot(lt_ftl, "LT Fast Trackline", color=ftl_color, linewidth=2, style=plot.style_circles)
-plot(lt_stl, "LT Slow Trackline", color=stl_color, linewidth=3)
-bgcolor(show_stage_bg ? (lt_bullish ? color.new(color.green, 93) : color.new(color.red, 93)) : na)
-
-// ═══════════════════════════════════════════════════════════════
-// AB2 v3 — ST-PRIMARY SPREAD SIGNALS
-//
-// The key insight: sell premium INTO the structural divergence.
-// ST turns bullish while LT is still negative → structural tension.
-// That tension resolves upward 70-84% of the time in 1-3 days.
-// Perfect window for short-dated credit spreads.
-//
-// BULL PUT (sell puts into strength):
-//   Entry: ST crosses + AND VST + (same trigger as AB1)
-//   Best context: MIXED (LT-, VLT+) — 70-85% win, 1-3d hold
-//   Exit: LT turns positive → close spread for profit
-//
-// BEAR CALL (MR assets only — sell calls into weakness):
-//   Entry: ST crosses negative AND VST negative
-//   Context: TAILWIND (LT+, VLT+) — price extended, reversion likely
-//
-// IRON CONDOR (MR assets only — neutral regime):
-//   Entry: Zone 3 (neutral SRIBI avg) + tight ribbon + ST not trending
-// ═══════════════════════════════════════════════════════════════
-
-// ST primary signals
-bool st_cross_bull = st_sribi > 0 and nz(st_sribi[1]) <= 0
+bool st_cross_bull = st_pos and nz(st_sribi[1]) <= 0
 bool st_cross_bear = st_sribi < 0 and nz(st_sribi[1]) >= 0
-bool vst_pos = vst_sribi > 0
-bool vst_neg = vst_sribi < 0
-
-// ── BULL PUT: Divergence Spread ──
-// ST turns bullish + VST confirms, best when LT still negative (room to run)
-// Mixed context: 70-85% win in backtests across QQQ/IWM/GLD/MSTR
-bool raw_bull_put = st_cross_bull and vst_pos and (spread_zone != 4)  // not in RED zone
-var int last_bp_bar = -999
-bool ab2_bull_put = raw_bull_put and (bar_index - last_bp_bar) > cooldown_bars
-if ab2_bull_put
-    last_bp_bar := bar_index
-
-// ── BEAR CALL: MR Reversion Spread ──
-// MR assets only — ST turns bearish with VLT exhausted, price above FTL
-bool raw_bear_call = is_mr and st_cross_bear and vst_neg and pct_from_ftl > 3.0 and (zone >= 4)
-var int last_bc_bar = -999
-bool ab2_bear_call = raw_bear_call and (bar_index - last_bc_bar) > cooldown_bars
-if ab2_bear_call
-    last_bc_bar := bar_index
-
-// ── IRON CONDOR: MR Neutral ──
-// MR assets, neutral zone, tight expected range, no strong ST trend
-float p75_20d = zone == 1 ? 8.74 : zone == 2 ? 6.71 : zone == 3 ? 6.77 : zone == 4 ? 8.95 : 10.96
-float p25_20d = zone == 1 ? -5.81 : zone == 2 ? -8.28 : zone == 3 ? -6.19 : zone == 4 ? -5.86 : -4.61
-float ribbon_width = p75_20d - p25_20d
-
-bool raw_iron_condor = is_mr and (zone == 3) and (ribbon_width < 14.0) and math.abs(st_sribi) < 15 and bull_count >= 1 and bull_count <= 3
-var int last_ic_bar = -999
-bool ab2_iron_condor = raw_iron_condor and (bar_index - last_ic_bar) > cooldown_bars * 2  // wider cooldown for ICs
-if ab2_iron_condor
-    last_ic_bar := bar_index
 
 // ═══════════════════════════════════════════════════════════════
-// SPREAD TRADE TRACKING
-// Track active spread: entry context, LT exit signal, P&L estimate
+// AB2 CONDITION: MIXED + ST+
+// Primary: Bull Put window (MIXED context confirmed)
+// The MIXED context is what gives the structural tension that resolves upward.
+// TAILWIND = LT already positive = spread window CLOSED (too late to enter).
+// HEADWIND = both LT and VLT negative = avoid (no catalyst for resolution).
 // ═══════════════════════════════════════════════════════════════
 
-var bool spread_active = false
-var int spread_bar = 0
-var float spread_entry = 0.0
-var string spread_type = ""
-var string spread_context = ""
-var float spread_peak = 0.0
-var float spread_trough = 0.0
+// Spread window open: MIXED context with ST+ and VST confirming
+bool window_open    = is_mixed and st_pos and vst_pos
+bool window_crossed = is_mixed and st_cross_bull and vst_pos
 
-if ab2_bull_put
-    spread_active := true
-    spread_bar := bar_index
-    spread_entry := close
-    spread_type := "Bull Put"
-    spread_context := context
-    spread_peak := close
-    spread_trough := close
+// Context crossing into MIXED (regardless of ST — useful for alert)
+bool mixed_entry    = is_mixed and nz(context[1]) != "MIXED"
 
-if ab2_bear_call
-    spread_active := true
-    spread_bar := bar_index
-    spread_entry := close
-    spread_type := "Bear Call"
-    spread_context := context
-    spread_peak := close
-    spread_trough := close
+// LT turning positive = spread exit signal
+bool lt_positive_cross = lt_pos and nz(lt_sribi[1]) <= 0  // close the spread
 
-if ab2_iron_condor
-    spread_active := true
-    spread_bar := bar_index
-    spread_entry := close
-    spread_type := "Iron Condor"
-    spread_context := context
-    spread_peak := close
-    spread_trough := close
+// Time stop reference (90 bars max per engine rule)
+// Track bars in MIXED context since ST turned positive
+var int mixed_bar_enter = -999
+if window_crossed
+    mixed_bar_enter := bar_index
+int bars_in_window = window_open and mixed_bar_enter > 0 ? bar_index - mixed_bar_enter : 0
+bool time_stop_warn = bars_in_window >= 80  // warn at 80, hard stop at 90
+bool time_stop_hit  = bars_in_window >= 90
 
-if spread_active
-    spread_peak := math.max(spread_peak, close)
-    spread_trough := math.min(spread_trough, close)
-
-// Exit: LT turns positive (for bull puts in mixed/headwind)
-// or LT turns negative (for bear calls in tailwind)
-bool exit_bp_lt = spread_active and spread_type == "Bull Put" and spread_context != "TAILWIND" and lt_sribi > 0 and nz(lt_sribi[1]) <= 0
-bool exit_bc_lt = spread_active and spread_type == "Bear Call" and lt_sribi < 0 and nz(lt_sribi[1]) >= 0
-bool exit_time  = spread_active and (bar_index - spread_bar) > 60  // 10-day max hold safety
-bool exit_signal = exit_bp_lt or exit_bc_lt or exit_time
-
-string exit_reason = exit_bp_lt ? "LT Confirm" : exit_bc_lt ? "LT Revert" : exit_time ? "Time Stop" : ""
-
-if exit_signal
-    spread_active := false
-
-float spread_pnl = spread_active ? (spread_type == "Bear Call" ? (spread_entry - close) / spread_entry * 100 : (close - spread_entry) / spread_entry * 100) : 0
-int spread_bars = spread_active ? bar_index - spread_bar : 0
-
-// Composite signal string
-string ab2_signal = ab2_bull_put ? "Bull Put ▲" : ab2_bear_call ? "Bear Call ▼" : ab2_iron_condor ? "Iron Condor ↔" : spread_active ? str.format("{0} (active)", spread_type) : "Watching"
+// IBIT override — window shows but flagged disabled
+bool ibit_override = is_ibit
 
 // ═══════════════════════════════════════════════════════════════
-// MARKERS
+// CONDITION COLORS
+// Green  = window open (MIXED + ST+ + VST+) — favorable for Bull Put
+// Orange = MIXED but ST not yet + — wait for ST cross
+// Yellow = ST+ but context is not MIXED (TAILWIND or HEADWIND with ST recovery)
+// Red    = TAILWIND (window closed — LT caught up) or HEADWIND (avoid)
+// Gray   = no clear signal
 // ═══════════════════════════════════════════════════════════════
 
-// Entry markers: context-colored for bull puts
-color fluorescent_green = #39FF14
+color bg_col = ibit_override     ? color.new(color.purple, 92) :
+     window_open    ? color.new(color.green,  87) :
+     is_mixed and not st_pos ? color.new(color.orange, 90) :
+     is_tailwind    ? color.new(color.red, 94)    :
+     is_headwind    ? color.new(color.gray, 97)   : na
 
-plotshape(show_markers and ab2_bull_put and context == "HEADWIND", title="BP Headwind", location=location.belowbar, style=shape.diamond, color=color.red, size=size.small)
-plotshape(show_markers and ab2_bull_put and context == "MIXED", title="BP Mixed", location=location.belowbar, style=shape.diamond, color=color.yellow, size=size.small)
-plotshape(show_markers and ab2_bull_put and context == "TAILWIND", title="BP Tailwind", location=location.belowbar, style=shape.diamond, color=fluorescent_green, size=size.small)
-
-plotshape(show_markers and ab2_bear_call, title="Bear Call", location=location.abovebar, style=shape.diamond, color=color.red, size=size.small)
-plotshape(show_markers and ab2_iron_condor, title="Iron Condor", location=location.belowbar, style=shape.circle, color=color.purple, size=size.tiny)
-
-// Exit markers
-plotshape(show_markers and (exit_bp_lt or exit_bc_lt), title="Exit LT", location=location.abovebar, style=shape.xcross, color=color.new(color.blue, 20), size=size.tiny)
-plotshape(show_markers and exit_time, title="Exit Time", location=location.abovebar, style=shape.xcross, color=color.new(color.orange, 20), size=size.tiny)
+bgcolor(show_bg ? bg_col : na)
 
 // ═══════════════════════════════════════════════════════════════
-// FORECAST RIBBON
+// LT BACKBONE (structural reference)
+// Color shows whether price is above/below LT slow trackline
 // ═══════════════════════════════════════════════════════════════
 
-f_get_pct(int z, int day_idx, int pct) =>
-    float result = 0.0
+bool lt_bullish      = lt_ftl > lt_stl
+bool lt_ftl_rising   = lt_ftl > nz(lt_ftl[1])
+
+color ftl_col = lt_ftl_rising ? color.new(color.teal, 35) : color.new(color.maroon, 35)
+color stl_col = is_mixed  ? color.new(color.yellow, 0)  :
+     lt_bullish ? color.new(color.teal, 30) : color.new(color.maroon, 30)
+
+plot(show_tracklines ? lt_ftl : na, "LT Fast TL", color=ftl_col, linewidth=2, style=plot.style_circles)
+plot(show_tracklines ? lt_stl : na, "LT Slow TL", color=stl_col, linewidth=3)
+
+// ═══════════════════════════════════════════════════════════════
+// ENTRY / EXIT MARKERS (minimal — on crossing only)
+// ═══════════════════════════════════════════════════════════════
+
+plotshape(window_crossed and not ibit_override, title="BP Entry", location=location.belowbar,
+    style=shape.diamond, color=color.new(#39FF14, 0), size=size.small)
+plotshape(mixed_entry and not st_pos and not ibit_override, title="MIXED Watch", location=location.belowbar,
+    style=shape.circle, color=color.orange, size=size.tiny)
+plotshape(lt_positive_cross, title="LT Exit",   location=location.abovebar,
+    style=shape.xcross, color=color.new(color.blue, 20), size=size.small)
+plotshape(time_stop_hit, title="Time Stop",     location=location.abovebar,
+    style=shape.xcross, color=color.new(color.orange, 20), size=size.tiny)
+plotshape(ibit_override, title="IBIT Disabled", location=location.belowbar,
+    style=shape.circle, color=color.new(color.purple, 40), size=size.tiny)
+
+// ═══════════════════════════════════════════════════════════════
+// FORECAST RIBBON (optional — from backtested SRIBI-zone returns)
+// ═══════════════════════════════════════════════════════════════
+
+int zone = sribi_avg < -25 ? 1 : sribi_avg < -5 ? 2 : sribi_avg < 5 ? 3 : sribi_avg < 25 ? 4 : 5
+color zone_color  = zone == 1 ? color.new(color.red, 0) : zone == 2 ? color.new(color.orange, 0) :
+     zone == 3 ? color.new(color.gray, 0) : zone == 4 ? color.new(color.teal, 0) : color.new(color.green, 0)
+color ribbon_fill = zone == 1 ? color.new(color.red, 80) : zone == 2 ? color.new(color.orange, 80) :
+     zone == 3 ? color.new(color.gray, 85) : zone == 4 ? color.new(color.teal, 80) : color.new(color.green, 80)
+
+f_get_pct(int z, int di, int p) =>
+    float r = 0.0
     if z == 1
-        if pct == 0
-            result := day_idx == 0 ? -2.91 : day_idx == 1 ? -3.66 : day_idx == 2 ? -4.92 : -5.81
-        else if pct == 1
-            result := day_idx == 0 ? 0.81 : day_idx == 1 ? 0.43 : day_idx == 2 ? 0.70 : 1.29
-        else
-            result := day_idx == 0 ? 4.21 : day_idx == 1 ? 5.72 : day_idx == 2 ? 6.93 : 8.74
+        r := p == 0 ? (di==0?-2.91:di==1?-3.66:di==2?-4.92:-5.81) : p==1 ? (di==0?0.81:di==1?0.43:di==2?0.70:1.29) : (di==0?4.21:di==1?5.72:di==2?6.93:8.74)
     else if z == 2
-        if pct == 0
-            result := day_idx == 0 ? -3.30 : day_idx == 1 ? -4.80 : day_idx == 2 ? -5.83 : -8.28
-        else if pct == 1
-            result := day_idx == 0 ? -0.24 : day_idx == 1 ? -0.30 : day_idx == 2 ? -0.15 : -0.58
-        else
-            result := day_idx == 0 ? 2.72 : day_idx == 1 ? 4.41 : day_idx == 2 ? 5.18 : 6.71
+        r := p == 0 ? (di==0?-3.30:di==1?-4.80:di==2?-5.83:-8.28) : p==1 ? (di==0?-0.24:di==1?-0.30:di==2?-0.15:-0.58) : (di==0?2.72:di==1?4.41:di==2?5.18:6.71)
     else if z == 3
-        if pct == 0
-            result := day_idx == 0 ? -3.00 : day_idx == 1 ? -4.95 : day_idx == 2 ? -5.81 : -6.19
-        else if pct == 1
-            result := day_idx == 0 ? -0.15 : day_idx == 1 ? -0.12 : day_idx == 2 ? -1.03 : -1.21
-        else
-            result := day_idx == 0 ? 3.21 : day_idx == 1 ? 4.46 : day_idx == 2 ? 5.36 : 6.77
+        r := p == 0 ? (di==0?-3.00:di==1?-4.95:di==2?-5.81:-6.19) : p==1 ? (di==0?-0.15:di==1?-0.12:di==2?-1.03:-1.21) : (di==0?3.21:di==1?4.46:di==2?5.36:6.77)
     else if z == 4
-        if pct == 0
-            result := day_idx == 0 ? -2.67 : day_idx == 1 ? -4.07 : day_idx == 2 ? -4.61 : -5.86
-        else if pct == 1
-            result := day_idx == 0 ? 0.29 : day_idx == 1 ? 0.85 : day_idx == 2 ? 0.86 : 0.10
-        else
-            result := day_idx == 0 ? 3.72 : day_idx == 1 ? 6.10 : day_idx == 2 ? 7.19 : 8.95
+        r := p == 0 ? (di==0?-2.67:di==1?-4.07:di==2?-4.61:-5.86) : p==1 ? (di==0?0.29:di==1?0.85:di==2?0.86:0.10)    : (di==0?3.72:di==1?6.10:di==2?7.19:8.95)
     else
-        if pct == 0
-            result := day_idx == 0 ? -2.76 : day_idx == 1 ? -4.45 : day_idx == 2 ? -4.79 : -4.61
-        else if pct == 1
-            result := day_idx == 0 ? 0.08 : day_idx == 1 ? 1.01 : day_idx == 2 ? 1.42 : 2.78
-        else
-            result := day_idx == 0 ? 3.73 : day_idx == 1 ? 6.19 : day_idx == 2 ? 8.98 : 10.96
-    result
+        r := p == 0 ? (di==0?-2.76:di==1?-4.45:di==2?-4.79:-4.61) : p==1 ? (di==0?0.08:di==1?1.01:di==2?1.42:2.78)    : (di==0?3.73:di==1?6.19:di==2?8.98:10.96)
+    r
 
 if barstate.islast and show_ribbon
-    float base_price = close
-    int[] offsets = array.from(0, 5, 10, 15, 20)
-    var line[] bull_lines = array.new<line>()
-    var line[] base_lines = array.new<line>()
-    var line[] bear_lines = array.new<line>()
-    var linefill[] fills  = array.new<linefill>()
-    if array.size(bull_lines) > 0
-        for i = 0 to array.size(bull_lines) - 1
-            line.delete(array.get(bull_lines, i))
-        array.clear(bull_lines)
-    if array.size(base_lines) > 0
-        for i = 0 to array.size(base_lines) - 1
-            line.delete(array.get(base_lines, i))
-        array.clear(base_lines)
-    if array.size(bear_lines) > 0
-        for i = 0 to array.size(bear_lines) - 1
-            line.delete(array.get(bear_lines, i))
-        array.clear(bear_lines)
-    if array.size(fills) > 0
-        for i = 0 to array.size(fills) - 1
-            linefill.delete(array.get(fills, i))
+    float bp = close
+    int[] offs = array.from(0, 5, 10, 15, 20)
+    var line[] blines = array.new<line>(), mlines = array.new<line>(), slines = array.new<line>()
+    var linefill[] fills = array.new<linefill>()
+    if array.size(blines)>0
+        for i=0 to array.size(blines)-1 ; line.delete(array.get(blines,i))
+        array.clear(blines)
+    if array.size(mlines)>0
+        for i=0 to array.size(mlines)-1 ; line.delete(array.get(mlines,i))
+        array.clear(mlines)
+    if array.size(slines)>0
+        for i=0 to array.size(slines)-1 ; line.delete(array.get(slines,i))
+        array.clear(slines)
+    if array.size(fills)>0
+        for i=0 to array.size(fills)-1 ; linefill.delete(array.get(fills,i))
         array.clear(fills)
-    for seg = 0 to 3
-        int bar_start = bar_index + array.get(offsets, seg)
-        int bar_end   = bar_index + array.get(offsets, seg + 1)
-        float p25_s = seg == 0 ? 0.0 : f_get_pct(zone, seg - 1, 0)
-        float p50_s = seg == 0 ? 0.0 : f_get_pct(zone, seg - 1, 1)
-        float p75_s = seg == 0 ? 0.0 : f_get_pct(zone, seg - 1, 2)
-        float p25_e = f_get_pct(zone, seg, 0)
-        float p50_e = f_get_pct(zone, seg, 1)
-        float p75_e = f_get_pct(zone, seg, 2)
-        line bl = line.new(bar_start, base_price * (1 + p75_s / 100), bar_end, base_price * (1 + p75_e / 100), color=color.new(zone_color, 50), width=1, style=line.style_dashed)
-        line ml = line.new(bar_start, base_price * (1 + p50_s / 100), bar_end, base_price * (1 + p50_e / 100), color=zone_color, width=2)
-        line sl = line.new(bar_start, base_price * (1 + p25_s / 100), bar_end, base_price * (1 + p25_e / 100), color=color.new(zone_color, 50), width=1, style=line.style_dashed)
-        array.push(bull_lines, bl)
-        array.push(base_lines, ml)
-        array.push(bear_lines, sl)
-        array.push(fills, linefill.new(bl, sl, ribbon_fill))
+    for seg=0 to 3
+        int bs = bar_index+array.get(offs,seg), be = bar_index+array.get(offs,seg+1)
+        float p25s = seg==0?0.0:f_get_pct(zone,seg-1,0), p50s = seg==0?0.0:f_get_pct(zone,seg-1,1), p75s = seg==0?0.0:f_get_pct(zone,seg-1,2)
+        float p25e = f_get_pct(zone,seg,0), p50e = f_get_pct(zone,seg,1), p75e = f_get_pct(zone,seg,2)
+        line bl = line.new(bs,bp*(1+p75s/100),be,bp*(1+p75e/100),color=color.new(zone_color,50),width=1,style=line.style_dashed)
+        line ml = line.new(bs,bp*(1+p50s/100),be,bp*(1+p50e/100),color=zone_color,width=2)
+        line sl = line.new(bs,bp*(1+p25s/100),be,bp*(1+p25e/100),color=color.new(zone_color,50),width=1,style=line.style_dashed)
+        array.push(blines,bl); array.push(mlines,ml); array.push(slines,sl)
+        array.push(fills, linefill.new(bl,sl,ribbon_fill))
 
 // ═══════════════════════════════════════════════════════════════
 // INFO TABLE
 // ═══════════════════════════════════════════════════════════════
 
-var table info_tbl = table.new(position.bottom_right, 2, 14, bgcolor=color.new(color.black, 30), border_width=1, border_color=color.new(color.gray, 60))
+var table t = table.new(position.bottom_right, 2, 13,
+    bgcolor=color.new(color.black, 30), border_width=1, border_color=color.new(color.gray, 60))
 
 if barstate.islast and show_table
-    string mode_tag = is_mr ? "MR" : "TR"
-    string auto_tag = asset_mode == "Auto-Detect" ? "⚡" : ""
+    string class_short = is_ibit ? "IBIT ⛔" : is_btc_proxy ? "BTC-Proxy" :
+         resolved_class == "Business Momentum (TSLA)" ? "TSLA" :
+         resolved_class == "Trending (GLD)" ? "GLD" :
+         resolved_class == "MR-Small (IWM)" ? "IWM" : "MR"
 
-    color ctx_clr = context == "HEADWIND" ? color.red : context == "TAILWIND" ? color.green : color.yellow
-    string ctx_icon = context == "HEADWIND" ? "🔴" : context == "TAILWIND" ? "🟢" : "🟡"
+    color hdr_bg = ibit_override ? color.new(color.purple, 40) :
+         window_open ? color.new(color.green, 30) :
+         is_mixed and not st_pos ? color.new(color.orange, 40) :
+         is_tailwind ? color.new(color.red, 40) : color.new(color.gray, 40)
 
-    color hdr_clr = spread_active ? color.new(color.teal, 20) : color.new(color.gray, 30)
-    table.cell(info_tbl, 0, 0, str.format("AB2 [{0}]{1}", mode_tag, auto_tag), text_color=color.white, text_size=size.small, bgcolor=hdr_clr)
-    table.cell(info_tbl, 1, 0, zone_name, text_color=color.white, text_size=size.small, bgcolor=zone_color)
+    string hdr_str = ibit_override ? "DISABLED (crypto)" :
+         window_open ? "WINDOW OPEN" :
+         is_mixed and not st_pos ? "MIXED — WAIT ST" :
+         is_tailwind ? "LT+ — WINDOW CLOSED" : "HEADWIND — AVOID"
 
-    // Context
-    table.cell(info_tbl, 0, 1, "Context", text_color=color.gray, text_size=size.tiny)
-    table.cell(info_tbl, 1, 1, str.format("{0} {1}", ctx_icon, context), text_color=ctx_clr, text_size=size.tiny)
+    table.cell(t, 0, 0, str.format("AB2 Bull Put [{0}]", class_short), text_color=color.white, text_size=size.small, bgcolor=hdr_bg)
+    table.cell(t, 1, 0, hdr_str, text_color=color.white, text_size=size.small, bgcolor=hdr_bg)
 
-    // TF Hierarchy — labeled by role
-    table.cell(info_tbl, 0, 2, "ST (Decision)", text_color=color.white, text_size=size.tiny)
-    table.cell(info_tbl, 1, 2, str.format("{0} {1}", st_sribi > 0 ? "●" : "○", str.tostring(st_sribi, "#.#")), text_color=st_sribi > 0 ? color.teal : color.red, text_size=size.tiny)
+    color ctx_clr = is_mixed ? color.yellow : is_tailwind ? color.green : color.red
+    table.cell(t, 0, 1, "Context", text_color=color.gray, text_size=size.tiny)
+    table.cell(t, 1, 1, context, text_color=ctx_clr, text_size=size.tiny)
 
-    table.cell(info_tbl, 0, 3, "VST (Timing)", text_color=color.white, text_size=size.tiny)
-    table.cell(info_tbl, 1, 3, str.format("{0} {1}", vst_sribi > 0 ? "●" : "○", str.tostring(vst_sribi, "#.#")), text_color=vst_sribi > 0 ? color.teal : color.red, text_size=size.tiny)
+    table.cell(t, 0, 2, "ST  (Decision)", text_color=color.white, text_size=size.tiny)
+    table.cell(t, 1, 2, str.format("{0} {1}", st_pos?"●":"○", str.tostring(st_sribi,"#.#")),
+        text_color=st_pos?color.teal:color.red, text_size=size.tiny)
+    table.cell(t, 0, 3, "VST (Timing)",   text_color=color.gray, text_size=size.tiny)
+    table.cell(t, 1, 3, str.format("{0} {1}", vst_pos?"●":"○", str.tostring(vst_sribi,"#.#")),
+        text_color=vst_pos?color.teal:color.red, text_size=size.tiny)
+    table.cell(t, 0, 4, "LT  (Exit Gate)", text_color=color.gray, text_size=size.tiny)
+    table.cell(t, 1, 4, str.format("{0} {1} {2}", lt_pos?"▲":"▼", str.tostring(lt_sribi,"#.#"), lt_positive_cross?"← EXIT":""),
+        text_color=lt_pos?color.teal:color.red, text_size=size.tiny)
+    table.cell(t, 0, 5, "VLT (Context)",  text_color=color.gray, text_size=size.tiny)
+    table.cell(t, 1, 5, str.format("{0} {1}", vlt_pos?"▲":"▼", str.tostring(vlt_sribi,"#.#")),
+        text_color=vlt_pos?color.teal:color.red, text_size=size.tiny)
 
-    table.cell(info_tbl, 0, 4, "LT (Context)", text_color=color.gray, text_size=size.tiny)
-    table.cell(info_tbl, 1, 4, str.format("{0} {1}", lt_sribi > 0 ? "▲" : "▼", str.tostring(lt_sribi, "#.#")), text_color=lt_sribi > 0 ? color.teal : color.red, text_size=size.tiny)
+    // Window status
+    string win_str = window_open ? str.format("Open — {0} bars", bars_in_window) :
+         is_mixed ? "MIXED — waiting ST+" : is_tailwind ? "Closed (LT+)" : "Closed (HW)"
+    color win_clr = window_open ? color.green : is_mixed ? color.orange : color.red
+    table.cell(t, 0, 6, "BP Window",  text_color=color.gray, text_size=size.tiny)
+    table.cell(t, 1, 6, win_str, text_color=win_clr, text_size=size.tiny)
 
-    table.cell(info_tbl, 0, 5, "VLT (Context)", text_color=color.gray, text_size=size.tiny)
-    table.cell(info_tbl, 1, 5, str.format("{0} {1}", vlt_sribi > 0 ? "▲" : "▼", str.tostring(vlt_sribi, "#.#")), text_color=vlt_sribi > 0 ? color.teal : color.red, text_size=size.tiny)
-
-    // Zone info
-    table.cell(info_tbl, 0, 6, "SRIBI Avg", text_color=color.gray, text_size=size.tiny)
-    table.cell(info_tbl, 1, 6, str.tostring(sribi_avg, "#.#"), text_color=sribi_avg > 5 ? color.teal : sribi_avg < -5 ? color.red : color.gray, text_size=size.tiny)
-
-    table.cell(info_tbl, 0, 7, "STL Zone", text_color=color.gray, text_size=size.tiny)
-    color sz_clr = switch spread_zone
-        0 => color.gray
-        1 => color.yellow
-        2 => color.new(#90EE90, 0)
-        3 => color.green
-        4 => color.red
-        => color.gray
-    table.cell(info_tbl, 1, 7, zone_action, text_color=sz_clr, text_size=size.tiny)
-
-    table.cell(info_tbl, 0, 8, "% from STL", text_color=color.gray, text_size=size.tiny)
-    table.cell(info_tbl, 1, 8, str.tostring(pct_from_stl, "+#.#;-#.#") + "%", text_color=color.gray, text_size=size.tiny)
-
-    table.cell(info_tbl, 0, 9, "LOI", text_color=color.gray, text_size=size.tiny)
-    table.cell(info_tbl, 1, 9, str.tostring(loi, "#.#"), text_color=loi < -20 ? color.green : loi > 40 ? color.red : color.gray, text_size=size.tiny)
-
-    // AB2 signal / active trade
-    color ab2_clr = ab2_bull_put ? color.green : ab2_bear_call ? color.red : ab2_iron_condor ? color.purple : spread_active ? color.teal : color.gray
-    table.cell(info_tbl, 0, 10, "AB2", text_color=color.gray, text_size=size.tiny)
-    table.cell(info_tbl, 1, 10, ab2_signal, text_color=ab2_clr, text_size=size.tiny)
-
-    if spread_active
-        color pnl_clr = spread_pnl > 0 ? color.green : color.red
-        table.cell(info_tbl, 0, 11, "Spread P&L", text_color=color.gray, text_size=size.tiny)
-        table.cell(info_tbl, 1, 11, str.format("{0}% ({1}b)", str.tostring(spread_pnl, "+#.#;-#.#"), spread_bars), text_color=pnl_clr, text_size=size.tiny)
-
-        string exit_hint = spread_type == "Bull Put" and spread_context != "TAILWIND" ? "LT turns +" : spread_type == "Bear Call" ? "LT turns -" : "Time (60b)"
-        table.cell(info_tbl, 0, 12, "Exit Rule", text_color=color.gray, text_size=size.tiny)
-        table.cell(info_tbl, 1, 12, exit_hint, text_color=color.gray, text_size=size.tiny)
-
-        table.cell(info_tbl, 0, 13, "Entry Ctx", text_color=color.gray, text_size=size.tiny)
-        table.cell(info_tbl, 1, 13, spread_context, text_color=color.gray, text_size=size.tiny)
+    // Time stop
+    if window_open and bars_in_window > 60
+        color ts_clr = time_stop_hit ? color.red : color.orange
+        table.cell(t, 0, 7, "⏱ Time Stop", text_color=ts_clr, text_size=size.tiny)
+        table.cell(t, 1, 7, str.format("{0}/90 bars", bars_in_window), text_color=ts_clr, text_size=size.tiny)
     else
-        string next_str = st_sribi <= 0 ? "Waiting ST+" : not vst_pos ? "ST+ ✓ — VST pending" : "Ready"
-        table.cell(info_tbl, 0, 11, "Next", text_color=color.gray, text_size=size.tiny)
-        table.cell(info_tbl, 1, 11, next_str, text_color=color.gray, text_size=size.tiny)
+        table.cell(t, 0, 7, "Exit Rule", text_color=color.gray, text_size=size.tiny)
+        table.cell(t, 1, 7, "LT turns + or 90-bar stop", text_color=color.gray, text_size=size.tiny)
+
+    // Disabled strategies note
+    table.cell(t, 0, 8, "Bear Call / IC", text_color=color.gray, text_size=size.tiny)
+    table.cell(t, 1, 8, "Disabled — pending P14", text_color=color.gray, text_size=size.tiny)
+
+    // SRIBI zone context
+    string zone_str = zone == 1 ? "Very Bearish" : zone == 2 ? "Bearish" : zone == 3 ? "Neutral" : zone == 4 ? "Bullish" : "Very Bullish"
+    table.cell(t, 0, 9, "SRIBI Zone", text_color=color.gray, text_size=size.tiny)
+    table.cell(t, 1, 9, str.format("{0} ({1})", zone_str, str.tostring(sribi_avg,"#.#")), text_color=zone_color, text_size=size.tiny)
+
+    // IBIT disabled warning
+    if ibit_override
+        table.cell(t, 0, 10, "⛔ IBIT", text_color=color.purple, text_size=size.tiny)
+        table.cell(t, 1, 10, "AB2 disabled — MIXED ctx unreliable on crypto-adjacent", text_color=color.purple, text_size=size.tiny)
 
 // ═══════════════════════════════════════════════════════════════
 // LEGEND
 // ═══════════════════════════════════════════════════════════════
 
-var table legend_tbl = table.new(position.bottom_left, 2, 10, bgcolor=color.new(color.black, 20), border_width=1, border_color=color.new(color.gray, 70))
+var table leg = table.new(position.bottom_left, 2, 9,
+    bgcolor=color.new(color.black, 25), border_width=1, border_color=color.new(color.gray, 70))
 
 if barstate.islast and show_legend
-    table.cell(legend_tbl, 0, 0, "AB2 v3", text_color=color.white, text_size=size.tiny, bgcolor=color.new(color.gray, 50))
-    table.cell(legend_tbl, 1, 0, "ST-Primary", bgcolor=color.new(color.gray, 50), text_color=color.white, text_size=size.tiny)
-    table.cell(legend_tbl, 0, 1, "◆ below", text_color=color.green, text_size=size.tiny)
-    table.cell(legend_tbl, 1, 1, "Bull Put (context-colored)", text_color=color.white, text_size=size.tiny)
-    table.cell(legend_tbl, 0, 2, "◆ above", text_color=color.red, text_size=size.tiny)
-    table.cell(legend_tbl, 1, 2, "Bear Call (MR only)", text_color=color.white, text_size=size.tiny)
-    table.cell(legend_tbl, 0, 3, "○ purple", text_color=color.purple, text_size=size.tiny)
-    table.cell(legend_tbl, 1, 3, "Iron Condor (MR only)", text_color=color.white, text_size=size.tiny)
-    table.cell(legend_tbl, 0, 4, "✕ blue", text_color=color.blue, text_size=size.tiny)
-    table.cell(legend_tbl, 1, 4, "Exit — LT confirm", text_color=color.white, text_size=size.tiny)
-    table.cell(legend_tbl, 0, 5, "✕ orange", text_color=color.orange, text_size=size.tiny)
-    table.cell(legend_tbl, 1, 5, "Exit — Time stop", text_color=color.white, text_size=size.tiny)
-    table.cell(legend_tbl, 0, 6, "STL Colors:", text_color=color.gray, text_size=size.tiny)
-    table.cell(legend_tbl, 1, 6, "", text_size=size.tiny)
-    table.cell(legend_tbl, 0, 7, "█ Grn/LtGrn", text_color=color.green, text_size=size.tiny)
-    table.cell(legend_tbl, 1, 7, "Overweight / Standard", text_color=color.white, text_size=size.tiny)
-    table.cell(legend_tbl, 0, 8, "█ Yel/Gray", text_color=color.yellow, text_size=size.tiny)
-    table.cell(legend_tbl, 1, 8, "Conservative / STRC", text_color=color.gray, text_size=size.tiny)
-    table.cell(legend_tbl, 0, 9, "█ Red", text_color=color.red, text_size=size.tiny)
-    table.cell(legend_tbl, 1, 9, "Avoid", text_color=color.white, text_size=size.tiny)
+    table.cell(leg, 0, 0, "AB2 v4", text_color=color.white, text_size=size.tiny, bgcolor=color.new(color.gray, 50))
+    table.cell(leg, 1, 0, "MIXED-Only", text_color=color.white, text_size=size.tiny, bgcolor=color.new(color.gray, 50))
+    table.cell(leg, 0, 1, "█ Green", text_color=color.green,  text_size=size.tiny)
+    table.cell(leg, 1, 1, "Window open — MIXED + ST+ + VST+", text_color=color.white, text_size=size.tiny)
+    table.cell(leg, 0, 2, "█ Orange", text_color=color.orange, text_size=size.tiny)
+    table.cell(leg, 1, 2, "MIXED — waiting for ST cross", text_color=color.white, text_size=size.tiny)
+    table.cell(leg, 0, 3, "█ Red", text_color=color.red, text_size=size.tiny)
+    table.cell(leg, 1, 3, "TAILWIND — window closed (LT+)", text_color=color.white, text_size=size.tiny)
+    table.cell(leg, 0, 4, "◆ green", text_color=#39FF14, text_size=size.tiny)
+    table.cell(leg, 1, 4, "Bull Put entry (ST crosses in MIXED)", text_color=color.white, text_size=size.tiny)
+    table.cell(leg, 0, 5, "○ orange", text_color=color.orange, text_size=size.tiny)
+    table.cell(leg, 1, 5, "Context entered MIXED — wait for ST", text_color=color.gray, text_size=size.tiny)
+    table.cell(leg, 0, 6, "✕ blue", text_color=color.blue, text_size=size.tiny)
+    table.cell(leg, 1, 6, "LT exit — close spread", text_color=color.white, text_size=size.tiny)
+    table.cell(leg, 0, 7, "✕ orange", text_color=color.orange, text_size=size.tiny)
+    table.cell(leg, 1, 7, "90-bar time stop", text_color=color.gray, text_size=size.tiny)
+    table.cell(leg, 0, 8, "○ purple", text_color=color.purple, text_size=size.tiny)
+    table.cell(leg, 1, 8, "IBIT detected — AB2 disabled", text_color=color.gray, text_size=size.tiny)
 
 // ═══════════════════════════════════════════════════════════════
-// ALERTS
+// ALERTS — CONFIRMATION LADDER ONLY
 // ═══════════════════════════════════════════════════════════════
 
-alertcondition(ab2_bull_put, title="AB2 Bull Put", message="SRI AB2: SELL BULL PUT — ST crossed bullish + VST confirms. Context: structural divergence window open.")
-alertcondition(ab2_bear_call, title="AB2 Bear Call", message="SRI AB2: SELL BEAR CALL — ST crossed bearish, price extended above FTL (MR asset).")
-alertcondition(ab2_iron_condor, title="AB2 Iron Condor", message="SRI AB2: IRON CONDOR — Neutral zone, tight range (MR asset).")
-alertcondition(exit_bp_lt or exit_bc_lt, title="AB2 Exit LT", message="SRI AB2: CLOSE SPREAD — LT structural catch-up complete.")
-alertcondition(exit_time, title="AB2 Exit Time", message="SRI AB2: CLOSE SPREAD — Time stop reached (60 bars).")
-alertcondition(spread_zone == 3 and spread_zone[1] != 3, title="STL GREEN", message="SRI AB2: STL zone GREEN — Overweight spreads.")
-alertcondition(spread_zone == 4 and spread_zone[1] != 4, title="STL RED", message="SRI AB2: STL zone RED — Avoid spreads.")
+// Step 1: Context enters MIXED (structural tension window opening)
+alertcondition(mixed_entry, title="AB2 — MIXED Context Entered",
+    message="AB2 Ladder: Context entered MIXED (LT<0, VLT>0). Wait for ST+ to open Bull Put window.")
+
+// Step 2: ST crosses positive in MIXED — Bull Put window opens
+alertcondition(window_crossed and not ibit_override, title="AB2 — Bull Put Window Open",
+    message="AB2 Ladder: ST+ in MIXED context. Bull Put window open. VST confirming. Check strikes and PoP.")
+
+// Step 3: LT crosses positive — close spread
+alertcondition(lt_positive_cross, title="AB2 — LT Exit (Close Spread)",
+    message="AB2 Ladder: LT turned positive. Structural catch-up complete — close Bull Put spread.")
+
+// Step 4: Time stop warning
+alertcondition(time_stop_warn and not time_stop_hit, title="AB2 — Time Stop Warning (80 bars)",
+    message="AB2 Time Stop: 80 bars elapsed in window. Review spread — exit within 10 bars.")
+alertcondition(time_stop_hit, title="AB2 — Time Stop Hit (90 bars)",
+    message="AB2 Time Stop: 90-bar maximum reached. Close spread regardless of P&L.")
