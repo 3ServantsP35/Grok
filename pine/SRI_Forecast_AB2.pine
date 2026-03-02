@@ -48,8 +48,8 @@ f_is_ibit() =>
 
 f_is_btc_proxy() =>
     string t = str.upper(syminfo.ticker)
-    syminfo.type == "crypto" or str.contains(t, "BTC") or str.contains(t, "MSTR") or
-    str.contains(t, "IBIT") or str.contains(t, "GBTC") or str.contains(t, "BITO") or str.contains(t, "PURR")
+    (syminfo.type == "crypto" or str.contains(t, "BTC") or str.contains(t, "MSTR") or
+     str.contains(t, "IBIT") or str.contains(t, "GBTC") or str.contains(t, "BITO") or str.contains(t, "PURR"))
 
 f_is_tsla() =>
     str.upper(syminfo.ticker) == "TSLA"
