@@ -1,5 +1,5 @@
 # Four-Bucket Allocation Framework — v3.0
-**Date: 2026-03-02 | Author: CIO | Status: Awaiting Greg sign-off**
+**Date: 2026-03-02 | Author: CIO | Status: ✅ Approved**
 
 ---
 
@@ -252,17 +252,17 @@ Each portfolio runs the full allocation engine independently.
 
 | Decision | Owner | Status |
 |---|---|---|
-| AB2 restructured as PMCC income overlay | Greg + Gavin | Gavin ✅ |
-| AB3 broadened to 2-year LEAPs, multi-asset | Greg + Gavin | Gavin ✅ |
-| Call-selling gate (LOI/CT state controls delta) | Greg + Gavin | Gavin ✅ |
-| AB1/AB2 pause interaction | Greg + Gavin | Gavin ✅ |
-| IBIT re-enabled for AB2 (PMCC) | Gavin | Gavin ✅ |
-| AB3 baseline raised to 50% (absorbs AB2 allocation) | Greg + Gavin | ⬜ Pending Greg |
+| AB2 restructured as PMCC income overlay | Gavin | ✅ |
+| AB3 broadened to 2-year LEAPs, multi-asset | Gavin | ✅ |
+| Call-selling gate (LOI/CT state controls delta) | Gavin | ✅ |
+| AB1/AB2 pause interaction | Gavin | ✅ |
+| IBIT re-enabled for AB2 (PMCC) | Gavin | ✅ |
+| AB3 baseline raised to 50% (absorbs AB2 allocation) | Gavin | ✅ |
 | AB3 35% ceiling (alert, not auto-trim) | Gavin | ✅ |
 | AB4 10% floor | Gavin | ✅ |
 | 25% equal trim tranches | Gavin | ✅ |
-| Multi-asset competition rules | Greg + Gavin | ⬜ Pending Greg |
-| STRC hurdle rate (0.83%/month) | Greg + Gavin | ⬜ Pending Greg |
+| Multi-asset competition rules | Gavin | ✅ |
+| STRC hurdle rate (0.83%/month) | Gavin | ✅ |
 
 ---
 
