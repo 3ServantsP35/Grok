@@ -57,6 +57,12 @@ CANONICAL_CSVS = {
     "BATS_IWM, 240_cfcaf.csv":                     "BATS_IWM, 240_cfcaf.csv",
     "BATS_TSLA, 240_1100b.csv":                    "BATS_TSLA, 240_1100b.csv",
     "BATS_PURR, 240_1fcfd.csv":                    "BATS_PURR, 240_1fcfd.csv",
+    # Howell Phase inputs (Layer 0.5 — sector ETF proxies)
+    "BATS_XLK, 240_b2e40.csv":                     "BATS_XLK, 240_b2e40.csv",
+    "BATS_XLY, 240_e9102.csv":                     "BATS_XLY, 240_e9102.csv",
+    "BATS_XLF, 240_019f2.csv":                     "BATS_XLF, 240_019f2.csv",
+    "BATS_XLE, 240_6357b.csv":                     "BATS_XLE, 240_6357b.csv",
+    "BATS_XLP, 240_bad2d.csv":                     "BATS_XLP, 240_bad2d.csv",
     # Regime inputs
     "BITSTAMP_BTCUSD, 240_fe30c.csv":              "BITSTAMP_BTCUSD, 240_fe30c.csv",
     "BATS_MSTR_BATS_IBIT, 240_0ae35.csv":          "BATS_MSTR_BATS_IBIT, 240_0ae35.csv",
