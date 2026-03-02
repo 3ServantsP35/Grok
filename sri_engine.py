@@ -41,9 +41,30 @@ except ImportError:
 # ═══════════════════════════════════════════════════════════════
 
 class AssetMode(Enum):
-    MOMENTUM = "Momentum"       # BTC, MSTR, TSLA, IBIT
-    MEAN_REVERTING = "MR"       # SPY, QQQ, IWM
-    TRENDING = "Trending"       # GLD
+    MOMENTUM = "Momentum"               # Generic Momentum (legacy)
+    MOMENTUM_BTC = "Momentum-BTC"       # BTC-proxy: MSTR, IBIT, PURR — CT1 sweet spot
+    MOMENTUM_FUNDAMENTAL = "Momentum-Fundamental"  # Business-driven: TSLA — CT3 required
+    MEAN_REVERTING = "MR"               # Broad market: SPY, QQQ, IWM — CT2 sweet spot
+    MR_SMALL = "MR-Small"               # Small-cap: IWM — CT1 entry, CT3 = trim signal
+    TRENDING = "Trending"               # GLD — all tiers viable, CT1/CT2 best
+
+    def is_momentum(self):
+        """True for any Momentum sub-type."""
+        return self in (AssetMode.MOMENTUM, AssetMode.MOMENTUM_BTC, AssetMode.MOMENTUM_FUNDAMENTAL)
+
+    def is_mr(self):
+        """True for any MR sub-type."""
+        return self in (AssetMode.MEAN_REVERTING, AssetMode.MR_SMALL)
+
+    def ab1_requires_ct3(self):
+        """True if AB1 entry requires full LT alignment (CT3) rather than CT1."""
+        return self == AssetMode.MOMENTUM_FUNDAMENTAL
+
+    def ab1_min_ct_tier(self):
+        """Minimum concordance tier required for AB1 entry."""
+        if self.ab1_requires_ct3():   return 3
+        if self == AssetMode.MR_SMALL: return 1
+        return 1  # CT1 default for BTC-proxy, Trending, MR-Large
 
 class Context(Enum):
     HEADWIND = "HEADWIND"       # LT- and VLT-
@@ -63,16 +84,21 @@ class SignalType(Enum):
     AB3_TRIM = "AB3_TRIM"
 
 ASSET_MODES = {
-    "MSTR": AssetMode.MOMENTUM,
-    "BTC": AssetMode.MOMENTUM,
-    "BTCUSD": AssetMode.MOMENTUM,
-    "TSLA": AssetMode.MOMENTUM,
-    "IBIT": AssetMode.MOMENTUM,
-    "BLOK": AssetMode.MOMENTUM,
-    "SPY": AssetMode.MEAN_REVERTING,
-    "QQQ": AssetMode.MEAN_REVERTING,
-    "IWM": AssetMode.MEAN_REVERTING,
-    "GLD": AssetMode.TRENDING,
+    # BTC-proxy Momentum: CT1 sweet spot, structural floor via BTC cycle
+    "MSTR":    AssetMode.MOMENTUM_BTC,
+    "IBIT":    AssetMode.MOMENTUM_BTC,
+    "PURR":    AssetMode.MOMENTUM_BTC,
+    "BTC":     AssetMode.MOMENTUM_BTC,
+    "BTCUSD":  AssetMode.MOMENTUM_BTC,
+    "BLOK":    AssetMode.MOMENTUM_BTC,
+    # Business-fundamental Momentum: CT3 required, LT must confirm
+    "TSLA":    AssetMode.MOMENTUM_FUNDAMENTAL,
+    # Mean-Reverting
+    "SPY":     AssetMode.MEAN_REVERTING,
+    "QQQ":     AssetMode.MEAN_REVERTING,
+    "IWM":     AssetMode.MR_SMALL,      # CT1 entry, CT3 = trim signal
+    # Trending
+    "GLD":     AssetMode.TRENDING,
 }
 
 # PC Val constants (update from 8-K filings)
@@ -691,7 +717,7 @@ class AB2SpreadEngine:
                 }
             
             # Bear Call: MR only
-            if self.mode == AssetMode.MEAN_REVERTING and st_cross_bear and vst_neg and cooldown_ok and not self.active_spread:
+            if self.mode.is_mr() and st_cross_bear and vst_neg and cooldown_ok and not self.active_spread:
                 pct_from_ftl = (bar.close - bar.tracklines.lt_ftl) / bar.tracklines.lt_ftl * 100 if bar.tracklines.lt_ftl > 0 else 0
                 if pct_from_ftl > 3.0 and bar.sribi.avg > 15:
                     sig = Signal(
@@ -788,14 +814,14 @@ class AB3LOIEngine:
         self.signals: List[Signal] = []
         
         # Mode-dependent thresholds
-        if mode == AssetMode.MOMENTUM:
+        if mode.is_momentum() or mode == AssetMode.TRENDING:
             self.acc_threshold = -60
             self.deep_acc_threshold = -80
-            self.trim_levels = [40, 60, 80]  # MSTR-shifted
-        else:
+            self.trim_levels = [40, 60, 80]
+        else:  # MR / MR_SMALL
             self.acc_threshold = -40
             self.deep_acc_threshold = -60
-            self.trim_levels = [10, 30, 50]  # MR earlier trims
+            self.trim_levels = [10, 30, 50]
     
     def process_bar(self, bar: BarData) -> Tuple[float, List[Signal]]:
         loi = compute_loi(bar.sribi, self.prev_vlt)
@@ -1399,9 +1425,9 @@ class AB1PreBreakoutEngine:
              → transition to AB3 (accounting reclassification, no forced close)
     """
     
-    def __init__(self, mode: AssetMode = AssetMode.MOMENTUM):
+    def __init__(self, mode: AssetMode = AssetMode.MOMENTUM_BTC):
         self.mode = mode
-        self.acc_thresh = -60 if mode == AssetMode.MOMENTUM else -40
+        self.acc_thresh = -60 if (mode.is_momentum() or mode == AssetMode.TRENDING) else -40
         self.anchor_window = 120    # bars to look back for LOI anchor
         self.cooldown_bars = 40     # min bars between signals
         self.failure_window = 40    # bars to watch for failure
@@ -1475,9 +1501,15 @@ class AB1PreBreakoutEngine:
             if not (st_cross_recent or lt_cross_recent):
                 continue
             
-            # C3: MIXED context (LT-, VLT+) — room to run
-            if sribi.context != Context.MIXED:
-                continue
+            # C3: Context gate — mode-dependent
+            # BTC-proxy + Trending + MR: MIXED context (LT<0, VLT>0) = room to run
+            # MOMENTUM_FUNDAMENTAL (TSLA): require TAILWIND (LT>0, VLT>0) = CT3 entry
+            if self.mode.ab1_requires_ct3():
+                if sribi.context != Context.TAILWIND:
+                    continue
+            else:
+                if sribi.context != Context.MIXED:
+                    continue
             
             # C4: VST positive (entry timing)
             if sribi.vst <= 0:
@@ -1593,19 +1625,19 @@ class AB3StateMachine:
         HOLDING = "HOLDING"
         TRIMMING = "TRIMMING"
     
-    def __init__(self, mode: AssetMode = AssetMode.MOMENTUM):
+    def __init__(self, mode: AssetMode = AssetMode.MOMENTUM_BTC):
         self.mode = mode
-        if mode == AssetMode.MOMENTUM:
+        if mode.is_momentum() or mode == AssetMode.TRENDING:
             self.acc_thresh = -60
             self.deep_thresh = -80
             self.trim_levels = [40, 60, 80]
             self.hysteresis = 20
-        else:  # MR or Trending
+        else:  # MR / MR_SMALL
             self.acc_thresh = -40
             self.deep_thresh = -60
             self.trim_levels = [10, 30, 50]
             self.hysteresis = 15
-        
+
         self.state = self.State.NEUTRAL
         self.trim_idx = 0
         self.last_signal_bar = -30
@@ -1901,13 +1933,13 @@ class SRIEngineV2:
     
     TRADING_ASSETS = {
         # Prefix includes ", " separator to avoid partial matches (e.g. MSTR vs MSTR_BATS_IBIT)
-        "MSTR":  ("BATS_MSTR, ",  AssetMode.MOMENTUM),
-        "IBIT":  ("BATS_IBIT, ",  AssetMode.MOMENTUM),
-        "TSLA":  ("BATS_TSLA, ",  AssetMode.MOMENTUM),
-        "PURR":  ("BATS_PURR, ",  AssetMode.MOMENTUM),  # obs mode
+        "MSTR":  ("BATS_MSTR, ",  AssetMode.MOMENTUM_BTC),
+        "IBIT":  ("BATS_IBIT, ",  AssetMode.MOMENTUM_BTC),
+        "TSLA":  ("BATS_TSLA, ",  AssetMode.MOMENTUM_FUNDAMENTAL),  # CT3 required — P6 finding
+        "PURR":  ("BATS_PURR, ",  AssetMode.MOMENTUM_BTC),          # obs mode; BTC-adjacent
         "SPY":   ("BATS_SPY, ",   AssetMode.MEAN_REVERTING),
         "QQQ":   ("BATS_QQQ, ",   AssetMode.MEAN_REVERTING),
-        "IWM":   ("BATS_IWM, ",   AssetMode.MEAN_REVERTING),
+        "IWM":   ("BATS_IWM, ",   AssetMode.MR_SMALL),              # CT3 = trim signal, not entry
         "GLD":   ("BATS_GLD, ",   AssetMode.TRENDING),
     }
     
