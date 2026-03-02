@@ -20,7 +20,7 @@ AB1 and AB4 are unchanged.
 | **AB1** | OTM LEAPs | 1 week – 90 days | Opportunistic breakout trades | 25% | — | — |
 | **AB2** | Short calls vs. AB3 LEAPs | < 90 days | Income overlay on AB3 | — | — | — |
 | **AB3** | 2-year LEAPs | Months – cycle | Core long exposure | 50% | — | **35%** |
-| **AB4** | Cash / STRC | Permanent | Liquidity reserve | 25% | **10%** | — |
+| **AB4** | Cash + Preferreds (STRC/STRK/STRF) | Permanent | Yield-bearing staging area | 25% | **10% true cash** | 100% (soft ceiling 25%) |
 
 > **Note on AB2 allocation:** AB2 no longer consumes independent capital. Short calls sold against AB3 LEAPs are collateralized by the LEAP itself — no additional margin required. AB2's 25% baseline from v2.0 is absorbed into AB3 (now 50% baseline). AB2 performance is measured as monthly income generated per LEAP unit, not as a % of portfolio capital.
 
@@ -166,22 +166,55 @@ The expected breakout move from AB1 must not be capped by a short call.
 
 ---
 
-## AB4 — Cash & STRC Reserve
+## AB4 — Cash & Preferred Reserve
 
 ### Purpose
-Liquidity reserve. Earns STRC yield (~10% annual / 0.83%/month) while awaiting opportunity.
+Yield-bearing capital staging area. Earns income while awaiting LEAP entry signals. All-cash (100% AB4) is a valid posture — never forced to deploy.
 
-### Floor (10%)
-Never depleted regardless of opportunity. If fully deployed, the next trade waits for an exit.
+### Composition
+- **All preferred stock (STRC, STRK, STRF) counts as AB4.** Full stop.
+- Hard floor (10%) must be satisfied by **true cash only** (T-bill / money market). Preferreds do not count toward the floor.
+- Default parking vehicle: **STRC**. STRK is acceptable alternative.
 
-### STRC as Hurdle Rate
-Every AB1 LEAP trade must have an expected return exceeding 0.83%/month. If not, capital stays in AB4.  
-AB2 income (short call premium) is measured against this hurdle — if premium available is < 0.83%/month of LEAP cost, skip the cycle.
+### Boundaries
+| Boundary | Value | Notes |
+|---|---|---|
+| Hard floor | 10% | True cash only. Never breached under any circumstance. |
+| Hard upper | 100% | All-cash is valid. No forced deployment. |
+| Soft upper | 25% | Target ceiling in steady-state. Above this = overallocated; seek deployment. |
+
+### Hurdle Rate (STRC)
+Capital only leaves AB4 if **expected return on target position > STRC yield (~0.83%/month)**.
+- If no signal clears this bar, stay in STRC. Do not deploy into cash drag.
+- AB2 income (short call premium) is also measured against this hurdle — skip cycles below 0.83%/month of LEAP cost basis.
+- STRC yield is the single benchmark for all deployment decisions across all buckets.
 
 ### STRC as Regime Signal
 - STRC ≥ $97: Saylor engine healthy — full deployment eligible
 - STRC $90–97: Stress building — reduce new AB3 entries
 - STRC < $90: Flywheel impaired — defensive posture, max AB4
+
+### Deployment Priority
+When signals are active, deploy in this order from STRC:
+1. **AB3 Stage 2 bounce** — highest conviction; deepest LOI + confirmed bottom; deploy full sizing
+2. **AB1 pre-breakout** — CT2+ confirmed; deploy promptly; shorter hold period
+3. **AB3 Stage 1 watch** — awareness only; begin sizing out of STRC gradually; hold full deployment for Stage 2 confirmation
+4. **AB2 PMCC** — no new AB4 capital; income overlay only against existing LEAPs
+
+**Timing note:** When Stage 1 fires, begin gradual STRC reduction — do not wait for Stage 2 confirmation to start liquidating. Preferred stocks can have thin intraday markets; avoid forced liquidation under time pressure.
+
+### Per-Asset Concentration
+**Normal mode (AB4 ≤ 25%):**
+- Soft cap of 20% of total portfolio in any single asset across all buckets combined.
+- This is a soft constraint — it bends when the signal landscape demands it.
+
+**Excess cash mode (AB4 > 25%):**
+- The 20% soft cap **suspends**. Allocate to the best available signal regardless of concentration.
+- Concentration in a single asset is acceptable when LEAP entries are prudent (expected return > hurdle, signal quality confirmed).
+- If only one asset is showing an entry opportunity, overweight it. Lack of diversification is not a risk when the entry thesis is sound.
+- The 20% cap reinstates once AB4 returns to ≤ 25%.
+
+**The only constraint that never bends:** 10% AB4 hard floor.
 
 ---
 
@@ -259,7 +292,14 @@ Each portfolio runs the full allocation engine independently.
 | IBIT re-enabled for AB2 (PMCC) | Gavin | ✅ |
 | AB3 baseline raised to 50% (absorbs AB2 allocation) | Gavin | ✅ |
 | AB3 35% ceiling (alert, not auto-trim) | Gavin | ✅ |
-| AB4 10% floor | Gavin | ✅ |
+| AB4 10% floor (true cash only) | Gavin | ✅ |
+| AB4 hard upper 100% / soft upper 25% | Gavin | ✅ |
+| All preferreds (STRC/STRK/STRF) count as AB4 | Gavin | ✅ |
+| STRC default staging vehicle; STRK acceptable | Gavin | ✅ |
+| Capital only leaves AB4 if expected return > STRC yield | Gavin | ✅ |
+| 20% per-asset cap (soft); suspends when AB4 > 25% | Gavin | ✅ |
+| Concentration acceptable in excess cash mode if signal is prudent | Gavin | ✅ |
+| Stage 1 fire → begin gradual STRC reduction (don't wait for Stage 2) | Gavin | ✅ |
 | 25% equal trim tranches | Gavin | ✅ |
 | Multi-asset competition rules | Gavin | ✅ |
 | STRC hurdle rate (0.83%/month) | Gavin | ✅ |
