@@ -28,8 +28,18 @@ if _ENV_PATH.exists():
             _k, _, _v = _line.partition("=")
             os.environ.setdefault(_k.strip(), _v.strip().strip('"').strip("'"))
 
+# Fallback token file — writable from container (/mnt/mstr-data is rw)
+# Used for tokens that can't be injected into /mnt/mstr-config/.env from sandbox.
+_TOKEN_PATH = Path("/mnt/mstr-data/.env_tokens")
+if _TOKEN_PATH.exists():
+    for _line in _TOKEN_PATH.read_text().splitlines():
+        _line = _line.strip()
+        if _line and not _line.startswith("#") and "=" in _line:
+            _k, _, _v = _line.partition("=")
+            os.environ.setdefault(_k.strip(), _v.strip().strip('"').strip("'"))
+
 # ── Config ──────────────────────────────────────────────────────
-GH_TOKEN   = os.environ.get("GITHUB_TOKEN", "")  # Set in /mnt/mstr-config/.env
+GH_TOKEN   = os.environ.get("GITHUB_TOKEN", "")  # /mnt/mstr-config/.env or /mnt/mstr-data/.env_tokens
 REPO       = "3ServantsP35/Grok"
 DATA_DIR   = Path("/mnt/mstr-data")
 LOG_TAG    = "[DAILY-RUN]"
