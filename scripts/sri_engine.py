@@ -3267,6 +3267,73 @@ class PBearSignal:
         if self.st_ob:        fired.append('STOCH_OB')
         return fired
 
+    def bearish_trade_spec(self) -> Optional[Dict]:
+        """
+        Returns a directional bearish trade specification when P-BEAR >= CONFIRMED.
+        Returns None if conditions not met (INACTIVE/WATCH/FORMING/FORMING_PLUS).
+
+        Entry only at CONFIRMED or above — FORMING is too early (whipsaw risk).
+        Max notional: 5% of portfolio per position.
+        IV gate applied at execution time: >70th pctl = prefer spreads; <30th = prefer long puts.
+
+        Per-asset-class playbook:
+          MOMENTUM (MSTR/TSLA):  Expression 3 for MSTR; put spread 45-60 DTE for TSLA
+          BTC_CORRELATED (IBIT): Long put LEAP 90-120 DTE (AB1-style, bearish direction)
+          MR (SPY/QQQ/IWM):      Debit put spread 45-60 DTE, OTM 5-10%
+          TRENDING (GLD):        Short-duration puts 30-45 DTE (GLD mean-reverts after tops)
+        """
+        if self.state.value < PBearState.CONFIRMED.value:
+            return None
+
+        # MSTR is handled by Expression 3 separately
+        if self.asset == 'MSTR':
+            return {
+                'asset': 'MSTR',
+                'instrument': 'See Expression 3 (debit put spread + long IBIT)',
+                'duration_dte': '90-120',
+                'structure': 'Expression 3 — mNAV contraction trade',
+                'max_notional_pct': 0.05,
+                'notes': 'Only eligible when mNAV > 2.0x. Currently monitoring.',
+            }
+
+        specs = {
+            'MOMENTUM': {   # TSLA
+                'instrument': 'Debit put spread',
+                'duration_dte': '45-60',
+                'structure': 'ATM / OTM-10% put spread; only if Howell ≠ Turbulence (TSLA blocked in Turb)',
+                'max_notional_pct': 0.05,
+                'notes': 'Confirm Howell gate before entry. TSLA is Cyclical — blocked in Turbulence.',
+            },
+            'BTC_CORRELATED': {  # IBIT
+                'instrument': 'Long put LEAP',
+                'duration_dte': '90-120',
+                'structure': 'OTM 10-15% put; BTC-correlated top confirmed by OBV primary',
+                'max_notional_pct': 0.05,
+                'notes': 'AB1-style sizing. IBIT options less liquid — account for wide spread in premium.',
+            },
+            'MR': {   # SPY, QQQ, IWM
+                'instrument': 'Debit put spread',
+                'duration_dte': '45-60',
+                'structure': 'OTM 5-10% put spread; RSI4H + RSI_D + OBV triple confirmation',
+                'max_notional_pct': 0.05,
+                'notes': 'IV gate: >70th pctl → tighter spread (sell premium); <30th → wider long put.',
+            },
+            'TRENDING': {  # GLD
+                'instrument': 'Short-duration puts',
+                'duration_dte': '30-45',
+                'structure': 'OTM 5-8% puts; GLD mean-reverts after ST flip + OBV + RSI4H confirm',
+                'max_notional_pct': 0.03,   # smaller — GLD bounces faster
+                'notes': 'Enter only on Supertrend flip confirmation. Tighter duration due to mean-reversion.',
+            },
+        }
+
+        spec = specs.get(self.asset_class, specs['MR']).copy()
+        spec['asset'] = self.asset
+        spec['pbear_state'] = self.state.name
+        spec['signals_confirmed'] = self.signals_fired()
+        spec['ab2_fast_gate_active'] = self.ab2_fast_gate
+        return spec
+
 
 class PBearEngine:
     """

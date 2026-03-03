@@ -672,6 +672,22 @@ def build_brief():
                     _em = _s.emoji if _s else '⚪'
                     posture_section += f"  • {_a}: {_em} {_st}\n"
 
+        # Bearish Trade Opportunities — only when any asset is P-BEAR CONFIRMED or above
+        _confirmed_trades = []
+        for _asset, _sig in _pbear_sigs.items():
+            _trade = _sig.bearish_trade_spec()
+            if _trade:
+                _confirmed_trades.append(_trade)
+
+        if _confirmed_trades:
+            posture_section += "\n**⚠️ Bearish Trade Opportunities (P-BEAR CONFIRMED)**\n"
+            for _t in _confirmed_trades:
+                posture_section += (
+                    f"• **{_t['asset']}** [{_t['pbear_state']}]: {_t['instrument']} "
+                    f"{_t['duration_dte']} DTE | {_t['structure']}\n"
+                    f"  Max notional: {_t['max_notional_pct']:.0%} | {_t['notes']}\n"
+                )
+
         # Expression 3 status
         _e3_bearish_phases = {'Speculation', 'Turbulence'}
         _mnav_ok   = _mnav > 2.0
