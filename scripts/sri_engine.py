@@ -2290,7 +2290,18 @@ class SRIEngineV2:
         if not matches:
             return None
         try:
-            df = pd.read_csv(matches[-1])
+            # Prefer the file with the most columns (v2 102-col files have bearish indicators).
+            # When multiple files match (e.g. old 71-col + new 102-col), pick richest.
+            best = matches[-1]
+            if len(matches) > 1:
+                col_counts = {}
+                for m in matches:
+                    try:
+                        col_counts[m] = len(pd.read_csv(m, nrows=0).columns)
+                    except:
+                        col_counts[m] = 0
+                best = max(col_counts, key=col_counts.get)
+            df = pd.read_csv(best)
             df['date'] = pd.to_datetime(df['time'], unit='s')
             self._dfs[asset] = df
             return df
@@ -3200,9 +3211,9 @@ class PBearEngine:
         CONFIRMED   -> Supertrend flips BEAR
         INVALIDATION -> Supertrend flips back BULL
 
-    Column name mapping (TradingView CSV format):
-      MTF RSI     = RSI 4H (updates every 4H bar)
-      MTF RSI.1   = RSI Daily (forward-filled; updates on daily close)
+    Column name mapping (TradingView CSV format — confirmed Gavin 2026-03-03):
+      MTF RSI     = RSI 1D / Daily (first indicator — updates on daily close)
+      MTF RSI.1   = RSI 4H (second indicator — updates every 4H bar)
       Histogram   = MACD histogram
       OnBalanceVolume = OBV
       Up Trend    = Supertrend BULL (notna = BULL active)
@@ -3259,9 +3270,10 @@ class PBearEngine:
     # -- signal detectors -------------------------------------------------------
 
     def _rsi4h_div(self, df: pd.DataFrame) -> bool:
-        """Bearish RSI4H divergence: price at/near prior local high, RSI below prior peak RSI."""
+        """Bearish RSI4H divergence: price at/near prior local high, RSI below prior peak RSI.
+        Uses MTF RSI.1 = RSI 4H (second MTF indicator in TradingView export)."""
         try:
-            rsi_s = self._col(df, 'MTF RSI')
+            rsi_s = self._col(df, 'MTF RSI.1')
             if rsi_s is None or len(df) < self.DIV_LOOKBACK + 2:
                 return False
             w       = df.tail(self.DIV_LOOKBACK + 1)
@@ -3282,9 +3294,10 @@ class PBearEngine:
             return False
 
     def _rsid_div(self, df: pd.DataFrame) -> bool:
-        """Bearish RSI Daily divergence (MTF RSI.1 column, forward-filled)."""
+        """Bearish RSI Daily divergence.
+        Uses MTF RSI = RSI 1D (first MTF indicator in TradingView export, forward-filled)."""
         try:
-            rsi_s = self._col(df, 'MTF RSI.1')
+            rsi_s = self._col(df, 'MTF RSI')
             if rsi_s is None or len(df) < self.DIV_LOOKBACK + 2:
                 return False
             w       = df.tail(self.DIV_LOOKBACK + 1)
@@ -3390,9 +3403,9 @@ class PBearEngine:
         last      = df.iloc[-1]
         loi       = self._loi_now(df)
         price     = self._safe(last.get('close', 0))
-        _rsi4h_col = self._col(df, 'MTF RSI')
+        _rsi4h_col = self._col(df, 'MTF RSI.1')   # 4H = second MTF indicator
         rsi_4h    = self._safe(_rsi4h_col.iloc[-1] if _rsi4h_col is not None else 0.0)
-        _rsid_col  = self._col(df, 'MTF RSI.1')
+        _rsid_col  = self._col(df, 'MTF RSI')      # Daily = first MTF indicator
         rsi_daily = self._safe(_rsid_col.iloc[-1] if _rsid_col is not None else 0.0)
         _macd_col  = self._col(df, 'Histogram')
         macd_hist = self._safe(_macd_col.iloc[-1] if _macd_col is not None else 0.0)
