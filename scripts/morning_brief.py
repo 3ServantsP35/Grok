@@ -311,6 +311,47 @@ def build_brief():
         sections.append(section)
 
     # ============================================
+    # 4.5 HOWELL PHASE (Layer 0.5)
+    # ============================================
+    try:
+        sys.path.insert(0, "/mnt/mstr-scripts")
+        from sri_engine import HowellPhaseEngine
+        howell_eng   = HowellPhaseEngine()
+        howell_state = howell_eng.compute()
+
+        ph   = howell_state.phase
+        conf = howell_state.confidence
+        em   = howell_state.emoji
+        scores_str = "  ".join(
+            f"{p[:4]}:{v:+.0f}" for p, v in howell_state.phase_scores.items()
+        )
+        # Sector signal table
+        signal_rows = ""
+        signal_map  = {"BULL": "▲", "BEAR": "▼", "NEUTRAL": "─"}
+        for ticker in ["XLK", "XLY", "XLF", "XLE", "XLP", "TLT", "GLD", "IWM"]:
+            sig   = howell_state.sector_signals.get(ticker, "?")
+            lt    = howell_state.sector_sribi.get(ticker, 0)
+            arrow = signal_map.get(sig, "?")
+            signal_rows += f"{ticker:4s} {arrow} {lt:+.0f}\n"
+
+        # AB strategy guidance
+        ab3_note = ""
+        if ph == "Turbulence":
+            ab3_note = "⚠️ AB3 Beta (MSTR/IBIT): wait for Rebound signal | AB2: PAUSED"
+        elif ph == "Speculation":
+            ab3_note = "⚠️ AB3 Beta: 50% max sizing | AB3 Cyclicals (TSLA): BLOCKED"
+        elif ph in ("Rebound", "Calm"):
+            ab3_note = "✅ AB3 all asset classes eligible | AB2 fully active"
+
+        section  = f"**🌍 Howell Phase: {em} {ph}** (conf={conf:.0f}%)\n"
+        section += f"```\nPhase scores: {scores_str}\n\n"
+        section += f"Sector signals (LT SRIBI):\n{signal_rows}```\n"
+        section += ab3_note
+        sections.append(section)
+    except Exception as _hpe:
+        sections.append(f"**🌍 Howell Phase**\n*Unavailable: {type(_hpe).__name__}: {str(_hpe)[:100]}*")
+
+    # ============================================
     # 5. IV REGIME
     # ============================================
     orats = conn.execute(
