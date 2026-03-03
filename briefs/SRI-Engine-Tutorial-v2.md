@@ -1,5 +1,5 @@
 # SRI Decision Engine — Complete Methodology Tutorial
-**Version 2.3 | Date: 2026-03-03 | Author: CIO Engine**
+**Version 2.4 | Date: 2026-03-03 | Author: CIO Engine**
 
 ---
 
@@ -29,6 +29,8 @@
 16. [Signal Cross-Reference & Priority Rules](#16-signal-cross-reference--priority-rules)
 17. [Validated Performance Numbers](#17-validated-performance-numbers)
 18. [Current Engine State (2026-03-05)](#18-current-engine-state)
+19. [P-BEAR Signal Layer: Bearish Top Detection](#19-p-bear-signal-layer-bearish-top-detection) *(NEW v2.4)*
+20. [Portfolio Defensive Posture (P-BEAR Phase 2)](#20-portfolio-defensive-posture-p-bear-phase-2) *(NEW v2.4)*
 
 ---
 
@@ -1803,6 +1805,261 @@ Neutral:  STRC ($100), VIX (20)
 
 ---
 
+---
+
+## 19. P-BEAR Signal Layer: Bearish Top Detection
+
+*(New in v2.4)*
+
+### 19.1 Why SRI Lags at Distribution Tops
+
+The SRI framework excels at identifying accumulation zones — it is built on long-term trend momentum. At **distribution tops**, however, SRI carries a **10–20 bar structural lag**. Distribution unfolds slowly: smart money exits into retail buying, price continues to make new highs while internal market structure quietly deteriorates. SRI trend signals only confirm the reversal *after* it has already propagated into the slow trackline.
+
+**SRI is context at tops, not trigger.** The correct role of SRI during a distribution phase:
+- Confirms *that the asset is in the distribution zone* (high LOI, VLT positive, price near or above historical resistance)
+- Does NOT trigger the bearish trade — that requires a dedicated detection layer
+
+The **P-BEAR (Protective Bearish) Signal Layer** is that detection layer. It reads leading indicators — momentum divergences, volume divergences, and multi-timeframe RSI behaviour — before the SRI reversal prints.
+
+---
+
+### 19.2 Per-Asset-Class Signal Ladders
+
+Each asset class has a confirmation ladder tuned to how that class typically distributes. The ladders are sequential: higher states require all lower-state conditions to have been met or to still be active.
+
+#### MOMENTUM Class — MSTR, TSLA
+
+Assets with high beta and trending characteristics. MACD histogram is the fastest leading indicator.
+
+```
+WATCH        → LOI > +40  (Momentum DELTA_MGMT threshold — watch begins)
+FORMING      → MACD histogram < 0  AND  LOI > +20
+FORMING_PLUS → RSI 4H bearish divergence confirmed
+CONFIRMED    → RSI Daily divergence  +  LOI rolling over (−2 pts from 5-bar peak)
+CONFIRMED_PLUS → OBV divergence (tertiary — strongest bearish signal)
+INVALIDATED  → MACD histogram > 0  AND  price within 0.2% of 20-bar high
+```
+
+Signal priority order: **MACD Hist → RSI 4H div → RSI Daily div + LOI rolling → OBV**
+
+#### BTC_CORRELATED Class — IBIT
+
+Bitcoin-correlated ETF. Volume is the primary leading indicator because on-chain flows front-run price.
+
+```
+WATCH        → LOI > +20
+FORMING      → OBV divergence (OBV < OBV_SMA20  or  OBV < prior peak)
+FORMING_PLUS → RSI 4H divergence also fires
+CONFIRMED    → RSI Daily also diverging
+INVALIDATED  → OBV recovers above SMA20
+```
+
+Signal priority order: **OBV primary → RSI 4H → RSI Daily**
+
+#### MR (Mean Reverting) Class — SPY, QQQ, IWM
+
+Broad market indices revert to trend. RSI 4H divergence is the fastest signal in this class.
+
+```
+WATCH        → LOI > +20
+FORMING      → RSI 4H bearish divergence
+FORMING_PLUS → OBV < OBV_SMA20 (volume confirmation)
+CONFIRMED    → RSI Daily divergence also fires
+CONFIRMED_PLUS → Weekly StochRSI > 80 (overbought on weekly — strongest for MR assets)
+INVALIDATED  → RSI 4H recovers  AND  price within 0.2% of 20-bar high
+```
+
+Signal priority order: **RSI 4H div → OBV → RSI Daily → Weekly StochRSI >80 (CONFIRMED_PLUS)**
+
+#### TRENDING Class — GLD
+
+Trend-following commodity. Requires simultaneous evidence from both price-derived and volume-derived indicators before a signal fires, reducing false positives.
+
+```
+WATCH        → LOI > +20
+FORMING      → OBV divergence  AND  RSI 4H divergence  (simultaneous — both required)
+CONFIRMED    → Supertrend flips BEAR (daily Supertrend direction reversal)
+INVALIDATED  → Supertrend flips back BULL
+```
+
+Signal priority order: **OBV + RSI 4H simultaneously → Supertrend flip**
+
+---
+
+### 19.3 P-BEAR State Machine
+
+The system cycles through seven discrete states per asset:
+
+| Value | State | Description |
+|-------|-------|-------------|
+| 0 | `INACTIVE` | LOI below watch threshold — no monitoring active |
+| 1 | `WATCH` | LOI entered elevated zone — divergence monitoring active |
+| 2 | `FORMING` | Primary bearish signal fires per asset class ladder |
+| 3 | `FORMING_PLUS` | Secondary signal also confirms |
+| 4 | `CONFIRMED` | Dual-timeframe confirmation + LOI rolling — AB2 pause strongly recommended |
+| 5 | `CONFIRMED_PLUS` | Tertiary confirmation — strongest signal; hedge entry eligible |
+| 6 | `INVALIDATED` | Bearish thesis invalidated — monitoring resets to INACTIVE |
+
+**State persistence:** All states and signal flags are persisted to `pbear_state_log` in `mstr.db`. Alerts fire on *transitions only* — not on every engine run.
+
+---
+
+### 19.4 AB2 Fast-Gate: FORMING → Immediate Call-Selling Pause
+
+When any asset reaches `FORMING` (state ≥ 2), the **AB2 fast-gate** fires immediately:
+
+```
+P-BEAR state ≥ FORMING → ab2_fast_gate = True → PMCCGateState.NO_CALLS
+```
+
+**This override is unconditional.** Even if LOI is in `OTM_INCOME` or `DELTA_MGMT` range, call-selling halts. The rationale string surfaced in the morning brief gate table:
+
+> `"P-BEAR fast-gate: distribution forming (MSTR)"`
+
+The fast-gate protects against short calls going deep ITM as the underlying reverses from a distribution top. The cost of missing premium is far lower than the cost of an adverse assignment.
+
+---
+
+### 19.5 Watch Thresholds
+
+LOI must enter the watch zone before P-BEAR activates. This prevents false positives during normal accumulation phases where bearish indicator noise is common.
+
+| Asset Class | Assets | Watch LOI Threshold |
+|-------------|--------|---------------------|
+| MOMENTUM | MSTR, TSLA | LOI > +40 |
+| BTC_CORRELATED | IBIT | LOI > +20 |
+| MR | SPY, QQQ, IWM | LOI > +20 |
+| TRENDING | GLD | LOI > +20 |
+
+**Rationale for MOMENTUM at +40:** The AB2 DELTA_MGMT threshold for MSTR/TSLA is LOI > +40. P-BEAR watch begins precisely at the same level — when LOI signals the asset is entering the distribution trim zone, P-BEAR simultaneously starts monitoring for the structural signals that confirm top-formation.
+
+---
+
+### 19.6 Alert Codes
+
+| Code | Trigger | Severity |
+|------|---------|----------|
+| `PBEAR_WATCH` | INACTIVE → WATCH | 🟡 Yellow — monitor |
+| `PBEAR_FORMING` | any → FORMING or FORMING_PLUS | 🟠 Orange — **stop writing new short calls** |
+| `PBEAR_CONFIRMED` | any → CONFIRMED or CONFIRMED_PLUS | 🔴 Red — **evaluate hedge entry; close existing short calls** |
+| `PBEAR_INVALIDATED` | FORMING+/CONFIRMED+ → INVALIDATED | ✅ Green — resume normal AB2 protocol |
+
+---
+
+## 20. Portfolio Defensive Posture (P-BEAR Phase 2)
+
+*(New in v2.4)*
+
+### 20.1 PortfolioPosture Levels
+
+Phase 2 synthesises per-asset P-BEAR signals into a single **portfolio-level posture**. Four levels are defined:
+
+| Level | Ordinal | Trigger Condition |
+|-------|---------|------------------|
+| 🟢 NORMAL | 0 | No asset at FORMING or above |
+| 🟡 CAUTIOUS | 1 | 1+ assets at FORMING |
+| 🟠 DEFENSIVE | 2 | 2+ assets FORMING **OR** 1+ asset CONFIRMED |
+| 🔴 MAX_DEFENSIVE | 3 | 2+ assets CONFIRMED **OR** any asset CONFIRMED_PLUS |
+
+The posture is computed on every engine run and persisted to `defensive_posture_log` in `mstr.db`.
+
+---
+
+### 20.2 Per-Level Rules
+
+#### 🟢 NORMAL
+- Standard allocation. AB2 call-selling allowed per LOI gate.
+- No distribution signals detected across tracked assets.
+- AB4 floor: **10%** (standard AGENTS.md floor)
+- AB3 new entries: **✅ allowed**
+- Expression 3 eligibility: **⬜ no**
+
+#### 🟡 CAUTIOUS
+- AB2 paused on affected asset(s) via fast-gate (propagated through `gate_state()`).
+- No capital reallocation required — the gate is the sufficient response.
+- AB4 floor: **10%** (unchanged)
+- AB3 new entries: **✅ allowed** (unaffected assets only)
+- Expression 3 eligibility: **⬜ no**
+- Morning brief: Affected asset names logged with rationale.
+
+#### 🟠 DEFENSIVE
+- AB4 floor rises to **15%** hard (overrides AGENTS.md 10% default for duration of posture).
+- No new AB3 entries on **any** asset regardless of LOI signal — dry powder preservation.
+- Existing AB2 positions under review: do not roll or extend.
+- Expression 3 eligibility: **⬜ no** — not yet at max confirmation.
+- The 10% true-cash-only requirement remains in force inside the 15% override.
+
+#### 🔴 MAX_DEFENSIVE
+- AB4 floor rises to **20%** hard.
+- Begin reducing AB3 positions on confirmed assets.
+- No new AB3 or AB2 anywhere in the portfolio.
+- Expression 3 trade entry **eligible** (all 4 independent conditions still required — eligibility is not activation).
+- The 10% true-cash-only floor remains in force inside the 20% override.
+
+| Posture | AB4 Floor | AB3 New Entries | Expression 3 |
+|---------|-----------|-----------------|--------------|
+| NORMAL | 10% | ✅ yes | ⬜ no |
+| CAUTIOUS | 10% | ✅ yes | ⬜ no |
+| DEFENSIVE | 15% | 🚫 halt | ⬜ no |
+| MAX_DEFENSIVE | 20% | 🚫 halt | ✅ eligible |
+
+---
+
+### 20.3 Expression 3 — Bearish mNAV Contraction Hedge
+
+Expression 3 is a specific hedging trade that profits from MSTR's premium to NAV (mNAV) compressing toward fair value during a broad distribution cycle.
+
+**Trade structure:** Long MSTR debit put spread (ATM/OTM 20–25%, 90–120 DTE) + Long IBIT  
+**Net exposure:** Long mNAV contraction — profits from MSTR premium compression regardless of BTC direction  
+**Sizing:** MSTR put spread notional 1.5–2.0× IBIT dollar equivalent
+
+**ALL 4 conditions required for ARMED status:**
+
+| # | Condition | Threshold | Logic |
+|---|-----------|-----------|-------|
+| 1 | mNAV > 2.0× | MSTR market cap / (717,130 BTC × BTC price) | Premium is elevated enough to justify compression bet |
+| 2 | MSTR P-BEAR ≥ FORMING | Distribution signal active | Asset-level confirmation of top-formation |
+| 3 | Howell Phase ∈ {Speculation, Turbulence} | GLI deteriorating | Macro season supports broad risk-off |
+| 4 | BTC LT SRIBI rolling over | current LT < max(prior 5 bars) − 5 pts | BTC structural weakness confirmed |
+
+**Alert levels:**
+
+| Conditions Met | Level | Alert Code |
+|----------------|-------|-----------|
+| 4/4 | ARMED 🚨 | `EXPRESSION3_ARMED` |
+| 3/4 | SETUP 🟠 | `EXPRESSION3_SETUP` |
+| 2/4 | WATCH 👁 | (informational only — no alert fires) |
+| 0–1/4 | INACTIVE ⚪ | (no alert) |
+
+Alerts fire on **level transitions only**.
+
+---
+
+### 20.4 Current mNAV Context — Expression 3 Not Near Triggering
+
+As of 2026-03-03, mNAV ≈ **0.91×**.
+
+Expression 3 requires mNAV > **2.0×** as its first condition. At 0.91×, MSTR is trading *below* its BTC NAV — the opposite of a premium compression scenario. This condition is not close to being met under current market structure.
+
+Current Expression 3 status: **👁 WATCH (2/4 conditions)**:
+- ✅ Howell Phase: Turbulence (condition 3 met)
+- ✅ BTC LT SRIBI rolling over (condition 4 met)
+- ❌ mNAV 0.91× — need >2.0× (condition 1 not met)
+- ❌ MSTR P-BEAR INACTIVE — no distribution signal (condition 2 not met)
+
+**Practical implication:** Expression 3 is a late-bull-cycle tool. It becomes relevant when MSTR is trading at 2× or more above its BTC holdings value — a situation that last occurred in late 2024 and early 2021. In the current accumulation-phase environment (MSTR in deep negative LOI, BTC in structural downtrend), this trade is not on the radar.
+
+---
+
+### 20.5 Alert Codes — Portfolio Posture
+
+| Code | Trigger | Color |
+|------|---------|-------|
+| `PORTFOLIO_POSTURE_CHANGE` | Any posture level transition | 🟡 CAUTIOUS / 🔴 DEFENSIVE+ |
+| `EXPRESSION3_SETUP` | Expression 3 reaches 3/4 conditions | 🟠 |
+| `EXPRESSION3_ARMED` | Expression 3 reaches 4/4 conditions | 🔴 |
+
+
 ## Appendix A: Decision Tree — New Trade
 
 ```
@@ -1884,3 +2141,5 @@ Incoming signal on asset X:
 ---
 
 *Tutorial v2.3 reflects engine state as of 2026-03-03. Added: Stage State Taxonomy (§3a), Confirmation Ladders (§3b), LEAP Attractiveness Score (§8a), Market Structure Report (§13c), Personalized Portfolio Report (§13d).*
+
+*Tutorial v2.4 reflects engine state as of 2026-03-03. Added: P-BEAR Signal Layer: Bearish Top Detection (§19), Portfolio Defensive Posture / P-BEAR Phase 2 (§20).*
