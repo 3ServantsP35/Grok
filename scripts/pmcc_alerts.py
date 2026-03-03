@@ -85,6 +85,16 @@ CREATE TABLE IF NOT EXISTS howell_phase_transitions (
     to_phase    TEXT NOT NULL,
     confidence  REAL
 );
+
+CREATE TABLE IF NOT EXISTS pbear_state_log (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp       TEXT NOT NULL,
+    asset           TEXT NOT NULL,
+    state           TEXT NOT NULL,
+    loi             REAL,
+    signals_fired   TEXT,
+    ab2_fast_gate   INTEGER DEFAULT 0
+);
 """
 
 # ── Transition config ─────────────────────────────────────────────────────────
@@ -225,6 +235,12 @@ TRANSITIONS: Dict[Tuple[str, str], Dict] = {
 AB3_WATCH_SIGNALS = {"ACC_ENTER", "STAGE1_ENTER", "WATCH"}    # Stage 1: zone entered — prepare STRC
 AB3_BUY_SIGNALS   = {"ACCUMULATE", "DEEP_ACCUMULATE", "STAGE2_BOUNCE", "BOUNCE"}  # Stage 2: act now
 AB3_TRIM_SIGNALS  = {"TRIM_25", "TRIM_50", "TRIM_75", "EXIT_100", "DISTRIBUTE"}
+
+# P-BEAR alert codes
+ALERT_PBEAR_WATCH       = "PBEAR_WATCH"        # LOI enters watch zone
+ALERT_PBEAR_FORMING     = "PBEAR_FORMING"      # Primary bearish signal fires → AB2 pause
+ALERT_PBEAR_CONFIRMED   = "PBEAR_CONFIRMED"    # Dual-TF confirmed → hedge entry zone
+ALERT_PBEAR_INVALIDATED = "PBEAR_INVALIDATED"  # Thesis invalidated → resume normal
 
 # AB3_WATCH: LOI threshold per asset class (same as AB3 entry thresholds from AGENTS.md)
 AB3_WATCH_THRESHOLD = {
@@ -731,6 +747,140 @@ def detect_howell_transition(state, prev_phase: Optional[str]) -> Optional[Dict]
     }
 
 
+# ── P-BEAR state change detection ─────────────────────────────────────────────
+
+def load_prev_pbear_states(conn: sqlite3.Connection) -> Dict[str, str]:
+    """Load most recent P-BEAR state per asset from pbear_state_log."""
+    rows = conn.execute(
+        """SELECT asset, state FROM pbear_state_log
+           WHERE id IN (
+               SELECT MAX(id) FROM pbear_state_log GROUP BY asset
+           )"""
+    ).fetchall()
+    return {r[0]: r[1] for r in rows}
+
+
+def save_pbear_states(conn: sqlite3.Connection, pbear_sigs: Dict) -> None:
+    """Persist current P-BEAR signals to pbear_state_log."""
+    now = datetime.now(timezone.utc).isoformat()
+    for asset, sig in pbear_sigs.items():
+        try:
+            conn.execute(
+                """INSERT INTO pbear_state_log
+                   (timestamp, asset, state, loi, signals_fired, ab2_fast_gate)
+                   VALUES (?, ?, ?, ?, ?, ?)""",
+                (now, asset, sig.state.name, sig.loi,
+                 json.dumps(sig.signals_fired()), int(sig.ab2_fast_gate))
+            )
+        except Exception:
+            pass
+    conn.commit()
+
+
+def detect_pbear_alerts(pbear_sigs: Dict, prev_pbear: Dict[str, str]) -> List[Dict]:
+    """
+    Detect P-BEAR state transitions and generate alerts.
+
+    Alert hierarchy:
+      INACTIVE/WATCH  → FORMING/+    → ALERT_PBEAR_FORMING
+      FORMING/+       → CONFIRMED/+  → ALERT_PBEAR_CONFIRMED
+      any             → WATCH        → ALERT_PBEAR_WATCH (first time watch)
+      FORMING+/CONF+  → INVALIDATED  → ALERT_PBEAR_INVALIDATED
+    """
+    alerts = []
+    _PBEAR_ORDER = ["INACTIVE", "WATCH", "FORMING", "FORMING_PLUS",
+                    "CONFIRMED", "CONFIRMED_PLUS", "INVALIDATED"]
+    _COLOR = {
+        ALERT_PBEAR_WATCH:       "yellow",
+        ALERT_PBEAR_FORMING:     "orange",
+        ALERT_PBEAR_CONFIRMED:   "red",
+        ALERT_PBEAR_INVALIDATED: "green",
+    }
+    _EMOJI = {
+        ALERT_PBEAR_WATCH:       "👁",
+        ALERT_PBEAR_FORMING:     "🟠",
+        ALERT_PBEAR_CONFIRMED:   "🚨",
+        ALERT_PBEAR_INVALIDATED: "✅",
+    }
+
+    for asset, sig in pbear_sigs.items():
+        curr_state = sig.state.name
+        prev_state = prev_pbear.get(asset, "INACTIVE")
+
+        if curr_state == prev_state:
+            continue
+
+        loi    = sig.loi
+        price  = sig.price
+        sigs   = ", ".join(sig.signals_fired()) or "none"
+        gate   = "🛑 AB2 PAUSED" if sig.ab2_fast_gate else "✅ AB2 OK"
+
+        # Determine alert type
+        alert_type = None
+        if curr_state == "INVALIDATED":
+            alert_type = ALERT_PBEAR_INVALIDATED
+        elif curr_state in ("CONFIRMED", "CONFIRMED_PLUS"):
+            alert_type = ALERT_PBEAR_CONFIRMED
+        elif curr_state in ("FORMING", "FORMING_PLUS"):
+            alert_type = ALERT_PBEAR_FORMING
+        elif curr_state == "WATCH" and prev_state == "INACTIVE":
+            alert_type = ALERT_PBEAR_WATCH
+
+        if alert_type is None:
+            continue
+
+        title_map = {
+            ALERT_PBEAR_WATCH:       f"P-BEAR Watch — {asset}",
+            ALERT_PBEAR_FORMING:     f"P-BEAR FORMING — {asset} | AB2 Paused",
+            ALERT_PBEAR_CONFIRMED:   f"🚨 P-BEAR CONFIRMED — {asset}",
+            ALERT_PBEAR_INVALIDATED: f"P-BEAR Invalidated — {asset}",
+        }
+        body_map = {
+            ALERT_PBEAR_WATCH: (
+                f"**LOI entered bearish watch zone.**\n"
+                f"LOI `{loi:+.1f}` | Price `${price:.2f}`\n"
+                f"State: `{prev_state}` → `{curr_state}`\n"
+                f"**Action:** Monitor for primary signal (MACD/RSI/OBV divergence)."
+            ),
+            ALERT_PBEAR_FORMING: (
+                f"**Primary bearish signal fired — AB2 call-selling PAUSED.**\n"
+                f"LOI `{loi:+.1f}` | Price `${price:.2f}`\n"
+                f"State: `{prev_state}` → `{curr_state}`\n"
+                f"Signals: `{sigs}`\n"
+                f"Gate: {gate}\n"
+                f"**Action:** Stop writing new short calls. Watch for CONFIRMED."
+            ),
+            ALERT_PBEAR_CONFIRMED: (
+                f"**Dual-TF confirmation — distribution top likely.**\n"
+                f"LOI `{loi:+.1f}` | Price `${price:.2f}`\n"
+                f"State: `{prev_state}` → `{curr_state}`\n"
+                f"Signals: `{sigs}`\n"
+                f"Gate: {gate}\n"
+                f"**Action:** Evaluate hedge entry. Consider defensive posture."
+            ),
+            ALERT_PBEAR_INVALIDATED: (
+                f"**Bearish thesis invalidated — normal mode resumed.**\n"
+                f"LOI `{loi:+.1f}` | Price `${price:.2f}`\n"
+                f"State: `{prev_state}` → `{curr_state}`\n"
+                f"**Action:** AB2 call-selling gate unlocked. Resume normal protocol."
+            ),
+        }
+
+        alerts.append({
+            "asset":      asset,
+            "alert_type": alert_type,
+            "prev_state": prev_state,
+            "new_state":  curr_state,
+            "color":      _COLOR[alert_type],
+            "emoji":      _EMOJI[alert_type],
+            "title":      title_map[alert_type],
+            "body":       body_map[alert_type],
+            "current":    {"loi": loi, "price": price},
+        })
+
+    return alerts
+
+
 def run(engine_result: Dict, webhook_url: str, db_path: str = DB_PATH) -> int:
     """
     Main entry point called from daily_engine_run.py after engine runs.
@@ -770,12 +920,20 @@ def run(engine_result: Dict, webhook_url: str, db_path: str = DB_PATH) -> int:
         howell_alert = detect_howell_transition(howell_state, prev_phase)
         save_howell_state(conn, howell_state)
 
+    # Load previous P-BEAR states and detect transitions
+    prev_pbear    = load_prev_pbear_states(conn)
+    pbear_signals = engine_result.get("pbear_signals", {})
+    pbear_alerts  = detect_pbear_alerts(pbear_signals, prev_pbear) if pbear_signals else []
+    if pbear_signals:
+        save_pbear_states(conn, pbear_signals)
+
     # Detect all alert types
     all_alerts = []
     all_alerts += detect_gate_transitions(prev_states, current_states)
     all_alerts += detect_ab3_watch(prev_states, current_states)   # Stage 1 zone entry
     all_alerts += detect_ab3_alerts(ab3_signals)                  # Stage 2 buy + trim
     all_alerts += detect_ab1_alerts(ab1_signals)
+    all_alerts += pbear_alerts                                      # P-BEAR top detection
     if howell_alert:
         all_alerts.insert(0, howell_alert)  # Phase transitions lead the alert queue
 
