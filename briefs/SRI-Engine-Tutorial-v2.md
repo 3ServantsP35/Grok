@@ -1,5 +1,5 @@
 # SRI Decision Engine — Complete Methodology Tutorial
-**Version 2.2 | Date: 2026-03-05 | Author: CIO Engine**
+**Version 2.3 | Date: 2026-03-03 | Author: CIO Engine**
 
 ---
 
@@ -14,6 +14,7 @@
 6b. [Howell Phase Engine — Layer 0.5](#6b-howell-phase-engine--layer-05) *(NEW)*
 7. [Regime Engine — Layer 1](#7-regime-engine--layer-1)
 8. [LOI — LEAP Opportunity Index](#8-loi--leap-opportunity-index)
+8a. [LEAP Attractiveness Score](#8a-leap-attractiveness-score) *(NEW v2.3)*
 9. [AB1 — Tactical LEAP Engine](#9-ab1--tactical-leap-engine)
 10. [AB2 — PMCC Income Engine](#10-ab2--pmcc-income-engine)
 11. [AB3 — Strategic LEAP Accumulation](#11-ab3--strategic-leap-accumulation)
@@ -21,6 +22,8 @@
 13. [Capital Allocation Engine](#13-capital-allocation-engine)
 13a. [SRIBI ROC Derivative](#13a-sribi-roc-derivative)
 13b. [Alert System](#13b-alert-system)
+13c. [Market Structure Report (MSR)](#13c-market-structure-report-msr) *(NEW v2.3)*
+13d. [Personalized Portfolio Report (PPR)](#13d-personalized-portfolio-report-ppr) *(NEW v2.3)*
 14. [PC Val — MSTR Perpetual Call Valuation](#14-pc-val--mstr-perpetual-call-valuation)
 15. [Asset Classification](#15-asset-classification)
 16. [Signal Cross-Reference & Priority Rules](#16-signal-cross-reference--priority-rules)
@@ -203,6 +206,157 @@ Backtest finding: SRI has never reliably predicted BTC direction.
 Additional finding: bearish ST crosses on BTC had 54% downside prediction pre-MSTR, but only **38% in the preferred era** — bearish signals now point UP because Saylor absorbs every dip. BTC SRI signals are anti-predictive in the current regime.
 
 **Decision:** BTC stays in the data feed as regime input (cycle phase, vol regime). IBIT is used for crypto exposure in the trading universe.
+
+---
+
+## 3a. Stage State Taxonomy
+
+### 3a.1 From Four Stages to Ten States
+
+The classic Wyckoff framework defines four stages: Accumulation (S1), Markup (S2), Distribution (S3), and Markdown (S4). While this four-stage model remains the conceptual foundation, the SRI engine's operational language is a **10-state taxonomy** that captures transition zones between stages with the same precision as the stages themselves.
+
+> **Why this matters:** Two assets can both be in "Stage 4" yet have fundamentally different outlooks. One may be in deep markdown with no floor in sight; another may be showing early trough formation. The 10-state system makes this distinction explicit and maps each state to a specific AB strategy posture.
+
+### 3a.2 The 10-State Taxonomy
+
+| State | Code | Description | AB Posture |
+|---|---|---|---|
+| Accumulation | **S1** | FTL just crossed above STL; markup beginning | AB3 hold + begin AB2 income |
+| Breakout Formation | **S1→2** | LT SRIBI rising; structural confirmation building | AB1 entry eligible; AB3 scaling |
+| Markup | **S2** | FTL >> STL; accelerating positive | AB3 hold; AB2 income active |
+| Stage 2 Continuation | **S2C** | Markup confirmed continuing; no distribution warning | AB3 full hold; AB2 at full gate |
+| Distribution Warning | **S2→3** | SRIBI topping; breadth narrowing; first divergences | AB3 prepare trim; reduce AB2 delta |
+| Distribution | **S3** | FTL declining toward STL; topping process | AB3 trim 1; pause new AB2 |
+| Markdown Initiation | **S3→4** | FTL crosses below STL; downtrend beginning | AB3 trim 2-3; close AB2 |
+| Markdown | **S4** | FTL << STL; sustained downtrend | No entries; AB4 only |
+| Stage 4 Continuation | **S4C** | Markdown continuing; no floor signals | No entries; AB4 only |
+| Bottom Formation | **S4→1** | LOI approaching deep threshold; VLT trough forming | Watch mode; begin STRC reduction |
+
+### 3a.3 State Transition Flow
+
+```
+   S1 ──→ S1→2 ──→ S2 ──→ S2C
+   ↑                         │
+   │                     S2→3 (distribution warning fires)
+   │                         │
+S4→1                     S3  │
+   ↑                         ↓
+  S4C ←── S4 ←── S3→4 ←──────┘
+```
+
+### 3a.4 Key Rules
+
+- **States are declared per timeframe** (ST-primary is the operational state; LT and VLT provide context).
+- **The S4→1 and S4C distinction is critical:** S4C means all early-recovery criteria are absent. S4→1 means the watch conditions have begun to fire. Never skip from S4 to S1 — the intermediate states must be traversed sequentially.
+- **S2C vs S2→3 is the most consequential mid-cycle decision.** Misclassifying S2→3 as S2C is the most common source of premature AB3 holds that become large drawdowns.
+
+
+---
+
+## 3b. Confirmation Ladders
+
+### 3b.1 The Three-Tier Framework
+
+Every key state transition uses a **Watch → Forming → Confirmed** ladder, with explicit **Invalidation** conditions. A signal stays at Watch until all Forming criteria are met; it stays at Forming until all Confirmed criteria are met. Missing one criterion holds the entire ladder at that tier.
+
+This prevents premature conviction. The engine does not skip tiers.
+
+---
+
+### 3b.2 S4→1 (Bottom Formation — the Most Important Transition)
+
+This is the primary AB3 LEAP entry signal. All three tiers must be evaluated before capital deployment.
+
+#### Watch (Tier 1)
+Triggers when:
+- LOI ≤ −45 (Momentum assets: MSTR, TSLA, IBIT) **or** LOI ≤ −40 (Mean-Reverting assets: SPY, QQQ, GLD, IWM)
+
+Action at Watch: Begin gradual STRC reduction. Do not buy LEAPs yet.
+
+#### Forming (Tier 2)
+Requires ALL of:
+- VLT trough confirmed (VLT SRIBI ROC turns positive while VLT SRIBI still negative — "Drag Diffusing")
+- STH-MVRV < 1.0 (for BTC-correlated assets: MSTR, IBIT)
+- Episode type = Structural (not Cyclical or Idiosyncratic — see episode classification in §13a)
+
+Action at Forming: Sizing preparation complete; early 25% Anticipatory Tranche eligible (see §8a).
+
+#### Confirmed (Tier 3)
+Requires ALL of:
+- VLT Recovery Clock ≤ 6 bars since VLT trough
+- CPS (Confirmation Point Score) ≥ 70
+- LT SRIBI slope turning positive (SRIBI ROC > 0 at LT timeframe)
+- BTC bottom confirmed (for BTC-correlated assets)
+- Howell Gate Zero passes (phase eligible for this asset class)
+
+Action at Confirmed: Full AB3 entry eligible. LEAP buy authorized.
+
+#### Invalidation
+- LOI recovers above −20 without triggering Confirmed → reset to NEUTRAL state
+- VLT Recovery Clock exceeds 10 bars without reaching Confirmed → downgrade to Watch
+- Regime score drops ≤ −2 → suspend until regime recovers
+
+---
+
+### 3b.3 S2C vs S2→3 (The Mid-Cycle Decision)
+
+These two states share the same starting point (active Stage 2 Markup) but diverge on breadth and momentum data.
+
+#### S2C (Stage 2 Continuation) — Confirmed When:
+- CPS ≥ 65 (broad multi-timeframe agreement still intact)
+- IWM context: NOT a headwind (IWM LT ≥ 0 **or** Howell phase = Calm/Rebound)
+- VLT Recovery Clock ≤ 6 bars (recent recovery; not overextended)
+
+#### S2→3 (Distribution Warning) — Confirmed When:
+- 3 or more consecutive red bars on Slow Trackline (STL declining)
+- **OR** BREADTH_DIVERGENCE active: IWM showing bullish divergence while SPY/QQQ correct (capital crowding into mega-cap — the Speculation-phase top signature)
+
+#### Invalidation of S2→3 (revert to S2C):
+- Slow Trackline resumes positive slope for 2+ consecutive bars AND CPS recovers ≥ 65
+- IWM rejoins the correction (BREADTH_DIVERGENCE clears)
+
+---
+
+### 3b.4 S1→2 (Breakout Formation)
+
+#### Watch:
+- LOI crosses above −20 (exiting accumulation zone)
+- ST SRIBI positive for ≥ 2 consecutive bars
+
+#### Forming:
+- LT SRIBI turning positive (LT ROC > 0)
+- VLT SRIBI recovering (VLT ROC > 0 while VLT SRIBI still negative — "MIXED context intact")
+- CT Tier ≥ 2
+
+#### Confirmed:
+- CT Tier ≥ 3
+- LOI above 0
+- Howell Phase = Rebound or Calm (season appropriate)
+- Regime score ≥ 0 (NEUTRAL or better)
+
+Action at Confirmed: AB1 pre-breakout LEAP entry eligible.
+
+#### Invalidation:
+- ST SRIBI turns negative before LT confirmation → reset to S1
+
+---
+
+### 3b.5 S3→4 (Markdown Initiation)
+
+#### Watch:
+- FTL crosses below STL on ST timeframe
+- LT SRIBI declining for ≥ 3 bars
+
+#### Forming:
+- VLT SRIBI turning negative (VLT ROC < 0)
+- Regime score ≤ 0
+
+#### Confirmed:
+- LT SRIBI negative AND VLT SRIBI negative (full HEADWIND context)
+- LOI drops below 0
+
+Action at Confirmed: Close AB2 calls; advance AB3 trim schedule; shift to AB4 staging.
+
 
 ---
 
@@ -627,6 +781,87 @@ VLT positive and high. Second and third trims appropriate. Structural overextens
 
 **LOI > +80 (Extreme):**  
 All TFs positive and high. Final exits. GLD hit +80 in Feb 2026 — max trim zone.
+
+---
+
+## 8a. LEAP Attractiveness Score
+
+### 8a.1 Purpose
+
+The LEAP Attractiveness Score is a **0–10 composite rating** published in every Market Structure Report (MSR). It translates the multi-layer signal stack — stage state, Howell phase, macro regime, and BTC confirmation — into a single actionable number that drives position-sizing decisions.
+
+The score is **objective**: all inputs are quantitative and apply equally to all readers of the MSR. Personal modifiers (income gap, platform deployment readiness) are applied only in the Personalized Portfolio Report (PPR) and are never included in the MSR.
+
+### 8a.2 Base Score by Stage State
+
+| Stage State | Base Score | Rationale |
+|---|---|---|
+| S3 (Distribution) | 0 | Topping; markdown not yet confirmed |
+| S4 (Markdown) | 0 | Active downtrend |
+| S4C (Stage 4 Continuation) | 0 | No floor in sight |
+| S3→4 (Markdown Initiation) | 1 | Transition underway; avoid |
+| S2→3 (Distribution Warning) | 2 | Deteriorating; reduce exposure |
+| S2C (Stage 2 Continuation) | 4 | Structural hold; not entry |
+| S2 (Markup) | 3 | Extended; entry risk high |
+| S1 (Accumulation) | 9 | Primary entry zone |
+| S1→2 (Breakout Formation) | 8 | AB1 entry zone |
+| S4→1 Watch | 5 | Watching; not yet actionable |
+| S4→1 Forming | 7 | Anticipatory entry eligible |
+| S4→1 Confirmed | 10 | Full AB3 entry authorized |
+
+### 8a.3 Objective Modifiers (applied in MSR)
+
+| Condition | Modifier | Rationale |
+|---|---|---|
+| Howell Phase = Turbulence (Gate Zero fails) | −1.5 | Wrong season; entry risk elevated |
+| GLI contraction (Z-score < −0.5) | −0.5 | Macro headwind; reduced probability |
+| BTC bottom unconfirmed (for BTC-correlated assets) | −0.5 | Missing upstream confirmation |
+| mNAV < 1.0× (MSTR trading at discount to BTC NAV) | +0.5 | Structural undervaluation bonus |
+| Floor proximity < 15% (price within 15% of VLT support) | +0.5 | Near-floor entry reduces downside |
+| Cycle target > 3× from current price | +0.25 | Asymmetric upside present |
+
+**Maximum objective modifier:** Capped at +1.5 above base, −2.0 below base. The base score reflects stage state which is the primary driver.
+
+### 8a.4 Platform Value Modifier (PPR Only — Never in MSR)
+
+The Platform Value modifier adjusts the score for an individual user's income generation gap:
+
+```
+Income Gap = Target monthly yield (2%/month) − Current STRC + PMCC yield
+```
+
+| Income Gap | Modifier |
+|---|---|
+| Gap > 1.5%/month (severely under-generating) | +1.0 |
+| Gap 0.5%–1.5%/month (moderately under-generating) | +0.5 |
+| Gap < 0.5% or surplus (on target or above) | 0 |
+
+This modifier acknowledges that a user who has not yet built their income engine may rationally act earlier (at score 6–7 rather than waiting for score 8) because the opportunity cost of waiting is higher — they are losing income every month the platform is not built.
+
+**This modifier is personal, private, and never appears in shared reports.**
+
+### 8a.5 Action Thresholds
+
+| Score | Action |
+|---|---|
+| ≥ 8 | **Full AB3 entry** — deploy from AB4 at full sizing |
+| 6–7 | **Anticipatory Tranche** — 25% of target AB3 size; record as ANTICIPATORY in trade_log |
+| 4–5 | **Watch only** — no capital deployment; STRC reduction not yet begun |
+| ≤ 3 | **No entry** — ignore any LOI signals; maintain full AB4 posture |
+
+### 8a.6 Anticipatory Tranche (Score 6–7)
+
+When the score is 6–7 — below the full deployment gate but above watch-only — a small early partial position is eligible. Conditions:
+
+1. Score is 6–7 on the MSR objective basis alone (before Platform Value modifier)
+2. Platform Value modifier is active (+0.5 or +1.0), lifting final PPR score to ≥ 7
+3. Howell Gate Zero passes (phase is not blocked)
+4. Regime score ≥ 0 (NEUTRAL or better)
+
+**Tranche size:** 25% of target AB3 sizing. If the position later qualifies for full deployment (score reaches 8), deploy the remaining 75%.
+
+**Trade log entry:** Record with `entry_type = ANTICIPATORY`. This ensures clear distinction from standard AB3 entries in performance attribution.
+
 
 ---
 
@@ -1181,6 +1416,144 @@ FROM pmcc_alert_log ORDER BY timestamp DESC LIMIT 20;
 
 ---
 
+## 13c. Market Structure Report (MSR)
+
+### 13c.1 Purpose and Audience
+
+The Market Structure Report is a **weekly standardized report** published for every tracked asset in the universe. It is the objective, shared signal document — identical for all readers. No personal information is included.
+
+MSR is generated by the engine every Monday (or after significant state changes mid-week) and published to the shared Discord channel.
+
+### 13c.2 MSR Structure
+
+Each MSR contains the following fields:
+
+```
+MARKET STRUCTURE REPORT — [ASSET] — [DATE]
+════════════════════════════════════════════════════════
+
+STAGE DECLARATION
+  Current State:        [S4→1 Forming / S2C / etc.]
+  Previous State:       [Prior state]
+  Bars in State:        [N bars since transition]
+
+CONFIRMATION LADDER
+  Tier:                 [Watch / Forming / Confirmed]
+  Criteria Met:         [List of passed conditions]
+  Criteria Pending:     [List of unmet conditions]
+  Invalidation Risk:    [Active threats to current state]
+
+LEAP ATTRACTIVENESS SCORE
+  Base Score (Stage):   [0–10]
+  Objective Modifiers:  [Applied modifier list with values]
+  MSR Score:            [Final objective score]
+  Action Threshold:     [Full Entry / Anticipatory / Watch / No Entry]
+
+UPSTREAM CONTEXT
+  Howell Phase:         [Season + confidence %]
+  GLI Z-Score:          [Value + direction]
+  RORO Score:           [Regime score + label]
+  Vehicle:              [MSTR / IBIT]
+
+LOI STATE
+  Current LOI:          [Value]
+  AB3 State:            [NEUTRAL / ACCUMULATING / HOLDING / TRIMMING]
+  AB2 Gate:             [NO_CALLS / OTM_INCOME / DELTA_MGMT / PAUSED]
+
+KEY TRIGGERS
+  Next Bull Trigger:    [Condition that would upgrade state]
+  Next Bear Trigger:    [Condition that would downgrade state]
+  Watch Levels:         [Price/LOI levels to monitor this week]
+
+════════════════════════════════════════════════════════
+```
+
+### 13c.3 Objectivity Rule
+
+The MSR is **identical for all readers**. It contains no personal portfolio information, no individual account balances, and no Platform Value calculations. The LEAP Attractiveness Score in the MSR reflects only objective modifiers from §8a.3.
+
+MSR content is safe to publish to GitHub under the public-facing brief format.
+
+### 13c.4 MSR vs. Prior Daily Embed
+
+The MSR replaces the prior single-line daily gate state embed (MSTR / LOI / Gate) with a structured weekly report. The daily embed remains active for gate transition alerts. The MSR provides the weekly narrative and conviction context.
+
+
+---
+
+## 13d. Personalized Portfolio Report (PPR)
+
+### 13d.1 Purpose
+
+The Personalized Portfolio Report is a **private, on-demand, per-user report** generated only in each user's dedicated private Discord channel. It takes the objective MSR analysis and translates it into a personal context — accounting for the user's individual income gap, current positions, cost basis, and personal deployment gate.
+
+### 13d.2 What the PPR Adds (Over MSR)
+
+| Component | Source | MSR | PPR |
+|---|---|---|---|
+| Stage declaration | Engine | ✅ | ✅ |
+| Confirmation ladder | Engine | ✅ | ✅ |
+| Objective LEAP score | Engine | ✅ | ✅ |
+| **Platform Value modifier** | User data | ❌ | ✅ |
+| **Income gap calculation** | User data | ❌ | ✅ |
+| **Current position context** | trade_log | ❌ | ✅ |
+| **Personal deploy gate** | User config | ❌ | ✅ |
+| **Risk/Reward modifier** | User data | ❌ | ✅ |
+| **Final personalized score** | Composite | ❌ | ✅ |
+| **Specific action recommendation** | Engine + user data | ❌ | ✅ |
+
+### 13d.3 Privacy Rules — NON-NEGOTIABLE
+
+The following rules are permanent and cannot be overridden:
+
+1. **PPR content is never committed to GitHub.** Not in summary form, not in anonymized form.
+2. **PPR is only delivered in the user's dedicated private Discord channel.** Cross-channel delivery is prohibited.
+3. **PPR reports from one user are never visible to another user.** Channel isolation is enforced at the bot level.
+4. **No PPR data is logged to any shared database table.** Personal deployment decisions, account balances, and position details remain in user-private storage only.
+
+### 13d.4 Generating a PPR
+
+PPR generation is **on-demand** — triggered by the user requesting their personal report in their private channel. The engine:
+
+1. Fetches the current MSR for all tracked assets
+2. Retrieves user's current positions, cost basis, and monthly income from trade_log (user partition)
+3. Calculates income gap: `Target (2%/month) − Current (STRC yield + PMCC yield)`
+4. Applies Platform Value modifier to each asset's MSR score
+5. Applies Risk/Reward modifier based on existing position cost basis relative to current price
+6. Outputs personalized action recommendation (buy / add / hold / trim / skip) with sizing
+
+### 13d.5 PPR Output Format
+
+```
+PERSONAL PORTFOLIO REPORT — [USER] — [DATE]
+══════════════════════════════════════════════
+
+INCOME ENGINE STATUS
+  Current Monthly Yield:   [X.XX%/month]
+  Target Monthly Yield:    2.00%/month
+  Income Gap:              [X.XX%/month]
+  Platform Value Modifier: [+0 / +0.5 / +1.0]
+
+PERSONALIZED SCORES THIS WEEK
+  Asset    MSR Score   PV Adj   Final   Action
+  MSTR     7           +0.5     7.5     Anticipatory Tranche eligible
+  IBIT     5           +0.5     5.5     Watch only
+  TSLA     4           +0       4.0     No entry
+  [...]
+
+CURRENT POSITIONS
+  [Asset / Entry / Cost Basis / Current P&L / Next Action]
+
+THIS WEEK'S RECOMMENDATION
+  [Specific action with sizing and rationale]
+
+══════════════════════════════════════════════
+PPR is private — do not share outside this channel.
+```
+
+
+---
+
 ## 14. PC Val — MSTR Perpetual Call Valuation
 
 ### 14.1 Model
@@ -1498,7 +1871,16 @@ Incoming signal on asset X:
 | Dr. Mo | 42 Macro momentum confirmation model — validates KISS portfolio direction |
 | RMOP | Reserve Management and Operations Program — Fed QT mechanism |
 | SLR | Supplementary Leverage Ratio — bank capital rule; reduction = liquidity expansion |
+| Stage State | One of 10 operational states (S1, S1→2, S2, S2C, S2→3, S3, S3→4, S4, S4C, S4→1) derived from the four classic Wyckoff stages |
+| Confirmation Ladder | Three-tier progression (Watch → Forming → Confirmed) for each state transition, with explicit Invalidation conditions |
+| LEAP Attractiveness Score | 0–10 composite rating combining stage state base score and objective modifiers; published in every MSR |
+| Anticipatory Tranche | 25% early partial AB3 position eligible when LEAP Attractiveness Score is 6–7 and Platform Value modifier is active |
+| MSR | Market Structure Report — weekly objective per-asset report including stage state, confirmation ladder, LEAP score, upstream context |
+| PPR | Personalized Portfolio Report — private per-user on-demand report applying Platform Value modifier to MSR data; never shared or committed to GitHub |
+| Platform Value Modifier | Personal income gap adjustment (+0 to +1.0) applied only in PPR; reflects gap between target 2%/month yield and current portfolio income |
+| CPS | Confirmation Point Score — composite score measuring multi-timeframe structural agreement at key transitions |
+| STH-MVRV | Short-Term Holder Market Value to Realized Value — on-chain metric; below 1.0 signals capitulation |
 
 ---
 
-*Tutorial reflects engine state as of 2026-03-05. Next update: after GLIEngine Python class is built and wired into RegimeEngine.compute().*
+*Tutorial v2.3 reflects engine state as of 2026-03-03. Added: Stage State Taxonomy (§3a), Confirmation Ladders (§3b), LEAP Attractiveness Score (§8a), Market Structure Report (§13c), Personalized Portfolio Report (§13d).*
