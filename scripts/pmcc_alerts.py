@@ -58,6 +58,33 @@ CREATE TABLE IF NOT EXISTS pmcc_alert_log (
     message     TEXT,
     sent        INTEGER DEFAULT 0
 );
+
+CREATE TABLE IF NOT EXISTS howell_phase_state (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp   TEXT NOT NULL,
+    phase       TEXT NOT NULL,
+    confidence  REAL,
+    score_rebound       REAL,
+    score_calm          REAL,
+    score_speculation   REAL,
+    score_turbulence    REAL,
+    xlk_sribi   REAL,   xlk_signal  TEXT,
+    xly_sribi   REAL,   xly_signal  TEXT,
+    xlf_sribi   REAL,   xlf_signal  TEXT,
+    xle_sribi   REAL,   xle_signal  TEXT,
+    xlp_sribi   REAL,   xlp_signal  TEXT,
+    tlt_sribi   REAL,   tlt_signal  TEXT,
+    gld_sribi   REAL,   gld_signal  TEXT,
+    iwm_sribi   REAL,   iwm_signal  TEXT
+);
+
+CREATE TABLE IF NOT EXISTS howell_phase_transitions (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp   TEXT NOT NULL,
+    from_phase  TEXT NOT NULL,
+    to_phase    TEXT NOT NULL,
+    confidence  REAL
+);
 """
 
 # ── Transition config ─────────────────────────────────────────────────────────
@@ -569,7 +596,8 @@ def send_alert_discord(alert: Dict, webhook_url: str) -> bool:
     ctx.check_hostname = False
     ctx.verify_mode    = ssl.CERT_NONE
 
-    color = COLOR_MAP.get(alert.get("color", "blue"), COLOR_MAP["blue"])
+    raw_color = alert.get("color", "blue")
+    color = raw_color if isinstance(raw_color, int) else COLOR_MAP.get(raw_color, COLOR_MAP["blue"])
     ts    = datetime.now(timezone.utc).isoformat()
 
     # ROC context footer if available
@@ -606,6 +634,103 @@ def send_alert_discord(alert: Dict, webhook_url: str) -> bool:
 
 # ── Main entry point ──────────────────────────────────────────────────────────
 
+# ── Howell Phase helpers ──────────────────────────────────────────────────────
+
+_PHASE_ACTION_LINES: Dict[str, str] = {
+    'Rebound':     "**Action:** Full AB3 sizing on Beta (MSTR/IBIT) and Cyclicals (TSLA). AB2 call-writing active.",
+    'Calm':        "**Action:** Maximum AB2 income activity. AB3 entries on all eligible assets.",
+    'Speculation': "**Action:** Reduce equity/cyclical AB3 to 50% max. No new Beta calls until phase shifts. Energy/GLD favoured.",
+    'Turbulence':  "**Action:** PAUSE AB2 call-writing. Hold existing LEAPs. Watch Beta assets for early Rebound signal. Preserve optionality.",
+}
+
+_TRANSITION_EMOJIS: Dict[str, str] = {
+    ('Turbulence',   'Rebound'):    '🚀',
+    ('Rebound',      'Calm'):       '☀️',
+    ('Calm',         'Speculation'):'🍂',
+    ('Speculation',  'Turbulence'): '🌧️',
+    # Non-sequential transitions
+    ('Turbulence',   'Calm'):       '🌤️',
+    ('Rebound',      'Speculation'):'⚡',
+}
+
+
+def save_howell_state(conn: sqlite3.Connection, state) -> None:
+    """Persist HowellPhaseState to DB."""
+    ts = datetime.now(timezone.utc).isoformat()
+    ps = state.phase_scores
+    ss = state.sector_sribi
+    sg = state.sector_signals
+    conn.execute(
+        """INSERT INTO howell_phase_state
+           (timestamp, phase, confidence,
+            score_rebound, score_calm, score_speculation, score_turbulence,
+            xlk_sribi, xlk_signal, xly_sribi, xly_signal,
+            xlf_sribi, xlf_signal, xle_sribi, xle_signal,
+            xlp_sribi, xlp_signal, tlt_sribi, tlt_signal,
+            gld_sribi, gld_signal, iwm_sribi, iwm_signal)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+        (ts, state.phase, state.confidence,
+         ps.get('Rebound', 0), ps.get('Calm', 0),
+         ps.get('Speculation', 0), ps.get('Turbulence', 0),
+         ss.get('XLK', 0), sg.get('XLK', ''),
+         ss.get('XLY', 0), sg.get('XLY', ''),
+         ss.get('XLF', 0), sg.get('XLF', ''),
+         ss.get('XLE', 0), sg.get('XLE', ''),
+         ss.get('XLP', 0), sg.get('XLP', ''),
+         ss.get('TLT', 0), sg.get('TLT', ''),
+         ss.get('GLD', 0), sg.get('GLD', ''),
+         ss.get('IWM', 0), sg.get('IWM', ''))
+    )
+    conn.commit()
+
+
+def load_prev_howell_phase(conn: sqlite3.Connection) -> Optional[str]:
+    """Return the most recently saved Howell phase label, or None."""
+    row = conn.execute(
+        "SELECT phase FROM howell_phase_state ORDER BY id DESC LIMIT 1"
+    ).fetchone()
+    return row[0] if row else None
+
+
+def detect_howell_transition(state, prev_phase: Optional[str]) -> Optional[Dict]:
+    """
+    Return an alert dict if the Howell phase has changed, else None.
+    state: HowellPhaseState
+    """
+    if prev_phase is None or prev_phase == state.phase:
+        return None
+
+    key     = (prev_phase, state.phase)
+    emoji   = _TRANSITION_EMOJIS.get(key, '🔄')
+    action  = _PHASE_ACTION_LINES.get(state.phase, '')
+    scores  = " | ".join(f"{p}: {v:+.0f}" for p, v in state.phase_scores.items())
+    sectors = "\n".join(
+        f"  {t}: `{state.sector_signals.get(t,'?')}` (LT={state.sector_sribi.get(t,0):+.0f})"
+        for t in ['XLK','XLY','XLF','XLE','XLP','TLT','GLD','IWM']
+    )
+
+    body = (
+        f"**Howell Macro Phase shifted:** `{prev_phase}` → `{state.phase}` {state.emoji}\n"
+        f"**Confidence:** `{state.confidence:.0f}%`\n\n"
+        f"**Phase scores:** {scores}\n\n"
+        f"**Sector signals:**\n{sectors}\n\n"
+        f"{action}"
+    )
+
+    return {
+        "asset":      "MACRO",
+        "alert_type": "HOWELL_PHASE_TRANSITION",
+        "prev_state": prev_phase,
+        "new_state":  state.phase,
+        "color":      0x1DB954 if state.phase in ('Rebound', 'Calm') else (
+                      0xD29922 if state.phase == 'Speculation' else 0xF85149),
+        "emoji":      emoji,
+        "title":      f"{emoji} Howell Phase: {prev_phase} → {state.phase}",
+        "body":       body,
+        "current":    {"phase": state.phase, "confidence": state.confidence},
+    }
+
+
 def run(engine_result: Dict, webhook_url: str, db_path: str = DB_PATH) -> int:
     """
     Main entry point called from daily_engine_run.py after engine runs.
@@ -637,12 +762,22 @@ def run(engine_result: Dict, webhook_url: str, db_path: str = DB_PATH) -> int:
         if curr:
             current_states[asset] = curr
 
+    # Howell phase — load prev, check transition, save current
+    howell_state  = engine_result.get("howell")
+    prev_phase    = load_prev_howell_phase(conn)
+    howell_alert  = None
+    if howell_state is not None:
+        howell_alert = detect_howell_transition(howell_state, prev_phase)
+        save_howell_state(conn, howell_state)
+
     # Detect all alert types
     all_alerts = []
     all_alerts += detect_gate_transitions(prev_states, current_states)
     all_alerts += detect_ab3_watch(prev_states, current_states)   # Stage 1 zone entry
     all_alerts += detect_ab3_alerts(ab3_signals)                  # Stage 2 buy + trim
     all_alerts += detect_ab1_alerts(ab1_signals)
+    if howell_alert:
+        all_alerts.insert(0, howell_alert)  # Phase transitions lead the alert queue
 
     # Send alerts and log
     sent = 0
