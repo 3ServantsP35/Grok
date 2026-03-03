@@ -328,7 +328,7 @@ def build_brief():
         # Sector signal table
         signal_rows = ""
         signal_map  = {"BULL": "▲", "BEAR": "▼", "NEUTRAL": "─"}
-        for ticker in ["XLK", "XLY", "XLF", "XLE", "XLP", "TLT", "GLD", "IWM"]:
+        for ticker in ["XLK", "XLY", "XLF", "XLE", "XLP", "TLT", "GLD", "IWM", "VT"]:
             sig   = howell_state.sector_signals.get(ticker, "?")
             lt    = howell_state.sector_sribi.get(ticker, 0)
             arrow = signal_map.get(sig, "?")
