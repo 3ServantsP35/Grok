@@ -1,7 +1,7 @@
-# Stage 2 Continuation Classifier — v1.0
-**Date:** 2026-03-02  
+# Stage 2 Continuation Classifier — v1.1
+**Date:** 2026-03-02 | **Revised:** 2026-03-02 (v1.1 — Gate Zero added)
 **Author:** CIO  
-**Status:** Research Complete — Ready for Gavin Review  
+**Status:** Production — Gate Zero integrated, Howell Phase Engine live  
 **Dataset:** 221 labeled correction episodes, 7 assets (MSTR/TSLA/IBIT/SPY/QQQ/GLD/IWM), 2022–2026
 
 ---
@@ -92,7 +92,68 @@ This is the only combination that meaningfully clears the 56% "always predict re
 
 ## The Classifier Framework
 
-### Three-Stage Gate System
+### Gate Zero: Howell Phase + IWM Breadth Filter
+
+**This gate runs BEFORE CPS, episode typing, or VLT clock. A failed Gate Zero hard-blocks entry regardless of how favorable downstream signals appear.**
+
+Gate Zero answers a single question: *Is this asset class currently "in season" per the Howell liquidity cycle?*
+
+#### Step 1 — Howell Phase Check
+
+| Asset | Phase eligibility for AB3 entry |
+|---|---|
+| MSTR / IBIT (Beta/Risk On) | Rebound ✅ Full · Calm ✅ Full · Speculation ⚠️ 50% max · Turbulence ❌ Wait |
+| SPY / QQQ (Equities) | Rebound ✅ · Calm ✅ · Speculation ❌ Block · Turbulence ✅ Flush entries only |
+| TSLA / IWM (Cyclicals) | Rebound ✅ · Calm ✅ · Speculation ❌ Block · Turbulence ❌ Wait |
+| GLD (Commodities) | Rebound ❌ · Calm ✅ · Speculation ✅ (approaching peak) · Turbulence ❌ Exiting |
+
+**Current phase (live, 2026-03-02): 🌧️ TURBULENCE**
+- MSTR/IBIT: ❌ Blocked (phase 0% multiplier) — wait for Rebound signal
+- TSLA: ❌ Blocked (Cyclicals blocked in Turbulence)
+- SPY/QQQ: ✅ Eligible (Turbulence flush — but IWM Breadth Gate required, see Step 2)
+- GLD: ❌ Exiting phase — no new AB3
+
+**Phase transition as early Rebound signal:** When MSTR/IBIT LOI begins recovering from deeply negative territory while phase is still Turbulence, this is the first leading indicator of a Turbulence→Rebound transition. The Howell Phase Engine fires a `HOWELL_PHASE_TRANSITION` Discord alert the moment the phase shifts. That alert is the primary AB3 entry trigger for Beta assets.
+
+#### Step 2 — IWM Breadth Gate (SPY/QQQ only)
+
+This gate applies exclusively when SPY or QQQ LOI crosses the -40 accumulation threshold. It determines whether the correction is a broad-market flush (entry eligible) or a narrow/concentrated sell (skip entirely).
+
+**IWM state at the SPY/QQQ LOI trough (AT the trough bar, not prior trend):**
+
+| IWM State | Breadth Signal | Entry Decision |
+|---|---|---|
+| IWM headwind (LT<0 AND VLT<0) | Broad flush — capital leaving all segments | ✅ Proceed to CPS + episode type |
+| IWM neutral or bull | Narrow/isolated correction — Howell Speculation top signal | ❌ Hard block — do not enter |
+
+**Why this matters:** When SPY/QQQ corrects while IWM holds firm, capital has rotated from cyclicals to mega-cap tech/quality equity (Howell Speculation phase breadth divergence). The index appears to correct but the broad market has already rolled over. Backtested continuation rate in this configuration: **10–13%**. Not a buying opportunity — it is the beginning of structural breakdown in SPY itself.
+
+When IWM is also weak at the SPY trough (broad flush): **51–63% continuation rate** in Structural episodes. The only actionable SPY/QQQ AB3 setup.
+
+**This signal is named `BREADTH_DIVERGENCE` in the system.** It fires when IWM LOI > 0 AND SPY LOI < -20 simultaneously.
+
+#### Gate Zero Decision Tree
+
+```
+LOI crosses accumulation threshold
+         │
+         ▼
+  Check Howell Phase
+  ┌──────┴──────────┐
+  │                 │
+Asset in season?   Asset out of season?
+  │                        │
+  ▼                        ▼
+For SPY/QQQ:          ❌ BLOCKED
+  Check IWM state          (even if CPS=80, VLT recovers fast)
+  │
+  ├─ IWM headwind → ✅ Proceed to CPS + Episode Type → VLT Clock
+  └─ IWM strong   → ❌ BLOCKED (BREADTH_DIVERGENCE)
+```
+
+---
+
+### Three-Stage Gate System (Stages A–C, run only after Gate Zero passes)
 
 **STAGE A — Episode Typing (real-time, as LOI drops below threshold)**
 
@@ -184,6 +245,8 @@ C4: Recent VLT momentum (prior 60-bar avg)           Weight: 15%
 
 ### Momentum Assets: MSTR, TSLA, IBIT
 
+**Gate Zero note — TSLA is a Cyclical in the Howell framework.** While MSTR/IBIT are Beta/Risk On assets eligible in Rebound and Calm, TSLA follows the Cyclicals path: blocked in both Speculation and Turbulence phases. In the current Turbulence phase, TSLA AB3 entry is hard-blocked at Gate Zero regardless of LOI depth or CPS score. Resume entry eligibility when phase shifts to Rebound.
+
 **Primary pattern:** Transient LOI spike (1–3 bars) during a period when BTC/market is stabilizing. These are mechanical acceleration-driven spikes, not structural breakdowns.
 
 **Entry sequence:**
@@ -199,12 +262,16 @@ C4: Recent VLT momentum (prior 60-bar avg)           Weight: 15%
 
 **Primary pattern:** Structural episodes (4–15 bars) represent genuine oversold conditions that tend to resolve higher.
 
+**Gate Zero applies first — SPY/QQQ require BOTH Howell phase eligibility AND IWM breadth gate.**
+
 **Entry sequence:**
-1. LOI crosses threshold → DO NOT enter on transient spike (26–30% continuation rate)
-2. Monitor: if episode extends to 4+ bars → elevate to MEDIUM alert
-3. CPS ≥ 50: enter 25% at trough
-4. VLT clock: VLT > 0 within 6 bars → scale to full position
-5. Transient spikes < 4 bars: ignore unless they cluster (3+ within 30 bars = accumulation pressure)
+1. **Gate Zero:** Howell phase must allow equity entries (Rebound/Calm/Turbulence flush). In Speculation, hard block regardless of LOI depth.
+2. **Gate Zero (SPY/QQQ only):** Check IWM state AT the LOI trough. IWM headwind (LT<0 AND VLT<0) required. IWM neutral or bullish = BREADTH_DIVERGENCE = skip entirely.
+3. LOI crosses threshold → DO NOT enter on transient spike (26–30% continuation rate; only Structural episodes in MR assets)
+4. Monitor: if episode extends to 4+ bars → elevate to MEDIUM alert
+5. CPS ≥ 50: enter 25% at trough
+6. VLT clock: VLT > 0 within 6 bars → scale to full position
+7. Transient spikes < 4 bars: ignore unless they cluster (3+ within 30 bars = accumulation pressure)
 
 ---
 
@@ -216,12 +283,15 @@ C4: Recent VLT momentum (prior 60-bar avg)           Weight: 15%
 - Enter LEAP on bounce confirmation
 - Miss: Entry is 10–25% above the actual trough price
 
-### New AB3 protocol (with classifier):
-- LOI crosses threshold → immediate episode-type classification
+### New AB3 protocol (with classifier + Gate Zero):
+- **Gate Zero:** Howell Phase check → phase-eligible or blocked. IWM breadth check for SPY/QQQ.
+- LOI crosses threshold (only if Gate Zero passes) → immediate episode-type classification
 - **Momentum + Transient spike:** 25% position immediately; scale on VLT>0 at ≤6 bars
 - **All assets + Structural + CPS≥50:** 25% position at trough; scale on VLT>0
 - **Extended episode:** Hold; enter on VLT recovery while still compressed
 - Miss: Eliminated for Transient entries; reduced from 10–25% to 5–10% for Structural entries
+
+**Key insight Gate Zero provides:** The 13% SPY/QQQ continuation rate on IWM-isolated spikes is explained entirely by the Howell Speculation phase. Those signals were not broken — they were correctly identifying that SPY was at a structural Speculation-phase top, not a buying opportunity. Gate Zero prevents deploying capital into this configuration.
 
 ### Capital deployment impact:
 The classifier enables partial deployment (~25%) at the trough price on high-confidence signals, before the full Stage 2 bounce confirmation. The remaining 75% deploys on VLT recovery (Stage B gate). This preserves the structural safety of Stage 2 confirmation for the majority of the position while capturing superior pricing on the initial tranche.
@@ -274,13 +344,21 @@ Price entry estimate: $370–$395 if LOI reaches -45 at current trajectory.
 
 ## Next Steps
 
-1. **Add VLT Recovery Clock to `pmcc_alerts.py`** — alert when VLT crosses zero after a LOI trough event
-2. **Add episode-type classifier to `sri_engine.py`** — real-time Transient/Structural/Extended label in scan output
-3. **Add CPS computation to `daily_engine_run.py`** — publish CPS in morning brief when any asset is in LOI watch zone
-4. **Backtest improvement:** Re-label using "new price high within 120 bars" instead of "+5% at 60 bars" to reduce false negatives on slow-recovery continuations
-5. **Regime conditioning:** Separate analysis for GLI > 0 vs GLI < 0 subsets — expected to materially improve all accuracy metrics
-6. **Monthly recalibration:** Run as part of monthly review when new CSV data arrives
+1. **Add VLT Recovery Clock to `pmcc_alerts.py`** — alert when VLT crosses zero after a LOI trough event *(pending)*
+2. **Add episode-type classifier to `sri_engine.py`** — real-time Transient/Structural/Extended label in scan output *(pending)*
+3. **Add CPS computation to `daily_engine_run.py`** — publish CPS in morning brief when any asset is in LOI watch zone *(pending)*
+4. **Backtest improvement:** Re-label using "new price high within 120 bars" instead of "+5% at 60 bars" to reduce false negatives on slow-recovery continuations *(pending)*
+5. **Regime conditioning:** Separate analysis for GLI > 0 vs GLI < 0 subsets — expected to materially improve all accuracy metrics *(pending)*
+6. **Monthly recalibration:** Run as part of monthly review when new CSV data arrives *(ongoing)*
+
+### Completed (v1.1)
+- ✅ **Gate Zero — Howell Phase Engine** live in `sri_engine.py` (Layer 0.5, commit `df64b23c`)
+- ✅ **Gate Zero — IWM Breadth Filter** documented and integrated into SPY/QQQ entry rules
+- ✅ **BREADTH_DIVERGENCE signal** named; fires when IWM LOI > 0 AND SPY LOI < -20
+- ✅ **HOWELL_PHASE_TRANSITION alert** in `pmcc_alerts.py` — fires on every phase change to Discord
+- ✅ **TSLA Cyclical classification** — hard-blocked in Turbulence and Speculation phases
+- ✅ **DB tables** `howell_phase_state` + `howell_phase_transitions` seeded and live
 
 ---
 
-*Brief ends. Recommend Gavin review Section "What the Classifier Does NOT Solve" before deployment.*
+*Brief v1.1. Gate Zero is production. "What the Classifier Does NOT Solve" section remains valid — recommend re-reading with Howell phase context in mind.*
