@@ -240,6 +240,16 @@ def build_discord_payload(result: dict) -> dict:
     adj_label = reg.adjusted_regime_label or reg.regime_label
     regime_line = f"**Layer 1 — Regime:** {re_em} **{eff:+d}/7** {adj_label} | Vehicle: **{ve}** | VIX={vix:.1f}\n"
 
+    # Howell Phase line (Layer 0.5)
+    howell = result.get("howell")
+    howell_line = ""
+    if howell is not None:
+        ph_emoji  = getattr(howell, 'emoji', '❓')
+        ph_name   = howell.phase
+        ph_conf   = howell.confidence
+        ph_trans  = " ⚡ TRANSITION" if howell.is_transition else ""
+        howell_line = f"**Layer 0.5 — Howell:** {ph_emoji} **{ph_name}** conf={ph_conf:.0f}%{ph_trans}\n"
+
     # PMCC gate states (from ab2 results)
     pmcc_gates = {}
     for asset, ab2 in ab2.items():
@@ -294,6 +304,7 @@ def build_discord_payload(result: dict) -> dict:
 
     description = (
         gli_line +
+        howell_line +
         regime_line +
         "\n```\n" + asset_block + "\n```\n"
         f"**AB1 Signals:** {ab1_str}\n"
