@@ -101,6 +101,15 @@ The **Howell Phase Engine** reads eight sector ETF trend signals — Tech (XLK),
 
 **The breadth signal:** There's one special rule inside this layer for SPY/QQQ. When small caps (IWM) are still strong while SPY is correcting, it means *only the big names are selling*. Capital has already rotated out of small caps into mega-cap quality earlier — and the index is beginning to roll over from the top, not bouncing from a healthy dip. Historical data: only 10–13% of SPY/QQQ corrections in this configuration continue higher. We skip those entirely. When small caps are *also* weak (everyone's selling), that's a real flush — and those have 51–63% continuation rates. Those we buy.
 
+
+### Weather Warnings: The P-BEAR System
+
+Knowing the season (Howell Phase) tells us what *kind* of market we're in. But it doesn't always tell us when a particular asset is about to roll over *within* that season. For that, the engine watches something more specific: the **P-BEAR system** — a set of early-warning indicators that detect distribution tops before they become obvious.
+
+Think of it like a barometer. A storm doesn't announce itself when it arrives — it announces itself hours before, through a drop in atmospheric pressure. P-BEAR works the same way: it watches for pressure drops in price momentum, volume flow, and multi-timeframe RSI *before* the trend officially turns. When MACD histogram goes negative while price is still making highs, when volume quietly fades on each new peak, when the 4-hour RSI stops confirming what price is doing — these are the barometer readings the system is tracking. When enough of them align, P-BEAR transitions from `INACTIVE` to `WATCH` to `FORMING` — and the engine responds immediately.
+
+The response is automatic: call-selling on that asset **pauses the moment** P-BEAR reaches `FORMING`. You don't have to wait for a breakdown, a red candle, or a manual decision. The income positions are protected before the storm arrives. At higher alert levels (`CONFIRMED`, `CONFIRMED_PLUS`), the portfolio manager is warned to build defenses — raising the cash reserve floor, pausing new position entries, and eventually evaluating a formal hedge. By the time the trend reversal is visible to everyone else, the engine has already been preparing for it.
+
 ### Layer 1 — Regime (The Road Conditions)
 
 Eight market inputs — including Bitcoin, interest rates, the dollar, credit spreads, and volatility — combine into a single **Regime Score** from -7 to +7. This tells us whether the overall market environment is risk-on, neutral, or risk-off.
