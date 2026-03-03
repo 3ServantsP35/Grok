@@ -2280,6 +2280,7 @@ class SRIEngineV2:
         self._dfs: Dict[str, pd.DataFrame] = {}
         self._ab3_machines: Dict[str, AB3StateMachine] = {}
         self._ab1_engines: Dict[str, AB1PreBreakoutEngine] = {}
+        self._pbear_engines: Dict[str, 'PBearEngine'] = {}
     
     def _load_asset(self, asset: str, prefix: str) -> Optional[pd.DataFrame]:
         if asset in self._dfs:
@@ -2363,7 +2364,21 @@ class SRIEngineV2:
                 continue
             results[asset] = machine.scan(df)
         return results
-    
+
+    def run_pbear(self) -> Dict[str, 'PBearSignal']:
+        """Layer 2 — P-BEAR bearish top detection for all trading assets."""
+        results: Dict[str, 'PBearSignal'] = {}
+        for asset, (prefix, mode) in self.TRADING_ASSETS.items():
+            if asset in self.OBS_ASSETS:
+                continue
+            df = self._dfs.get(asset)
+            if df is None or len(df) == 0:
+                continue
+            if asset not in self._pbear_engines:
+                self._pbear_engines[asset] = PBearEngine(asset)
+            results[asset] = self._pbear_engines[asset].compute(df)
+        return results
+
     def run_ab2(self, regime: RegimeState = None,
                 gli_state=None) -> Dict[str, Any]:
         """
@@ -2431,6 +2446,7 @@ class SRIEngineV2:
         ab1_sigs = self.run_ab1(reg)
         ab2_sigs = self.run_ab2(reg, gli_state=gli_state)
         ab3_sigs = self.run_ab3()
+        pbear_sigs = self.run_pbear()
         
         # Current state summary
         current_state = {}
@@ -2454,6 +2470,10 @@ class SRIEngineV2:
                 "context": sribi.context.value,
                 "loi": loi_now,
                 "mode": self.TRADING_ASSETS[asset][1].value,
+                "pbear_state":   pbear_sigs.get(asset).state.name if pbear_sigs.get(asset) else "INACTIVE",
+                "pbear_emoji":   pbear_sigs.get(asset).emoji if pbear_sigs.get(asset) else '⚪',
+                "pbear_signals": pbear_sigs.get(asset).signals_fired() if pbear_sigs.get(asset) else [],
+                "ab2_fast_gate": pbear_sigs.get(asset).ab2_fast_gate if pbear_sigs.get(asset) else False,
             }
         
         # Open AB3 positions (last signal type)
@@ -2472,6 +2492,7 @@ class SRIEngineV2:
             "ab1_signals": ab1_sigs,
             "ab2_signals": ab2_sigs,
             "ab3_signals": ab3_sigs,
+            "pbear_signals": pbear_sigs,
         }
     
     def _print_report(self, reg, current_state, ab1_sigs, ab2_sigs, ab3_sigs, ab3_last):
@@ -2857,11 +2878,14 @@ class AB2PMCCEngine:
                    has_position: bool = True,
                    asset: str = '',
                    gli_z: float = 0.0,
-                   gegi: float = 0.0) -> PMCCGateState:
+                   gegi: float = 0.0,
+                   pbear_forming: bool = False) -> PMCCGateState:
         if not has_position:
             return PMCCGateState.NO_POSITION
         if ab1_active:
             return PMCCGateState.PAUSED_AB1
+        if pbear_forming:
+            return PMCCGateState.NO_CALLS  # P-BEAR fast-gate: distribution top forming
         if loi < self.LOI_NO_CALL_FLOOR:
             return PMCCGateState.NO_CALLS
         trim_thresh = self._trim_threshold(asset, gli_z, gegi)
@@ -2870,7 +2894,8 @@ class AB2PMCCEngine:
         return PMCCGateState.OTM_INCOME
 
     def _rationale(self, state: PMCCGateState, loi: float, ct_tier: int,
-                   asset: str = '', gli_z: float = 0.0, gegi: float = 0.0) -> str:
+                   asset: str = '', gli_z: float = 0.0, gegi: float = 0.0,
+                   pbear_forming: bool = False) -> str:
         d      = self.DELTA_LIMITS[state]
         thresh = self._trim_threshold(asset, gli_z, gegi)
         is_momentum = asset.upper() in self.MOMENTUM_ASSETS
@@ -2879,7 +2904,11 @@ class AB2PMCCEngine:
                    if gli_z != 0.0 or gegi != 0.0 else "")
         return {
             PMCCGateState.NO_POSITION: "No AB3 LEAP — nothing to write against",
-            PMCCGateState.NO_CALLS:    f"LOI {loi:.1f} < {self.LOI_NO_CALL_FLOOR:.0f} — accumulation, preserve upside",
+            PMCCGateState.NO_CALLS: (
+                f"P-BEAR fast-gate: distribution forming ({asset})"
+                if pbear_forming
+                else f"LOI {loi:.1f} < {self.LOI_NO_CALL_FLOOR:.0f} — accumulation, preserve upside"
+            ),
             PMCCGateState.OTM_INCOME:  f"LOI {loi:.1f} in neutral zone, CT{ct_tier} — OTM calls δ≤{d}{asset_tag}{gli_tag}",
             PMCCGateState.DELTA_MGMT:  f"LOI {loi:.1f} ≥ {thresh:.0f} (asset+GLI adj), CT{ct_tier} — delta reduction δ≤{d}{asset_tag}{gli_tag}",
             PMCCGateState.PAUSED_AB1:  "AB1 breakout active — call selling paused",
@@ -3052,3 +3081,407 @@ class AB2PMCCEngine:
             'status':        'OPEN' if open_ended else 'CLOSED',
         })
         return w
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# P-BEAR SIGNAL LAYER — Phase 1
+# Bearish top detection for distribution → markdown transitions.
+# Asset-class-specific confirmation ladders derived from Track B empirical analysis.
+# ═════════════════════════════════════════════════════════════════════════════
+
+class PBearState(Enum):
+    """
+    Bearish signal ladder states.
+    INACTIVE     : LOI below watch threshold; no bearish monitoring
+    WATCH        : LOI entered elevated zone; divergence monitoring active
+    FORMING      : Primary bearish signal fires (per asset class)
+    FORMING_PLUS : Secondary signal also confirms
+    CONFIRMED    : Dual-timeframe confirmation + LOI rolling; AB2 pause recommended
+    CONFIRMED_PLUS: Tertiary confirmation (strongest; use for hedge entry)
+    INVALIDATED  : Bearish thesis invalidated; monitoring resets
+    """
+    INACTIVE       = 0
+    WATCH          = 1
+    FORMING        = 2
+    FORMING_PLUS   = 3
+    CONFIRMED      = 4
+    CONFIRMED_PLUS = 5
+    INVALIDATED    = 6
+
+
+@dataclass
+class PBearSignal:
+    """P-BEAR state snapshot for a single asset at a single point in time."""
+    asset:           str
+    state:           PBearState
+    asset_class:     str          # MOMENTUM / BTC_CORRELATED / MR / TRENDING
+    loi:             float
+    watch_threshold: float
+
+    # Individual signal flags
+    macd_neg:        bool = False   # MACD histogram < 0
+    rsi4h_div:       bool = False   # RSI 4H bearish divergence
+    rsid_div:        bool = False   # RSI Daily bearish divergence
+    obv_div:         bool = False   # OBV bearish divergence
+    loi_rolling:     bool = False   # LOI rolled over from recent peak
+    st_bear:         bool = False   # Supertrend flipped BEAR
+
+    # Context values
+    price:           float = 0.0
+    rsi_4h:          float = 0.0
+    rsi_daily:       float = 0.0
+    macd_hist:       float = 0.0
+
+    @property
+    def ab2_fast_gate(self) -> bool:
+        """True if call-selling should be paused immediately (FORMING or above)."""
+        return self.state.value >= PBearState.FORMING.value
+
+    @property
+    def emoji(self) -> str:
+        return {
+            PBearState.INACTIVE:       '⚪',
+            PBearState.WATCH:          '👁',
+            PBearState.FORMING:        '🟡',
+            PBearState.FORMING_PLUS:   '🟠',
+            PBearState.CONFIRMED:      '🔴',
+            PBearState.CONFIRMED_PLUS: '🚨',
+            PBearState.INVALIDATED:    '✅',
+        }.get(self.state, '⚪')
+
+    @property
+    def label(self) -> str:
+        return self.state.name.replace('_', ' ')
+
+    def signals_fired(self) -> List[str]:
+        fired = []
+        if self.macd_neg:     fired.append('MACD<0')
+        if self.rsi4h_div:    fired.append('RSI4H_DIV')
+        if self.rsid_div:     fired.append('RSI_D_DIV')
+        if self.obv_div:      fired.append('OBV_DIV')
+        if self.loi_rolling:  fired.append('LOI_ROLL')
+        if self.st_bear:      fired.append('ST_BEAR')
+        return fired
+
+
+class PBearEngine:
+    """
+    P-BEAR Signal Layer — Phase 1.
+
+    Computes the bearish top detection state for a trading asset using
+    per-asset-class confirmation ladders derived from Track B empirical analysis.
+
+    Asset classes and primary signals (Track B findings):
+      MOMENTUM (MSTR, TSLA):
+        WATCH       -> LOI > +40
+        FORMING     -> MACD_hist < 0 AND LOI > +20
+        FORMING+    -> RSI4H divergence confirmed
+        CONFIRMED   -> RSI_Daily divergence + LOI rolling over
+        CONF+       -> OBV divergence (tertiary)
+        INVALIDATION -> MACD_hist > 0 AND price at/near 20-bar high
+
+      BTC_CORRELATED (IBIT):
+        WATCH       -> LOI > +20
+        FORMING     -> OBV divergence (OBV < OBV_SMA20 or OBV < peak OBV)
+        FORMING+    -> RSI4H divergence also fires
+        CONFIRMED   -> RSI_Daily also diverging
+        INVALIDATION -> OBV recovers above SMA20
+
+      MR (SPY, QQQ, IWM):
+        WATCH       -> LOI > +20
+        FORMING     -> RSI4H divergence
+        FORMING+    -> OBV < OBV_SMA20 (volume confirmation)
+        CONFIRMED   -> RSI_Daily divergence also fires
+        INVALIDATION -> RSI4H recovers + price at/near new high
+
+      TRENDING (GLD):
+        WATCH       -> LOI > +20
+        FORMING     -> OBV divergence AND RSI4H divergence simultaneously
+        CONFIRMED   -> Supertrend flips BEAR
+        INVALIDATION -> Supertrend flips back BULL
+
+    Column name mapping (TradingView CSV format):
+      MTF RSI     = RSI 4H (updates every 4H bar)
+      MTF RSI.1   = RSI Daily (forward-filled; updates on daily close)
+      Histogram   = MACD histogram
+      OnBalanceVolume = OBV
+      Up Trend    = Supertrend BULL (notna = BULL active)
+      Down Trend  = Supertrend BEAR (notna = BEAR active)
+      LOI         = LEAP Opportunity Index
+      %K / %D     = Weekly StochRSI (secondary only; long warmup)
+    """
+
+    MOMENTUM_ASSETS    = frozenset({'MSTR', 'TSLA'})
+    BTC_CORRELATED     = frozenset({'IBIT'})
+    MR_ASSETS          = frozenset({'SPY', 'QQQ', 'IWM'})
+    TRENDING_ASSETS    = frozenset({'GLD'})
+
+    WATCH_MOMENTUM     = +40.0   # Momentum: DELTA_MGMT threshold = watch start
+    WATCH_DEFAULT      = +20.0   # All other classes
+
+    DIV_LOOKBACK       = 20      # bars (4H x 20 = ~3.5 trading days)
+    PRICE_NEAR_PEAK    = 0.05    # within 5% of local high = "at the top"
+    RSI_DIV_MIN_GAP    = 2.0     # RSI must be at least 2 pts below peak RSI
+    LOI_ROLL_LOOKBACK  = 5       # bars to check LOI rollover
+
+    def __init__(self, asset: str):
+        self.asset       = asset.upper()
+        self.asset_class = self._classify(self.asset)
+        self.watch_threshold = (
+            self.WATCH_MOMENTUM if self.asset_class == 'MOMENTUM'
+            else self.WATCH_DEFAULT
+        )
+
+    def _classify(self, asset: str) -> str:
+        if asset in self.MOMENTUM_ASSETS:   return 'MOMENTUM'
+        if asset in self.BTC_CORRELATED:    return 'BTC_CORRELATED'
+        if asset in self.MR_ASSETS:         return 'MR'
+        if asset in self.TRENDING_ASSETS:   return 'TRENDING'
+        return 'MR'
+
+    # -- helpers ----------------------------------------------------------------
+
+    @staticmethod
+    def _safe(val, default: float = 0.0) -> float:
+        try:
+            v = float(val)
+            return default if (v != v) else v   # NaN check
+        except Exception:
+            return default
+
+    @staticmethod
+    def _col(df: pd.DataFrame, *names) -> Optional[pd.Series]:
+        for n in names:
+            if n in df.columns:
+                return df[n]
+        return None
+
+    # -- signal detectors -------------------------------------------------------
+
+    def _rsi4h_div(self, df: pd.DataFrame) -> bool:
+        """Bearish RSI4H divergence: price at/near prior local high, RSI below prior peak RSI."""
+        try:
+            rsi_s = self._col(df, 'MTF RSI')
+            if rsi_s is None or len(df) < self.DIV_LOOKBACK + 2:
+                return False
+            w       = df.tail(self.DIV_LOOKBACK + 1)
+            prices  = w['close'].values.astype(float)
+            rsis    = pd.Series(rsi_s.tail(self.DIV_LOOKBACK + 1).values).ffill().values.astype(float)
+            cur_p, cur_r = prices[-1], rsis[-1]
+            if cur_p <= 0 or cur_r <= 0:
+                return False
+            prior_p, prior_r = prices[:-1], rsis[:-1]
+            pk = int(np.argmax(prior_p))
+            pk_p, pk_r = prior_p[pk], prior_r[pk]
+            return bool(
+                cur_p >= pk_p * (1 - self.PRICE_NEAR_PEAK) and
+                cur_r < pk_r - self.RSI_DIV_MIN_GAP and
+                pk_r > 0
+            )
+        except Exception:
+            return False
+
+    def _rsid_div(self, df: pd.DataFrame) -> bool:
+        """Bearish RSI Daily divergence (MTF RSI.1 column, forward-filled)."""
+        try:
+            rsi_s = self._col(df, 'MTF RSI.1')
+            if rsi_s is None or len(df) < self.DIV_LOOKBACK + 2:
+                return False
+            w       = df.tail(self.DIV_LOOKBACK + 1)
+            prices  = w['close'].values.astype(float)
+            rsisd   = pd.Series(rsi_s.tail(self.DIV_LOOKBACK + 1).values).ffill().values.astype(float)
+            cur_p, cur_rd = prices[-1], rsisd[-1]
+            if cur_p <= 0 or cur_rd <= 0:
+                return False
+            prior_p, prior_rd = prices[:-1], rsisd[:-1]
+            pk  = int(np.argmax(prior_p))
+            pk_p, pk_rd = prior_p[pk], prior_rd[pk]
+            return bool(
+                cur_p >= pk_p * (1 - self.PRICE_NEAR_PEAK) and
+                cur_rd < pk_rd - self.RSI_DIV_MIN_GAP and
+                pk_rd > 0
+            )
+        except Exception:
+            return False
+
+    def _obv_div(self, df: pd.DataFrame) -> bool:
+        """Bearish OBV divergence: price near local high but OBV below that high's OBV."""
+        try:
+            obv_s = self._col(df, 'OnBalanceVolume')
+            if obv_s is None or len(df) < self.DIV_LOOKBACK + 2:
+                return False
+            w      = df.tail(self.DIV_LOOKBACK + 1)
+            prices = w['close'].values.astype(float)
+            obvs   = obv_s.tail(self.DIV_LOOKBACK + 1).values.astype(float)
+            cur_p, cur_obv = prices[-1], obvs[-1]
+            prior_p, prior_obv = prices[:-1], obvs[:-1]
+            pk = int(np.argmax(prior_p))
+            pk_p, pk_obv = prior_p[pk], prior_obv[pk]
+            near_peak = cur_p >= pk_p * (1 - self.PRICE_NEAR_PEAK)
+            obv_lower = cur_obv < pk_obv * 0.999   # even small divergence counts
+            # also check OBV vs SMA20
+            below_sma20 = False
+            if len(df) >= 20:
+                sma20 = obv_s.tail(20).mean()
+                below_sma20 = bool(cur_obv < sma20)
+            return bool(near_peak and (obv_lower or below_sma20))
+        except Exception:
+            return False
+
+    def _macd_neg(self, df: pd.DataFrame) -> bool:
+        try:
+            col = self._col(df, 'Histogram')
+            return bool(col is not None and self._safe(col.iloc[-1]) < 0)
+        except Exception:
+            return False
+
+    def _loi_rolling(self, df: pd.DataFrame) -> bool:
+        """LOI has rolled over: current LOI below recent peak by at least 2 points."""
+        try:
+            col = self._col(df, 'LOI')
+            if col is None or len(df) < self.LOI_ROLL_LOOKBACK + 1:
+                return False
+            recent = col.tail(self.LOI_ROLL_LOOKBACK + 1).values.astype(float)
+            return bool(recent[-1] < np.nanmax(recent[:-1]) - 2.0)
+        except Exception:
+            return False
+
+    def _st_bear(self, df: pd.DataFrame) -> bool:
+        try:
+            col = self._col(df, 'Down Trend')
+            if col is None:
+                return False
+            v = col.iloc[-1]
+            return bool(v is not None and str(v).strip() not in ('', 'nan', 'NaN'))
+        except Exception:
+            return False
+
+    def _st_bull(self, df: pd.DataFrame) -> bool:
+        try:
+            col = self._col(df, 'Up Trend')
+            if col is None:
+                return False
+            v = col.iloc[-1]
+            return bool(v is not None and str(v).strip() not in ('', 'nan', 'NaN'))
+        except Exception:
+            return False
+
+    def _loi_now(self, df: pd.DataFrame) -> float:
+        try:
+            col = self._col(df, 'LOI')
+            return self._safe(col.iloc[-1]) if col is not None and len(df) > 0 else 0.0
+        except Exception:
+            return 0.0
+
+    # -- main compute -----------------------------------------------------------
+
+    def compute(self, df: pd.DataFrame) -> PBearSignal:
+        """
+        Compute P-BEAR state for this asset using the last DIV_LOOKBACK bars.
+        Returns a PBearSignal with full state + individual signal flags.
+        """
+        if df is None or len(df) < self.DIV_LOOKBACK:
+            return PBearSignal(
+                asset=self.asset, state=PBearState.INACTIVE,
+                asset_class=self.asset_class, loi=0.0,
+                watch_threshold=self.watch_threshold,
+            )
+
+        last      = df.iloc[-1]
+        loi       = self._loi_now(df)
+        price     = self._safe(last.get('close', 0))
+        _rsi4h_col = self._col(df, 'MTF RSI')
+        rsi_4h    = self._safe(_rsi4h_col.iloc[-1] if _rsi4h_col is not None else 0.0)
+        _rsid_col  = self._col(df, 'MTF RSI.1')
+        rsi_daily = self._safe(_rsid_col.iloc[-1] if _rsid_col is not None else 0.0)
+        _macd_col  = self._col(df, 'Histogram')
+        macd_hist = self._safe(_macd_col.iloc[-1] if _macd_col is not None else 0.0)
+
+        # Compute individual signals
+        macd_neg   = self._macd_neg(df)
+        rsi4h_div  = self._rsi4h_div(df)
+        rsid_div   = self._rsid_div(df)
+        obv_div    = self._obv_div(df)
+        loi_roll   = self._loi_rolling(df)
+        st_bear    = self._st_bear(df)
+        st_bull    = self._st_bull(df)
+
+        sig = PBearSignal(
+            asset=self.asset, asset_class=self.asset_class,
+            loi=loi, watch_threshold=self.watch_threshold,
+            macd_neg=macd_neg, rsi4h_div=rsi4h_div, rsid_div=rsid_div,
+            obv_div=obv_div, loi_rolling=loi_roll, st_bear=st_bear,
+            price=price, rsi_4h=rsi_4h, rsi_daily=rsi_daily, macd_hist=macd_hist,
+            state=PBearState.INACTIVE,
+        )
+
+        # -- MOMENTUM (MSTR, TSLA) -----------------------------------------------
+        if self.asset_class == 'MOMENTUM':
+            if loi < self.watch_threshold:
+                sig.state = PBearState.INACTIVE
+            else:
+                sig.state = PBearState.WATCH
+                if loi > self.WATCH_DEFAULT and macd_neg:
+                    sig.state = PBearState.FORMING
+                    if rsi4h_div:
+                        sig.state = PBearState.FORMING_PLUS
+                        if rsid_div and loi_roll:
+                            sig.state = PBearState.CONFIRMED
+                            if obv_div:
+                                sig.state = PBearState.CONFIRMED_PLUS
+            # Invalidation: MACD back positive + price at/near 20-bar high
+            if (sig.state.value >= PBearState.FORMING.value
+                    and not macd_neg and not rsi4h_div):
+                price_20h = float(df['close'].tail(20).max()) if 'close' in df.columns else price
+                if price >= price_20h * 0.998:
+                    sig.state = PBearState.INVALIDATED
+
+        # -- BTC_CORRELATED (IBIT) -----------------------------------------------
+        elif self.asset_class == 'BTC_CORRELATED':
+            if loi < self.watch_threshold:
+                sig.state = PBearState.INACTIVE
+            else:
+                sig.state = PBearState.WATCH
+                if obv_div:
+                    sig.state = PBearState.FORMING
+                    if rsi4h_div:
+                        sig.state = PBearState.FORMING_PLUS
+                        if rsid_div:
+                            sig.state = PBearState.CONFIRMED
+            # Invalidation: OBV recovers
+            if sig.state.value >= PBearState.FORMING.value and not obv_div:
+                sig.state = PBearState.INVALIDATED
+
+        # -- MR (SPY, QQQ, IWM) -------------------------------------------------
+        elif self.asset_class == 'MR':
+            if loi < self.watch_threshold:
+                sig.state = PBearState.INACTIVE
+            else:
+                sig.state = PBearState.WATCH
+                if rsi4h_div:
+                    sig.state = PBearState.FORMING
+                    if obv_div:
+                        sig.state = PBearState.FORMING_PLUS
+                        if rsid_div:
+                            sig.state = PBearState.CONFIRMED
+            # Invalidation: RSI4H recovers + price at/near new high
+            if sig.state.value >= PBearState.FORMING.value and not rsi4h_div:
+                price_20h = float(df['close'].tail(20).max()) if 'close' in df.columns else price
+                if price >= price_20h * 0.998:
+                    sig.state = PBearState.INVALIDATED
+
+        # -- TRENDING (GLD) ------------------------------------------------------
+        elif self.asset_class == 'TRENDING':
+            if loi < self.watch_threshold:
+                sig.state = PBearState.INACTIVE
+            else:
+                sig.state = PBearState.WATCH
+                if obv_div and rsi4h_div:
+                    sig.state = PBearState.FORMING
+                    if st_bear:
+                        sig.state = PBearState.CONFIRMED
+            # Invalidation: Supertrend flips back BULL after CONFIRMED
+            if sig.state.value >= PBearState.CONFIRMED.value and st_bull:
+                sig.state = PBearState.INVALIDATED
+
+        return sig
