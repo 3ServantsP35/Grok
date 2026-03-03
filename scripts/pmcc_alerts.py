@@ -95,6 +95,30 @@ CREATE TABLE IF NOT EXISTS pbear_state_log (
     signals_fired   TEXT,
     ab2_fast_gate   INTEGER DEFAULT 0
 );
+
+CREATE TABLE IF NOT EXISTS defensive_posture_log (
+    id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp            TEXT NOT NULL,
+    posture              TEXT NOT NULL,
+    forming_assets       TEXT,
+    confirmed_assets     TEXT,
+    ab4_floor            REAL,
+    ab3_new_entries      INTEGER,
+    expression3_eligible INTEGER,
+    rationale            TEXT
+);
+
+CREATE TABLE IF NOT EXISTS expression3_log (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp       TEXT NOT NULL,
+    level           TEXT NOT NULL,
+    conditions_met  INTEGER,
+    mnav            REAL,
+    mstr_pbear      TEXT,
+    howell_phase    TEXT,
+    btc_lt_sribi    REAL,
+    btc_lt_rolling  INTEGER
+);
 """
 
 # ── Transition config ─────────────────────────────────────────────────────────
@@ -241,6 +265,11 @@ ALERT_PBEAR_WATCH       = "PBEAR_WATCH"        # LOI enters watch zone
 ALERT_PBEAR_FORMING     = "PBEAR_FORMING"      # Primary bearish signal fires → AB2 pause
 ALERT_PBEAR_CONFIRMED   = "PBEAR_CONFIRMED"    # Dual-TF confirmed → hedge entry zone
 ALERT_PBEAR_INVALIDATED = "PBEAR_INVALIDATED"  # Thesis invalidated → resume normal
+
+# Portfolio posture + Expression 3 alert codes
+ALERT_PORTFOLIO_POSTURE_CHANGE = "PORTFOLIO_POSTURE_CHANGE"
+ALERT_EXPRESSION3_SETUP        = "EXPRESSION3_SETUP"
+ALERT_EXPRESSION3_ARMED        = "EXPRESSION3_ARMED"
 
 # AB3_WATCH: LOI threshold per asset class (same as AB3 entry thresholds from AGENTS.md)
 AB3_WATCH_THRESHOLD = {
@@ -777,6 +806,58 @@ def save_pbear_states(conn: sqlite3.Connection, pbear_sigs: Dict) -> None:
     conn.commit()
 
 
+def save_defensive_posture(conn: sqlite3.Connection, state) -> None:
+    """Persist defensive posture state to defensive_posture_log."""
+    conn.execute("""
+        INSERT INTO defensive_posture_log
+        (timestamp, posture, forming_assets, confirmed_assets, ab4_floor,
+         ab3_new_entries, expression3_eligible, rationale)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    """, (
+        datetime.now(timezone.utc).isoformat(),
+        state.posture.name,
+        ','.join(state.forming_assets),
+        ','.join(state.confirmed_assets),
+        state.ab4_floor_override,
+        int(state.ab3_new_entries),
+        int(state.expression3_eligible),
+        state.rationale,
+    ))
+    conn.commit()
+
+
+def save_expression3(conn: sqlite3.Connection, state) -> None:
+    """Persist Expression 3 trigger state to expression3_log."""
+    conn.execute("""
+        INSERT INTO expression3_log
+        (timestamp, level, conditions_met, mnav, mstr_pbear,
+         howell_phase, btc_lt_sribi, btc_lt_rolling)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    """, (
+        datetime.now(timezone.utc).isoformat(),
+        state.level, state.conditions_met, state.mnav,
+        state.mstr_pbear, state.howell_phase, state.btc_lt_sribi,
+        int(state.btc_lt_rolling),
+    ))
+    conn.commit()
+
+
+def load_prev_defensive_posture(conn: sqlite3.Connection) -> str:
+    """Return most recent posture name from DB, or 'NORMAL' if none."""
+    row = conn.execute(
+        "SELECT posture FROM defensive_posture_log ORDER BY id DESC LIMIT 1"
+    ).fetchone()
+    return row[0] if row else 'NORMAL'
+
+
+def load_prev_expression3_level(conn: sqlite3.Connection) -> str:
+    """Return most recent Expression 3 level from DB, or 'INACTIVE' if none."""
+    row = conn.execute(
+        "SELECT level FROM expression3_log ORDER BY id DESC LIMIT 1"
+    ).fetchone()
+    return row[0] if row else 'INACTIVE'
+
+
 def detect_pbear_alerts(pbear_sigs: Dict, prev_pbear: Dict[str, str]) -> List[Dict]:
     """
     Detect P-BEAR state transitions and generate alerts.
@@ -927,6 +1008,60 @@ def run(engine_result: Dict, webhook_url: str, db_path: str = DB_PATH) -> int:
     if pbear_signals:
         save_pbear_states(conn, pbear_signals)
 
+    # ── Defensive posture + Expression 3 ──────────────────────────────────────
+    defensive_state = engine_result.get("defensive_posture")
+    expr3_state     = engine_result.get("expression3")
+    posture_alerts  = []
+
+    if defensive_state is not None:
+        prev_posture_str = load_prev_defensive_posture(conn)
+        if defensive_state.posture.name != prev_posture_str:
+            posture_color = (0xFF4444 if defensive_state.posture.value >= 2 else 0xFFAA00)
+            posture_alerts.append({
+                "asset":      "PORTFOLIO",
+                "alert_type": ALERT_PORTFOLIO_POSTURE_CHANGE,
+                "prev_state": prev_posture_str,
+                "new_state":  defensive_state.posture.name,
+                "color":      posture_color,
+                "emoji":      defensive_state.emoji,
+                "title":      f"🛡️ Portfolio Posture: {prev_posture_str} → {defensive_state.posture.name}",
+                "body":       (
+                    f"**{defensive_state.rationale}**\n"
+                    f"AB4 floor: {defensive_state.ab4_floor_override:.0%} | "
+                    f"AB3 new entries: {'✅' if defensive_state.ab3_new_entries else '🚫'} | "
+                    f"Expr3 eligible: {'✅' if defensive_state.expression3_eligible else '⬜'}\n"
+                    + (f"Forming: {', '.join(defensive_state.forming_assets)}\n"
+                       if defensive_state.forming_assets else "")
+                    + (f"Confirmed: {', '.join(defensive_state.confirmed_assets)}"
+                       if defensive_state.confirmed_assets else "")
+                ),
+                "current":    {"loi": 0, "price": 0},
+            })
+        save_defensive_posture(conn, defensive_state)
+
+    if expr3_state is not None:
+        prev_e3_str = load_prev_expression3_level(conn)
+        if expr3_state.level in ('SETUP', 'ARMED') and expr3_state.level != prev_e3_str:
+            e3_code  = ALERT_EXPRESSION3_ARMED if expr3_state.level == 'ARMED' else ALERT_EXPRESSION3_SETUP
+            e3_color = 0xFF0000 if expr3_state.level == 'ARMED' else 0xFF8800
+            posture_alerts.append({
+                "asset":      "MSTR",
+                "alert_type": e3_code,
+                "prev_state": prev_e3_str,
+                "new_state":  expr3_state.level,
+                "color":      e3_color,
+                "emoji":      expr3_state.emoji,
+                "title":      f"📐 Expression 3: {expr3_state.emoji} {expr3_state.level}",
+                "body":       (
+                    f"mNAV={expr3_state.mnav:.2f}x | MSTR P-BEAR={expr3_state.mstr_pbear} | "
+                    f"Howell={expr3_state.howell_phase} | BTC LT rolling={expr3_state.btc_lt_rolling}\n"
+                    f"Conditions met: {expr3_state.conditions_met}/4\n"
+                    f"Structure: Long MSTR debit put spread (ATM/OTM 20-25%, 90-120 DTE) + Long IBIT"
+                ),
+                "current":    {"loi": 0, "price": 0},
+            })
+        save_expression3(conn, expr3_state)
+
     # Detect all alert types
     all_alerts = []
     all_alerts += detect_gate_transitions(prev_states, current_states)
@@ -934,6 +1069,7 @@ def run(engine_result: Dict, webhook_url: str, db_path: str = DB_PATH) -> int:
     all_alerts += detect_ab3_alerts(ab3_signals)                  # Stage 2 buy + trim
     all_alerts += detect_ab1_alerts(ab1_signals)
     all_alerts += pbear_alerts                                      # P-BEAR top detection
+    all_alerts += posture_alerts                                    # Portfolio posture + Expr3
     if howell_alert:
         all_alerts.insert(0, howell_alert)  # Phase transitions lead the alert queue
 
