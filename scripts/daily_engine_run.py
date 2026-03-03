@@ -48,32 +48,34 @@ WEBHOOK_ALERTS = os.environ.get("DISCORD_WEBHOOK_ALERTS", "")
 
 # ── The 16 canonical CSVs (filename on GitHub → local save name) ─
 CANONICAL_CSVS = {
-    # Trading assets
-    "BATS_MSTR, 240_7b1cc.csv":                    "BATS_MSTR, 240_7b1cc.csv",  # v2 — bearish indicators added
-    "BATS_IBIT, 240_86dc2.csv":                    "BATS_IBIT, 240_86dc2.csv",
-    "BATS_SPY, 240_981cd.csv":                     "BATS_SPY, 240_981cd.csv",
-    "BATS_QQQ, 240_21e37.csv":                     "BATS_QQQ, 240_21e37.csv",
-    "BATS_GLD, 240_bfd71.csv":                     "BATS_GLD, 240_bfd71.csv",
-    "BATS_IWM, 240_cfcaf.csv":                     "BATS_IWM, 240_cfcaf.csv",
-    "BATS_TSLA, 240_1100b.csv":                    "BATS_TSLA, 240_1100b.csv",
-    "BATS_PURR, 240_1fcfd.csv":                    "BATS_PURR, 240_1fcfd.csv",
-    # Howell Phase inputs (Layer 0.5 — sector ETF proxies)
-    "BATS_XLK, 240_b2e40.csv":                     "BATS_XLK, 240_b2e40.csv",
-    "BATS_XLY, 240_e9102.csv":                     "BATS_XLY, 240_e9102.csv",
-    "BATS_XLF, 240_019f2.csv":                     "BATS_XLF, 240_019f2.csv",
-    "BATS_XLE, 240_6357b.csv":                     "BATS_XLE, 240_6357b.csv",
-    "BATS_XLP, 240_bad2d.csv":                     "BATS_XLP, 240_bad2d.csv",
-    # Regime inputs
-    "BITSTAMP_BTCUSD, 240_fe30c.csv":              "BITSTAMP_BTCUSD, 240_fe30c.csv",
-    "BATS_MSTR_BATS_IBIT, 240_0ae35.csv":          "BATS_MSTR_BATS_IBIT, 240_0ae35.csv",
-    "CRYPTOCAP_STABLE.C.D, 240_7a290.csv":         "CRYPTOCAP_STABLE.C.D, 240_7a290.csv",
-    "BATS_STRC, 240_9969c.csv":                    "BATS_STRC, 240_9969c.csv",
-    "BATS_TLT, 240_c5a3d.csv":                     "BATS_TLT, 240_c5a3d.csv",
-    "TVC_DXY, 240_b3956.csv":                      "TVC_DXY, 240_b3956.csv",
-    "BATS_HYG, 240_ab482.csv":                     "BATS_HYG, 240_ab482.csv",
-    "TVC_VIX, 240_7b6d0.csv":                      "TVC_VIX, 240_7b6d0.csv",
-    # Global breadth
-    "BATS_VT, 240_6744a.csv":                       "BATS_VT, 240_6744a.csv",   # v2 — bearish indicators added
+    # ── Trading assets (v2 — full bearish indicator set) ─────────
+    "BATS_MSTR, 240_7b1cc.csv":                    "BATS_MSTR, 240_7b1cc.csv",
+    "BATS_IBIT, 240_7654d.csv":                    "BATS_IBIT, 240_7654d.csv",
+    "BATS_SPY, 240_8f6d8.csv":                     "BATS_SPY, 240_8f6d8.csv",
+    "BATS_QQQ, 240_5de53.csv":                     "BATS_QQQ, 240_5de53.csv",
+    "BATS_GLD, 240_41f2b.csv":                     "BATS_GLD, 240_41f2b.csv",
+    "BATS_IWM, 240_9624e.csv":                     "BATS_IWM, 240_9624e.csv",
+    "BATS_TSLA, 240_b8831.csv":                    "BATS_TSLA, 240_b8831.csv",
+    "BATS_PURR, 240_0bdda.csv":                    "BATS_PURR, 240_0bdda.csv",
+    # ── Howell Phase inputs (Layer 0.5 — sector ETF proxies) ────
+    "BATS_XLK, 240_e62e8.csv":                     "BATS_XLK, 240_e62e8.csv",
+    "BATS_XLY, 240_73218.csv":                     "BATS_XLY, 240_73218.csv",
+    "BATS_XLF, 240_e9161.csv":                     "BATS_XLF, 240_e9161.csv",
+    "BATS_XLE, 240_e801d.csv":                     "BATS_XLE, 240_e801d.csv",
+    "BATS_XLP, 240_3a323.csv":                     "BATS_XLP, 240_3a323.csv",
+    # ── Regime inputs ────────────────────────────────────────────
+    "INDEX_BTCUSD, 240_6739b.csv":                 "INDEX_BTCUSD, 240_6739b.csv",     # BTC (INDEX source)
+    "BATS_MSTR_BATS_IBIT, 240_05486.csv":          "BATS_MSTR_BATS_IBIT, 240_05486.csv",
+    "CRYPTOCAP_STABLE.C.D, 240_7a8a0.csv":         "CRYPTOCAP_STABLE.C.D, 240_7a8a0.csv",
+    "BATS_STRC, 240_5320c.csv":                    "BATS_STRC, 240_5320c.csv",
+    "BATS_TLT, 240_f930d.csv":                     "BATS_TLT, 240_f930d.csv",
+    "TVC_DXY, 240_d7e33.csv":                      "TVC_DXY, 240_d7e33.csv",
+    "BATS_HYG, 240_03e84.csv":                     "BATS_HYG, 240_03e84.csv",
+    "TVC_VIX, 240_5ff5f.csv":                      "TVC_VIX, 240_5ff5f.csv",
+    # ── Global / breadth / credit regime ─────────────────────────
+    "BATS_VT, 240_05664.csv":                      "BATS_VT, 240_05664.csv",          # Global equity breadth
+    "BATS_DBC, 240_5aa4d.csv":                     "BATS_DBC, 240_5aa4d.csv",         # NEW: Diversified commodities
+    "BATS_LQD, 240_1778d.csv":                     "BATS_LQD, 240_1778d.csv",         # NEW: Investment-grade bonds
 }
 
 # ── SSL context ──────────────────────────────────────────────────
