@@ -72,6 +72,8 @@ CANONICAL_CSVS = {
     "TVC_DXY, 240_b3956.csv":                      "TVC_DXY, 240_b3956.csv",
     "BATS_HYG, 240_ab482.csv":                     "BATS_HYG, 240_ab482.csv",
     "TVC_VIX, 240_7b6d0.csv":                      "TVC_VIX, 240_7b6d0.csv",
+    # Global breadth
+    "BATS_VT, 240_4c4ed.csv":                      "BATS_VT, 240_4c4ed.csv",
 }
 
 # ── SSL context ──────────────────────────────────────────────────
