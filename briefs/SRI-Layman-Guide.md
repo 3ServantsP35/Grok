@@ -77,6 +77,30 @@ Is the global central bank environment expanding or contracting? Think of this a
 
 A positive Global Liquidity Index (GLI) delays our exit signals — rallies tend to run further in good weather. A negative GLI makes us more cautious on new entries.
 
+### Layer 0.5 — Howell Phase (The Season)
+
+Between the global weather and the road conditions, there's a question neither one answers on its own:
+
+> *What time of year is it in the market?*
+
+The **Howell Phase Engine** reads eight sector ETF trend signals — Tech (XLK), Cyclicals (XLY), Financials (XLF), Energy (XLE), Defensives (XLP), Bonds (TLT), Gold (GLD), and Small Caps (IWM) — and determines which of four macro seasons the market is currently in:
+
+| Season | Phase | What's Working | What's Not |
+|---|---|---|---|
+| 🌱 Spring | **Rebound** | Equities, Tech, Cyclicals, Financials | Bonds, Energy, Defensives |
+| ☀️ Summer | **Calm** | Everything — broad participation | Nothing yet fading |
+| 🍂 Autumn | **Speculation** | Commodities, Energy, Defensives | Cyclicals rolling over; equity breadth narrowing |
+| 🌧️ Winter | **Turbulence** | Bonds, Defensives | Almost everything else |
+
+**Why this matters for us:** You don't plant crops in winter — and you don't buy TSLA or MSTR LEAPs when the season is wrong. In **Speculation**, Cyclicals (TSLA, small caps) are already rolling over — entering them feels like buying a dip but it's actually the beginning of a breakdown. In **Turbulence**, the correct trade for SPY is to wait for broad-flush conditions (small caps also down), not to buy when only the big names are selling off.
+
+**The current season (2026-03-02): 🌧️ Turbulence**
+- Meaning: Tech, Cyclicals, and Financials are all trending down. Bonds and Defensives are holding up. This is the late-cycle pattern.
+- What we're doing: Preserving cash in STRC, pausing AB2 call-writing, watching MSTR and BTC for the first signs that Spring is beginning.
+- The moment the phase shifts to Rebound, a Discord alert fires — that's the starting gun for AB3 LEAP deployment on Beta assets.
+
+**The breadth signal:** There's one special rule inside this layer for SPY/QQQ. When small caps (IWM) are still strong while SPY is correcting, it means *only the big names are selling*. Capital has already rotated out of small caps into mega-cap quality earlier — and the index is beginning to roll over from the top, not bouncing from a healthy dip. Historical data: only 10–13% of SPY/QQQ corrections in this configuration continue higher. We skip those entirely. When small caps are *also* weak (everyone's selling), that's a real flush — and those have 51–63% continuation rates. Those we buy.
+
 ### Layer 1 — Regime (The Road Conditions)
 
 Eight market inputs — including Bitcoin, interest rates, the dollar, credit spreads, and volatility — combine into a single **Regime Score** from -7 to +7. This tells us whether the overall market environment is risk-on, neutral, or risk-off.
@@ -142,6 +166,7 @@ STRC also serves as a **health indicator**: if STRC's price drops below $97, it 
 | 🔴 Gate Closed | LOI dropped back into accumulation. Stop writing calls. |
 | ⏸️ AB1 Pause | Breakout signal active. Call selling paused on this asset. |
 | ▶️ AB1 Resumed | Breakout done. Calls can resume. |
+| 🌱 Howell Phase Transition | **The macro season just changed.** The most important alert in the system — especially Turbulence → Rebound, which is the starting gun for MSTR/IBIT AB3 deployment. |
 
 ---
 
