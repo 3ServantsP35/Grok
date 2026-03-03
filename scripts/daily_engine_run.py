@@ -49,7 +49,7 @@ WEBHOOK_ALERTS = os.environ.get("DISCORD_WEBHOOK_ALERTS", "")
 # ── The 16 canonical CSVs (filename on GitHub → local save name) ─
 CANONICAL_CSVS = {
     # Trading assets
-    "BATS_MSTR, 240_7f820.csv":                    "BATS_MSTR, 240_7f820.csv",
+    "BATS_MSTR, 240_7b1cc.csv":                    "BATS_MSTR, 240_7b1cc.csv",  # v2 — bearish indicators added
     "BATS_IBIT, 240_86dc2.csv":                    "BATS_IBIT, 240_86dc2.csv",
     "BATS_SPY, 240_981cd.csv":                     "BATS_SPY, 240_981cd.csv",
     "BATS_QQQ, 240_21e37.csv":                     "BATS_QQQ, 240_21e37.csv",
@@ -73,7 +73,7 @@ CANONICAL_CSVS = {
     "BATS_HYG, 240_ab482.csv":                     "BATS_HYG, 240_ab482.csv",
     "TVC_VIX, 240_7b6d0.csv":                      "TVC_VIX, 240_7b6d0.csv",
     # Global breadth
-    "BATS_VT, 240_4c4ed.csv":                      "BATS_VT, 240_4c4ed.csv",
+    "BATS_VT, 240_6744a.csv":                       "BATS_VT, 240_6744a.csv",   # v2 — bearish indicators added
 }
 
 # ── SSL context ──────────────────────────────────────────────────
