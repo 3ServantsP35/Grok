@@ -3227,6 +3227,7 @@ class PBearSignal:
     obv_div:         bool = False   # OBV bearish divergence
     loi_rolling:     bool = False   # LOI rolled over from recent peak
     st_bear:         bool = False   # Supertrend flipped BEAR
+    st_ob:           bool = False   # Weekly StochRSI overbought (%K > 80 or early turn)
 
     # Context values
     price:           float = 0.0
@@ -3263,6 +3264,7 @@ class PBearSignal:
         if self.obv_div:      fired.append('OBV_DIV')
         if self.loi_rolling:  fired.append('LOI_ROLL')
         if self.st_bear:      fired.append('ST_BEAR')
+        if self.st_ob:        fired.append('STOCH_OB')
         return fired
 
 
@@ -3478,6 +3480,33 @@ class PBearEngine:
         except Exception:
             return 0.0
 
+    def _stoch_overbought(self, df: pd.DataFrame) -> bool:
+        """Weekly StochRSI overbought signal. %K > 80 = overbought. %K > 70 and turning = early."""
+        try:
+            k_col = self._col(df, '%K')
+            d_col = self._col(df, '%D')
+            if k_col is None or len(df) < 3:
+                return False
+            # Use last 3 non-NaN values
+            k_vals = k_col.dropna().tail(3).values.astype(float)
+            if len(k_vals) < 2:
+                return False
+            cur_k = k_vals[-1]
+            prev_k = k_vals[-2]
+            # Overbought: above 80
+            if cur_k > 80:
+                return True
+            # Early turn: above 70, K > D, and K is falling
+            if d_col is not None:
+                d_vals = d_col.dropna().tail(2).values.astype(float)
+                if len(d_vals) >= 1:
+                    cur_d = d_vals[-1]
+                    if cur_k > 70 and cur_k > cur_d and cur_k < prev_k:
+                        return True
+            return False
+        except Exception:
+            return False
+
     # -- main compute -----------------------------------------------------------
 
     def compute(self, df: pd.DataFrame) -> PBearSignal:
@@ -3510,12 +3539,13 @@ class PBearEngine:
         loi_roll   = self._loi_rolling(df)
         st_bear    = self._st_bear(df)
         st_bull    = self._st_bull(df)
+        st_ob      = self._stoch_overbought(df)
 
         sig = PBearSignal(
             asset=self.asset, asset_class=self.asset_class,
             loi=loi, watch_threshold=self.watch_threshold,
             macd_neg=macd_neg, rsi4h_div=rsi4h_div, rsid_div=rsid_div,
-            obv_div=obv_div, loi_rolling=loi_roll, st_bear=st_bear,
+            obv_div=obv_div, loi_rolling=loi_roll, st_bear=st_bear, st_ob=st_ob,
             price=price, rsi_4h=rsi_4h, rsi_daily=rsi_daily, macd_hist=macd_hist,
             state=PBearState.INACTIVE,
         )
@@ -3569,6 +3599,8 @@ class PBearEngine:
                         sig.state = PBearState.FORMING_PLUS
                         if rsid_div:
                             sig.state = PBearState.CONFIRMED
+                            if self._stoch_overbought(df):
+                                sig.state = PBearState.CONFIRMED_PLUS
             # Invalidation: RSI4H recovers + price at/near new high
             if sig.state.value >= PBearState.FORMING.value and not rsi4h_div:
                 price_20h = float(df['close'].tail(20).max()) if 'close' in df.columns else price
