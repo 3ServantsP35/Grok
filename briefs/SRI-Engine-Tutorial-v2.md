@@ -11,6 +11,7 @@
 4. [ST-Primary Framework](#4-st-primary-framework)
 5. [Context Classification: Headwind / Mixed / Tailwind](#5-context-classification)
 6. [GLI Engine — Layer 0](#6-gli-engine--layer-0)
+6b. [Howell Phase Engine — Layer 0.5](#6b-howell-phase-engine--layer-05) *(NEW)*
 7. [Regime Engine — Layer 1](#7-regime-engine--layer-1)
 8. [LOI — LEAP Opportunity Index](#8-loi--leap-opportunity-index)
 9. [AB1 — Tactical LEAP Engine](#9-ab1--tactical-leap-engine)
@@ -41,6 +42,15 @@ The engine is organized into four layers. Each layer has a distinct function and
 │  Function: Adjusts Layer 1 probabilities, NOT entry signals │
 └─────────────────────────────────┬───────────────────────────┘
                                   │ probability weights
+┌─────────────────────────────────▼───────────────────────────┐
+│  LAYER 0.5: HOWELL PHASE ENGINE (NEW)                       │
+│  Sector ETF SRI states → macro cycle phase                  │
+│  Inputs: XLK, XLY, XLF, XLE, XLP, TLT, GLD, IWM (LT SRIBI)│
+│  Output: Phase (Rebound/Calm/Speculation/Turbulence),       │
+│          confidence, per-asset AB3 size multiplier          │
+│  Function: Gate Zero — blocks out-of-season entries        │
+└─────────────────────────────────┬───────────────────────────┘
+                                  │ phase gate + size multiplier
 ┌─────────────────────────────────▼───────────────────────────┐
 │  LAYER 1: REGIME ENGINE                                     │
 │  8 market inputs → composite score + vehicle selection      │
@@ -433,6 +443,91 @@ GLI leading indicator peaked in late 2025. 13-week lag implies BTC faces meaning
 
 **Manual protocol until `GLIEngine` is built:**  
 When CIO produces a Morning Brief or trade recommendation, it reads the most recent 42 Macro research update and applies the probability adjustment rules manually. The GRID regime, Paradigm, and Dr. Mo signals are stated explicitly in the brief.
+
+---
+
+## 6b. Howell Phase Engine — Layer 0.5
+
+### 6b.1 Purpose and Role
+
+The Howell Phase Engine sits between the GLI macro view (Layer 0) and the per-asset regime signal (Layer 1). It answers a structural question neither layer addresses:
+
+> *Which asset classes are "in season" right now within the global liquidity cycle?*
+
+Michael Howell's framework identifies four repeating macro phases — Rebound, Calm, Speculation, Turbulence — driven by the Global Liquidity cycle. Each phase has distinct sector winners and losers. Entering an asset in the wrong phase is equivalent to planting crops in winter: the signal may be technically correct but the macro environment prevents the trade from working.
+
+**The four seasons analogy:**
+- 🌱 **Rebound** = Spring — plant equities and risk assets; they emerge fastest from the trough
+- ☀️ **Calm** = Summer — everything grows; maximum participation, maximum AB2 income
+- 🍂 **Speculation** = Autumn — harvest Commodities/Energy; equity breadth narrows; cyclicals roll over first
+- 🌧️ **Turbulence** = Winter — shelter in Bonds and Defensives; preserve optionality; wait for spring
+
+### 6b.2 Phase Detection Methodology
+
+The engine reads **LT SRIBI** from 8 sector ETF CSV exports (same 4H format as trading assets) and classifies each as BULL (LT > +5), BEAR (LT < -5), or NEUTRAL. It then scores each phase against a signature matrix derived from Howell's published traffic light slide (GLIndexes, Slide 35):
+
+| Sector | Proxy | Rebound | Calm | Speculation | Turbulence |
+|---|---|---|---|---|---|
+| XLK | Technology | + | + | + | **−** |
+| XLY | Cyclicals | + | + | **−** | **−** |
+| XLF | Financials | + | + | 0 | **−** |
+| XLE | Energy | − | + | + | **−** |
+| XLP | Defensives | − | + | + | **+** |
+| TLT | Bond Duration | − | 0 | − | **+** |
+| GLD | Commodities | − | 0 | + | **−** |
+| IWM | Cyclicals broad | + | + | **−** | **−** |
+
+Phase score = sum of (expected_sign × actual_signal) for each sector. Highest score wins. Confidence = score gap to next-best phase, normalised 0–100%.
+
+### 6b.3 Gate Zero: AB3 Entry Eligibility by Phase
+
+| Asset | Rebound | Calm | Speculation | Turbulence |
+|---|---|---|---|---|
+| Beta/Risk On (MSTR, IBIT) | ✅ 100% | ✅ 100% | ⚠️ 50% | ❌ 0% — wait |
+| Equities (SPY, QQQ) | ✅ 100% | ✅ 100% | ❌ 0% | ✅ 100% flush only |
+| Cyclicals (TSLA, IWM) | ✅ 100% | ✅ 100% | ❌ 0% | ❌ 0% — wait |
+| Commodities (GLD) | ❌ 0% | ✅ 100% | ⚠️ 75% | ❌ 0% |
+| Bond Duration (TLT) | ❌ 0% | ❌ 0% | ❌ 0% | ✅ 100% |
+
+**Hard rule:** Size multiplier of 0% means the entry is blocked regardless of LOI depth, CPS score, or VLT recovery speed. A CPS of 80 in a blocked phase is still a blocked entry.
+
+### 6b.4 IWM Breadth Gate (SPY/QQQ only — applies inside Turbulence)
+
+When phase = Turbulence and SPY/QQQ LOI crosses -40, a second sub-gate activates:
+
+- **IWM headwind (LT < 0 AND VLT < 0) at the SPY trough** → ✅ broad flush → eligible. Historical continuation rate: 51–63% in Structural episodes.
+- **IWM neutral or bull at the SPY trough** → ❌ BREADTH_DIVERGENCE → blocked. This is the Howell Speculation-phase top signal in disguise — capital concentrated in mega-cap while small caps already deteriorated. Historical continuation rate: 10–13%.
+
+This signal is named `BREADTH_DIVERGENCE` in the system.
+
+### 6b.5 AB2 Phase Rules
+
+| Phase | AB2 Call-Selling |
+|---|---|
+| Rebound | Standard LOI gates; aggressive income harvesting |
+| Calm | Maximum AB2 activity; highest income period |
+| Speculation | Reduce max_delta by 0.05 on all Equity/Cyclical assets |
+| Turbulence | **PAUSE AB2** across all assets — preserve LEAP optionality |
+
+### 6b.6 The Turbulence → Rebound Transition (Primary AB3 Signal for Beta Assets)
+
+In Howell's framework, Beta/Risk On assets (MSTR, IBIT) are the **first to recover** at the beginning of Rebound — they lead the rotation out of Turbulence. This is consistent with BTC historically leading global risk-on recoveries.
+
+**Operational signal:** When MSTR/IBIT LOI begins recovering from deep negative territory (crosses above -20) while phase is still technically Turbulence, this is an **early Rebound indicator**. It typically precedes the full phase shift by 2–4 weeks.
+
+The `HOWELL_PHASE_TRANSITION` Discord alert fires immediately when the engine detects a phase change. This alert is the primary AB3 entry trigger for Beta assets.
+
+### 6b.7 Current Phase and DB State
+
+**Live phase (as of 2026-03-02): 🌧️ Turbulence**
+- Score: Turbulence +3 | Speculation +2 (low confidence 12.5% — XLE/GLD anomaly noted)
+- XLK/XLY/XLF: BEAR ✅ consistent with Turbulence
+- TLT/XLP: BULL ✅ consistent with Turbulence
+- XLE/GLD: BULL ⚠️ anomaly — XLE = early-cycle energy; GLD = structural CB demand (known divergence)
+
+**DB tables:** `howell_phase_state` (every daily run), `howell_phase_transitions` (on change)
+**Script location:** `HowellPhaseEngine` class in `/mnt/mstr-scripts/sri_engine.py`
+**Data inputs:** 5 sector ETF CSVs (XLK/XLY/XLF/XLE/XLP) + TLT/GLD/IWM from existing data directory
 
 ---
 
@@ -1182,12 +1277,13 @@ else:
 
 When multiple signals fire on the same asset, priority order:
 
+0. **Layer 0.5 (Howell Phase) Gate Zero** — check phase eligibility for the asset class. If size multiplier = 0%, hard block. Also check IWM Breadth Gate for SPY/QQQ. No downstream evaluation until Gate Zero passes.
 1. **Layer 0 (GLI) flag** — "GLI HEADWIND" tag reduces confidence; does not block
 2. **Regime gate** — if score ≤ -2, override all entry signals
 3. **AB3 deep accumulation (LOI < -80)** — highest priority entry
 4. **AB1 pre-breakout** — tactical entry on confirmed Stage 4→1
 5. **AB3 accumulation (LOI < acc_thresh)** — standard strategic entry
-6. **AB2 Bull Put** — spread entry in MIXED context
+6. **AB2 PMCC** — call-selling on existing LEAPs in eligible LOI zone
 7. **AB3 trim signals** — reduce existing positions
 8. **AB2/AB1 LT exit** — close positions on structural catch-up
 
@@ -1339,7 +1435,16 @@ Neutral:  STRC ($100), VIX (20)
 ```
 Incoming signal on asset X:
 
-0. Check Layer 0 (GLI):
+0a. Check Layer 0.5 (Howell Phase — Gate Zero):
+   - What is current phase? (Rebound/Calm/Speculation/Turbulence)
+   - Is this asset class eligible? (see §6b.3 table)
+   - If size multiplier = 0% → HARD BLOCK. Stop. Do not evaluate further.
+   - If SPY or QQQ: check IWM breadth state at trough
+     IWM headwind (LT<0 AND VLT<0)? → proceed
+     IWM neutral/bull? → BREADTH_DIVERGENCE → HARD BLOCK
+   - If eligible: apply phase size multiplier to final position size
+
+0b. Check Layer 0 (GLI):
    - GLI Z < -0.5? → Tag signal "GLI HEADWIND"; raise confidence threshold
    - GEGI < 0? → Reduce position size; amplify bearish regime weight
    - Dr. Mo bearish on asset class? → Flag for human review before entry
@@ -1383,6 +1488,10 @@ Incoming signal on asset X:
 | AB1/2/3/4 | Allocation Buckets — Tactical LEAP / Spreads / Strategic LEAP / Cash |
 | GLI | Global Liquidity Index — aggregate central bank balance sheet measure |
 | GEGI | Global Economic Growth Index — fiscal + monetary + external demand composite |
+| Howell Phase | One of four macro cycle phases (Rebound/Calm/Speculation/Turbulence) derived from sector ETF LT SRIBI states |
+| Gate Zero | Howell Phase eligibility check — first filter before CPS, episode type, or VLT clock |
+| BREADTH_DIVERGENCE | Signal when IWM is neutral/bull while SPY/QQQ corrects — marks Speculation-phase top; 10–13% continuation |
+| HOWELL_PHASE_TRANSITION | Discord alert fired when Howell Phase changes — primary AB3 Beta entry trigger |
 | GRID | 42 Macro growth/inflation regime matrix (Goldilocks/Reflation/Stagflation/Deflation) |
 | Paradigm | 42 Macro multi-year monetary cycle phase (A=tighten, B=cut, C=largesse) |
 | KISS | 42 Macro model portfolio — binary long/short signals by asset class |
