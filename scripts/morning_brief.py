@@ -490,16 +490,13 @@ def build_brief():
         # CSV paths for each asset (84-col AB3-enhanced preferred; 71-col fallback)
         DATA_DIR = "/mnt/mstr-data"
         PMCC_CSVS = {
-            "MSTR": [
-                f"{DATA_DIR}/BATS_MSTR, 240_55b17.csv",   # 84-col
-                f"{DATA_DIR}/BATS_MSTR, 240_7f820.csv",   # 71-col fallback
-            ],
-            "IBIT": [f"{DATA_DIR}/BATS_IBIT, 240_ccca2.csv"],
-            "TSLA": [f"{DATA_DIR}/BATS_TSLA, 240_bdcd2.csv"],
-            "SPY":  [f"{DATA_DIR}/BATS_SPY, 240_981cd.csv"],
-            "QQQ":  [f"{DATA_DIR}/BATS_QQQ, 240_21e37.csv"],
-            "GLD":  [f"{DATA_DIR}/BATS_GLD, 240_bfd71.csv"],
-            "IWM":  [f"{DATA_DIR}/BATS_IWM, 240_cfcaf.csv"],
+            "MSTR": [f"{DATA_DIR}/BATS_MSTR, 240_7b1cc.csv"],   # v2 bearish indicators
+            "IBIT": [f"{DATA_DIR}/BATS_IBIT, 240_7654d.csv"],
+            "TSLA": [f"{DATA_DIR}/BATS_TSLA, 240_b8831.csv"],
+            "SPY":  [f"{DATA_DIR}/BATS_SPY, 240_8f6d8.csv"],
+            "QQQ":  [f"{DATA_DIR}/BATS_QQQ, 240_5de53.csv"],
+            "GLD":  [f"{DATA_DIR}/BATS_GLD, 240_41f2b.csv"],
+            "IWM":  [f"{DATA_DIR}/BATS_IWM, 240_9624e.csv"],
         }
 
         # Load GLI for threshold adjustment (gli_proxy table; no gegi column — use 0.0)
