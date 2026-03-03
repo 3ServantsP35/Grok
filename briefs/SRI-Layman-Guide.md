@@ -1,5 +1,5 @@
 # SRI Options Engine — Layman's Guide
-**Version 1.0 | March 5, 2026**
+**Version 1.1 | March 3, 2026**
 **Audience: Greg, Gavin, Gary**
 
 ---
@@ -190,6 +190,106 @@ STRC also serves as a **health indicator**: if STRC's price drops below $97, it 
 
 ---
 
+## The Traffic Light System
+
+The engine doesn't just say "buy" or "sell." It tells you **exactly where we are on the journey** — and how confident it is that we're about to turn the corner.
+
+Think of it like a road trip with ten distinct mile markers. The classic map has four main stops: Accumulation (buying zone), Markup (going up), Distribution (topping out), and Markdown (going down). But the real world doesn't jump cleanly from one stop to the next. There are transition zones — that moment when you can see the engine struggling to pull the car uphill before it finally crests the ridge.
+
+The engine now names those transition zones explicitly. Here are all ten:
+
+| Where We Are | Engine Name | Plain Language |
+|---|---|---|
+| 🟢 The valley floor | **S4→1** | "We might be at the bottom. Watch carefully." |
+| 🟢 Starting to climb | **S1** | "The climb has begun. Engine confirmed turning." |
+| 🟢 Gaining speed | **S1→2** | "Breakout building. Pre-breakout entry window." |
+| 🟢 Full acceleration | **S2** | "Full markup underway. Momentum is real." |
+| 🟢 Cruising altitude | **S2C** | "The run is continuing. Hold your position." |
+| 🟡 Warning signs | **S2→3** | "Starting to see cracks. First caution flags." |
+| 🔴 Topping out | **S3** | "Distribution in progress. Reduce exposure." |
+| 🔴 Losing altitude | **S3→4** | "Markdown beginning. Get lighter fast." |
+| 🔴 Descending | **S4** | "Full downtrend. Don't buy the dip." |
+| 🔴 Still descending | **S4C** | "Continues lower. No floor signal yet." |
+
+**The key insight:** Most costly mistakes in this system happen at two points — at *S2→3* (holding too long because you think the run is continuing) and at *S4→1* (buying too early because you think the bottom is in). The engine's job is to tell you which one of those you're actually in, with specificity.
+
+### The Confidence Ladder
+
+Every transition also has a confidence level: **Watch → Forming → Confirmed**.
+
+- **Watch** means "conditions are starting to look like a transition might be coming." The car is slowing down. You notice it. But you haven't confirmed the turn yet.
+- **Forming** means "multiple conditions are now lining up." The speedometer is dropping, the road ahead is curving, your passenger is pointing left.
+- **Confirmed** means "the turn has happened." The evidence is there. Now you act.
+
+The most important confirmation is the **S4→1 Confirmed** signal — the engine's all-clear that a genuine bottom has been reached. Until that fires, you hold your cash in STRC and watch. When it fires, you act.
+
+
+---
+
+## The Readiness Score
+
+Every week, the engine publishes a **0–10 Readiness Score** (technically called the LEAP Attractiveness Score) for each asset it tracks. Think of it like a weather forecast confidence rating:
+
+- **10/10:** "Pack your umbrella, cancel your picnic — it's definitely raining." High confidence, high conviction. Full position entry authorized.
+- **8–9/10:** "There's an 80% chance of rain." Strong conviction. Act now.
+- **6–7/10:** "There's a chance — building but not certain yet." Conditions are developing. A small early position may make sense.
+- **4–5/10:** "Clouds are forming, but it might blow over." Watch closely. Don't commit yet.
+- **1–3/10:** "Not a cloud in the sky." No entry. Hold your cash.
+
+### Where the Number Comes From
+
+The score starts with where the asset is on the ten-step road map above. Being at **S4→1 Confirmed** (genuine bottom confirmed) starts you at a 10. Being in **S4 or S4C** (still falling, no floor) starts you at 0. The middle states get scores in between.
+
+Then the engine applies adjustments based on the broader environment:
+
+- Is the macro season wrong? (Turbulence phase — wrong time of year to plant) → score goes down
+- Is global liquidity contracting? → score goes down slightly
+- Is Bitcoin's bottom unconfirmed? (For MSTR and IBIT) → score goes down slightly
+- Is MSTR trading at a discount to its Bitcoin holdings? → score goes up slightly
+- Is the price near a major floor? → score goes up slightly
+
+### Most Decisions Happen in the 6–8 Range
+
+A perfect 10 is rare — it requires all the stars to align simultaneously. A 0 means "don't touch it." Most real decisions happen in the **6–8 range**, where conditions are building but not yet certain. That's normal. The engine is designed to make you act on evidence, not perfection.
+
+### The Personal Income Angle
+
+Here's something the shared score doesn't capture: **your specific situation matters.**
+
+If your portfolio isn't generating the monthly income you need yet — say you haven't built up enough covered call income to hit your 2% monthly target — the engine recognizes that and adjusts when it makes sense to act a little earlier.
+
+Think of it this way: if you're getting paid well while you wait (your income engine is working), you can afford to be patient and wait for a score of 8 before deploying. But if your income engine isn't built yet, waiting for that perfect 8 while sitting at a 6.5 has a real cost every month you delay. The engine accounts for this in your **private personal report** (more on that below).
+
+This personal adjustment is **never shown in the shared report**. It's your information, for your situation, used only in your private channel.
+
+
+---
+
+## Your Personal Report
+
+Once a week — or any time you ask — the engine generates a **Personal Report** just for you, delivered only in your private channel.
+
+Here's what it does: it takes the shared market picture (the 0–10 scores, the stage states, the confirmation ladders) and translates it into:
+
+> *"Here's what this means for your specific situation, your income needs, and your current positions."*
+
+For example, the shared report might say MSTR is a 7/10. Your personal report might say: "Your income engine is currently generating 1.1%/month against your 2% target. Given that gap, this 7 becomes more actionable for you — here's a suggested approach at 25% of your normal sizing."
+
+Or it might say: "You already have a large MSTR position from the February entry. Given your current exposure, the recommendation is to hold and not add at this level."
+
+**What your personal report covers:**
+- Your income gap (how far you are from your 2%/month target)
+- Your current positions and how they relate to the current signals
+- A specific action recommendation for the week — with sizing
+- What to watch for that would change that recommendation
+
+**Privacy rule:** Your personal report is never shared with other users, never posted to shared channels, and never committed to GitHub. It is yours and only yours.
+
+To get your report, just ask in your private channel: *"Give me my personal report."*
+
+
+---
+
 ## Frequently Asked Questions
 
 **"Why aren't we buying anything right now?"**
@@ -213,3 +313,5 @@ The engine is a decision-support tool. The humans decide.
 ---
 
 *SRI Options Engine — Internal Reference Document. Not investment advice.*
+
+*v1.1 additions: The Traffic Light System (10-state taxonomy), The Readiness Score (LEAP Attractiveness), Your Personal Report (PPR overview).*
