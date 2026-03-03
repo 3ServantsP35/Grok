@@ -1048,12 +1048,12 @@ if __name__ == "__main__":
     # Auto-discover CSV files
     data_dir = "/mnt/mstr-data"
     csv_map = {
-        "MSTR": f"{data_dir}/BATS_MSTR, 240_7f820.csv",
-        "BTC": f"{data_dir}/BITSTAMP_BTCUSD, 240_fe30c.csv",
-        "SPY": f"{data_dir}/BATS_SPY, 240_981cd.csv",
-        "QQQ": f"{data_dir}/BATS_QQQ, 240_21e37.csv",
-        "GLD": f"{data_dir}/BATS_GLD, 240_bfd71.csv",
-        "IWM": f"{data_dir}/BATS_IWM, 240_cfcaf.csv",
+        "MSTR": f"{data_dir}/BATS_MSTR, 240_7b1cc.csv",
+        "BTC":  f"{data_dir}/INDEX_BTCUSD, 240_6739b.csv",
+        "SPY":  f"{data_dir}/BATS_SPY, 240_8f6d8.csv",
+        "QQQ":  f"{data_dir}/BATS_QQQ, 240_5de53.csv",
+        "GLD":  f"{data_dir}/BATS_GLD, 240_41f2b.csv",
+        "IWM":  f"{data_dir}/BATS_IWM, 240_9624e.csv",
     }
     
     print("Loading assets...")
@@ -1503,7 +1503,7 @@ class RegimeEngine:
     DATA_DIR = "/mnt/mstr-data"
     
     REGIME_FILES = {
-        "BTC":        "BITSTAMP_BTCUSD",
+        "BTC":        "INDEX_BTCUSD",          # switched from BITSTAMP to INDEX source
         "MSTR_IBIT":  "BATS_MSTR_BATS_IBIT",
         "STABLE":     "CRYPTOCAP_STABLE.C.D",
         "STRC":       "BATS_STRC",
