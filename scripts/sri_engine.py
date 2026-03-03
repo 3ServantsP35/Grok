@@ -1319,25 +1319,35 @@ class HowellPhaseEngine:
         'TLT': 'BATS_TLT, 240_',
         'GLD': 'BATS_GLD, 240_',
         'IWM': 'BATS_IWM, 240_',
+        'VT':  'BATS_VT, 240_',     # Global equity breadth (world ETF)
     }
 
     # Phase signature matrix
+    # VT = World ETF — global equity breadth signal
+    #   Rebound:     +1  global equities recovering alongside domestic
+    #   Calm:        +1  global equities healthy
+    #   Speculation:  0  US leads; global breadth may lag — neutral contribution
+    #   Turbulence:  -1  global risk-off; broad equity selling
     PHASE_SIGNATURES: Dict[str, Dict[str, int]] = {
         'Rebound': {
             'XLK': +1, 'XLY': +1, 'XLF': +1,
             'XLE': -1, 'XLP': -1, 'TLT': -1, 'GLD': -1, 'IWM': +1,
+            'VT':  +1,
         },
         'Calm': {
             'XLK': +1, 'XLY': +1, 'XLF': +1,
             'XLE': +1, 'XLP': +1, 'TLT':  0, 'GLD':  0, 'IWM': +1,
+            'VT':  +1,
         },
         'Speculation': {
             'XLK': +1, 'XLY': -1, 'XLF':  0,
             'XLE': +1, 'XLP': +1, 'TLT': -1, 'GLD': +1, 'IWM': -1,
+            'VT':   0,
         },
         'Turbulence': {
             'XLK': -1, 'XLY': -1, 'XLF': -1,
             'XLE': -1, 'XLP': +1, 'TLT': +1, 'GLD': -1, 'IWM': -1,
+            'VT':  -1,
         },
     }
 
