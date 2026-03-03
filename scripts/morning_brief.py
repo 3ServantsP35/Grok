@@ -485,7 +485,7 @@ def build_brief():
     # ============================================
     try:
         import pandas as pd
-        from sri_engine import AB2PMCCEngine, PMCCGateState
+        from sri_engine import AB2PMCCEngine, PMCCGateState, PBearEngine
 
         # CSV paths for each asset (84-col AB3-enhanced preferred; 71-col fallback)
         DATA_DIR = "/mnt/mstr-data"
@@ -506,9 +506,20 @@ def build_brief():
         gli_z   = float(gli_row[0]) if gli_row else 0.0
         gegi    = 0.0   # gegi not stored in gli_proxy; GLI Z-score is the primary adjuster
 
-        pmcc_eng = AB2PMCCEngine()
+        pmcc_eng  = AB2PMCCEngine()
         gate_rows = []
-        has_any = False
+        has_any   = False
+
+        # Load P-BEAR states from DB (most recent per asset); fallback to live compute
+        _pbear_db = {}
+        try:
+            _pb_rows = conn.execute(
+                """SELECT asset, state FROM pbear_state_log
+                   WHERE id IN (SELECT MAX(id) FROM pbear_state_log GROUP BY asset)"""
+            ).fetchall()
+            _pbear_db = {r[0]: r[1] for r in _pb_rows}
+        except Exception:
+            pass
 
         for asset, paths in PMCC_CSVS.items():
             df = None
@@ -541,22 +552,45 @@ def build_brief():
                 'NO_POSITION': '⬜',
             }.get(state, '❓')
 
-            gate_rows.append((asset, gate_emoji, state, loi, ct, ctx, delta, thresh, cls, price))
+            # P-BEAR state: use DB if available, else compute live
+            pbear_state_name = _pbear_db.get(asset)
+            pbear_emoji      = '⚪'
+            if pbear_state_name is None and df is not None:
+                try:
+                    _pb_eng  = PBearEngine(asset)
+                    _pb_sig  = _pb_eng.compute(df)
+                    pbear_state_name = _pb_sig.state.name
+                    pbear_emoji      = _pb_sig.emoji
+                except Exception:
+                    pbear_state_name = 'N/A'
+            else:
+                _pbear_emoji_map = {
+                    'INACTIVE': '⚪', 'WATCH': '👁', 'FORMING': '🟡',
+                    'FORMING_PLUS': '🟠', 'CONFIRMED': '🔴',
+                    'CONFIRMED_PLUS': '🚨', 'INVALIDATED': '✅',
+                }
+                pbear_emoji = _pbear_emoji_map.get(pbear_state_name or '', '⚪')
+
+            gate_rows.append((asset, gate_emoji, state, loi, ct, ctx, delta, thresh, cls, price,
+                               pbear_emoji, pbear_state_name or 'N/A'))
             has_any = True
 
         if has_any:
             section  = "**📝 AB2 PMCC — Gate States**\n"
             section += f"*GLI Z={gli_z:+.3f} | GEGI={gegi:+.3f}*\n"
             section += "```\n"
-            section += f"{'Asset':<6} {'Gate':<13} {'LOI':>6}  {'CT':>3}  {'Ctx':>4}  {'δ max':>5}  {'Thresh':>6}\n"
-            section += "─" * 52 + "\n"
-            for asset, em, state, loi, ct, ctx, delta, thresh, cls, price in gate_rows:
-                state_short = state.replace('_', ' ')[:12]
-                section += f"{asset:<6} {em}{state_short:<12} {loi:>+6.1f}  CT{ct}  {ctx:<4}  {delta:>5.2f}  {thresh:>+6.0f}\n"
+            section += f"{'Asset':<6} {'Gate':<13} {'LOI':>6}  {'CT':>3}  {'Ctx':>4}  {'δ max':>5}  {'Thresh':>6}  {'P-BEAR':<14}\n"
+            section += "─" * 68 + "\n"
+            for asset, em, state, loi, ct, ctx, delta, thresh, cls, price, pb_em, pb_st in gate_rows:
+                state_short  = state.replace('_', ' ')[:12]
+                pb_st_short  = (pb_st or 'N/A').replace('_', ' ')[:13]
+                section += (f"{asset:<6} {em}{state_short:<12} {loi:>+6.1f}  CT{ct}  "
+                            f"{ctx:<4}  {delta:>5.2f}  {thresh:>+6.0f}  {pb_em}{pb_st_short}\n")
             section += "```\n"
 
             # Momentum vs MR legend
             section += "🔴 NO\\_CALLS = accumulate | 🟢 OTM = δ≤0.25 | 🟠 DELTA\\_MGMT = δ≤0.40\n"
+            section += "⚪=Inactive 👁=Watch 🟡=Forming 🟠=Forming+ 🔴=Confirmed 🚨=Conf+ ✅=Invalidated\n"
             section += f"*Momentum (MSTR/TSLA/IBIT) DELTA\\_MGMT threshold: LOI>+40 | MR: LOI>+20*\n\n"
 
             # Open short calls from trade_log
