@@ -25,8 +25,10 @@ from dataclasses import dataclass, field
 from typing import Optional, List, Dict, Tuple, Any
 from datetime import datetime, timedelta
 from enum import Enum
+from pathlib import Path
 import json
 import math
+import glob as _glob
 
 # Layer 0: GLI Engine (optional import — engine runs without it if unavailable)
 try:
@@ -1216,6 +1218,260 @@ class AB1Trade:
 
 
 # ═══════════════════════════════════════════════════════════════
+# HOWELL PHASE ENGINE  (Layer 0.5)
+# ═══════════════════════════════════════════════════════════════
+
+@dataclass
+class HowellPhaseState:
+    """
+    Current Howell macro phase + per-sector signals.
+    Four phases: Rebound → Calm → Speculation → Turbulence → repeat
+    """
+    timestamp: datetime
+    phase: str                          # Rebound | Calm | Speculation | Turbulence
+    confidence: float                   # Score gap to next-best (0–100 normalised)
+    phase_scores: Dict[str, float]      # raw score per phase
+    sector_signals: Dict[str, str]      # ticker → BULL | BEAR | NEUTRAL
+    sector_sribi: Dict[str, float]      # ticker → LT SRIBI value
+    prev_phase: Optional[str] = None
+    is_transition: bool = False
+
+    PHASE_ORDER  = ['Rebound', 'Calm', 'Speculation', 'Turbulence']
+    PHASE_EMOJIS = {'Rebound': '🌱', 'Calm': '☀️', 'Speculation': '🍂', 'Turbulence': '🌧️'}
+
+    @property
+    def emoji(self) -> str:
+        return self.PHASE_EMOJIS.get(self.phase, '❓')
+
+    @property
+    def ab3_beta_eligible(self) -> bool:
+        """MSTR / IBIT AB3 full sizing allowed."""
+        return self.phase in ('Rebound', 'Calm')
+
+    @property
+    def ab3_beta_caution(self) -> bool:
+        """MSTR / IBIT AB3 at 50 % max sizing."""
+        return self.phase == 'Speculation'
+
+    @property
+    def ab3_equity_eligible(self) -> bool:
+        """SPY / QQQ AB3 — Turbulence flush entry only."""
+        return self.phase == 'Turbulence'
+
+    @property
+    def ab3_cyclicals_eligible(self) -> bool:
+        """TSLA / IWM AB3 entry window."""
+        return self.phase in ('Rebound', 'Calm')
+
+    @property
+    def ab2_paused(self) -> bool:
+        """Pause AB2 call-selling across all assets."""
+        return self.phase == 'Turbulence'
+
+    @property
+    def ab2_delta_cap_adjustment(self) -> float:
+        """
+        Adjustment to apply to max_delta in AB2 gate.
+        Speculation → reduce by 0.05 on equity / cyclical assets.
+        """
+        return -0.05 if self.phase == 'Speculation' else 0.0
+
+    def ab3_size_multiplier(self, asset_class: str) -> float:
+        """
+        Phase-conditioned size multiplier for AB3 entries.
+        asset_class: 'beta' (MSTR/IBIT), 'equity' (SPY/QQQ),
+                     'cyclical' (TSLA/IWM), 'commodity' (GLD),
+                     'bond' (TLT)
+        """
+        table = {
+            # phase      beta  equity  cyclical  commodity  bond
+            'Rebound':   (1.0,  1.0,    1.0,      0.0,       0.0),
+            'Calm':      (1.0,  1.0,    1.0,      1.0,       0.0),
+            'Speculation':(0.5, 0.0,    0.0,      0.75,      0.0),
+            'Turbulence': (0.0, 1.0,    0.0,      0.0,       1.0),
+        }
+        idx = {'beta': 0, 'equity': 1, 'cyclical': 2, 'commodity': 3, 'bond': 4}
+        row = table.get(self.phase, (0.5,)*5)
+        return row[idx.get(asset_class, 0)]
+
+
+class HowellPhaseEngine:
+    """
+    Detects the current Howell macro phase by reading LT SRIBI from
+    sector ETF CSV exports (downloaded alongside the 16 trading CSVs).
+
+    Phase signature matrix (sign = expected LT SRIBI direction):
+      +1 → expect BULL   −1 → expect BEAR   0 → neutral (no contribution)
+
+    Sectors:
+        XLK = Technology     XLY = Cyclicals      XLF = Financials
+        XLE = Energy         XLP = Defensives      TLT = Bond Duration
+        GLD = Commodities    IWM = Cyclicals broad
+    """
+
+    # Glob prefix per sector (scans DATA_DIR for latest matching file)
+    SECTOR_PREFIXES: Dict[str, str] = {
+        'XLK': 'BATS_XLK, 240_',
+        'XLY': 'BATS_XLY, 240_',
+        'XLF': 'BATS_XLF, 240_',
+        'XLE': 'BATS_XLE, 240_',
+        'XLP': 'BATS_XLP, 240_',
+        'TLT': 'BATS_TLT, 240_',
+        'GLD': 'BATS_GLD, 240_',
+        'IWM': 'BATS_IWM, 240_',
+    }
+
+    # Phase signature matrix
+    PHASE_SIGNATURES: Dict[str, Dict[str, int]] = {
+        'Rebound': {
+            'XLK': +1, 'XLY': +1, 'XLF': +1,
+            'XLE': -1, 'XLP': -1, 'TLT': -1, 'GLD': -1, 'IWM': +1,
+        },
+        'Calm': {
+            'XLK': +1, 'XLY': +1, 'XLF': +1,
+            'XLE': +1, 'XLP': +1, 'TLT':  0, 'GLD':  0, 'IWM': +1,
+        },
+        'Speculation': {
+            'XLK': +1, 'XLY': -1, 'XLF':  0,
+            'XLE': +1, 'XLP': +1, 'TLT': -1, 'GLD': +1, 'IWM': -1,
+        },
+        'Turbulence': {
+            'XLK': -1, 'XLY': -1, 'XLF': -1,
+            'XLE': -1, 'XLP': +1, 'TLT': +1, 'GLD': -1, 'IWM': -1,
+        },
+    }
+
+    # SRIBI neutral band — signals within ±THRESHOLD treated as NEUTRAL
+    BULL_THRESHOLD = +5.0
+    BEAR_THRESHOLD = -5.0
+
+    # Asset-class classification for AB3 size multiplier lookup
+    ASSET_CLASS_MAP: Dict[str, str] = {
+        'MSTR':  'beta',    'IBIT':  'beta',
+        'SPY':   'equity',  'QQQ':   'equity',
+        'TSLA':  'cyclical','IWM':   'cyclical',
+        'GLD':   'commodity',
+        'TLT':   'bond',
+        'PURR':  'beta',
+    }
+
+    def __init__(self, data_dir: str = "/mnt/mstr-data"):
+        self.data_dir = Path(data_dir)
+
+    # ── Internal helpers ─────────────────────────────────────────
+
+    def _find_csv(self, ticker: str) -> Optional[Path]:
+        """Return the latest (alphabetically last) CSV matching the prefix."""
+        prefix = self.SECTOR_PREFIXES[ticker]
+        matches = sorted(self.data_dir.glob(f'{prefix}*.csv'))
+        if not matches:
+            return None
+        # Prefer files with LOI data (larger = more columns); pick the newest
+        # by choosing the last sorted match (TradingView names have hash suffix)
+        return matches[-1]
+
+    def _load_df(self, ticker: str) -> Optional[pd.DataFrame]:
+        """Load sector CSV; return None if unavailable."""
+        try:
+            path = self._find_csv(ticker)
+            if path is None:
+                return None
+            df = pd.read_csv(path)
+            if df.empty:
+                return None
+            return df
+        except Exception:
+            return None
+
+    def _classify_signal(self, df: Optional[pd.DataFrame]) -> tuple:
+        """
+        Extract LT SRIBI from the last bar and classify as BULL/BEAR/NEUTRAL.
+        Falls back to VLT if LT is not present.
+        Returns (lt_value: float, signal: str)
+        """
+        if df is None or len(df) == 0:
+            return 0.0, 'NEUTRAL'
+        last = df.iloc[-1]
+        lt  = float(last.get('LT SRI Bias Histogram',  last.get('LT_SRIBI',  0)) or 0)
+        vlt = float(last.get('VLT SRI Bias Histogram', last.get('VLT_SRIBI', 0)) or 0)
+        # Primary signal: LT. If zero (column missing), use VLT with higher bar.
+        if lt > self.BULL_THRESHOLD or (lt == 0.0 and vlt > 20.0):
+            return lt, 'BULL'
+        if lt < self.BEAR_THRESHOLD or (lt == 0.0 and vlt < -20.0):
+            return lt, 'BEAR'
+        return lt, 'NEUTRAL'
+
+    # ── Public API ───────────────────────────────────────────────
+
+    def compute(self, prev_phase: Optional[str] = None) -> HowellPhaseState:
+        """
+        Load all sector CSVs, score each Howell phase, return HowellPhaseState.
+        prev_phase: pass the last known phase to detect transitions.
+        """
+        sector_sribi:   Dict[str, float] = {}
+        sector_signals: Dict[str, str]   = {}
+        latest_ts = datetime.utcnow()
+
+        for ticker in self.SECTOR_PREFIXES:
+            df = self._load_df(ticker)
+            if df is not None and len(df) > 0:
+                try:
+                    bar_ts = datetime.utcfromtimestamp(int(df.iloc[-1]['time']))
+                    if bar_ts > latest_ts:
+                        latest_ts = bar_ts
+                except Exception:
+                    pass
+            lt_val, sig = self._classify_signal(df)
+            sector_sribi[ticker]   = lt_val
+            sector_signals[ticker] = sig
+
+        # Score each phase
+        phase_scores: Dict[str, float] = {}
+        for phase, sigs in self.PHASE_SIGNATURES.items():
+            score = 0.0
+            for ticker, expected in sigs.items():
+                if expected == 0:
+                    continue
+                actual = sector_signals.get(ticker, 'NEUTRAL')
+                actual_val = +1 if actual == 'BULL' else (-1 if actual == 'BEAR' else 0)
+                score += expected * actual_val
+            phase_scores[phase] = score
+
+        # Rank
+        ranked = sorted(phase_scores, key=phase_scores.get, reverse=True)
+        best_phase  = ranked[0]
+        best_score  = phase_scores[best_phase]
+        second_score = phase_scores[ranked[1]] if len(ranked) > 1 else 0.0
+
+        # Confidence: score gap normalised to max possible (non-zero expected entries)
+        n_active = sum(1 for v in self.PHASE_SIGNATURES[best_phase].values() if v != 0)
+        gap = best_score - second_score
+        confidence = round(min(100.0, (gap / max(n_active, 1)) * 100), 1)
+
+        is_transition = (prev_phase is not None and best_phase != prev_phase)
+
+        return HowellPhaseState(
+            timestamp      = latest_ts,
+            phase          = best_phase,
+            confidence     = confidence,
+            phase_scores   = phase_scores,
+            sector_signals = sector_signals,
+            sector_sribi   = sector_sribi,
+            prev_phase     = prev_phase,
+            is_transition  = is_transition,
+        )
+
+    def asset_class(self, asset: str) -> str:
+        """Return the Howell asset class string for a given trading asset."""
+        return self.ASSET_CLASS_MAP.get(asset.upper(), 'equity')
+
+    def ab3_size_multiplier(self, asset: str, phase_state: HowellPhaseState) -> float:
+        """Convenience wrapper: return size multiplier for asset given current phase."""
+        ac = self.asset_class(asset)
+        return phase_state.ab3_size_multiplier(ac)
+
+
+# ═══════════════════════════════════════════════════════════════
 # REGIME ENGINE
 # ═══════════════════════════════════════════════════════════════
 
@@ -2007,8 +2263,9 @@ class SRIEngineV2:
     OBS_MIN_BARS = 500
     
     def __init__(self):
-        self.regime_engine = RegimeEngine(self.DATA_DIR)
-        self.pc_val_engine = PCValEngine()
+        self.regime_engine  = RegimeEngine(self.DATA_DIR)
+        self.howell_engine  = HowellPhaseEngine(self.DATA_DIR)
+        self.pc_val_engine  = PCValEngine()
         self.allocation_engine = AllocationEngine()
         self._dfs: Dict[str, pd.DataFrame] = {}
         self._ab3_machines: Dict[str, AB3StateMachine] = {}
@@ -2050,7 +2307,11 @@ class SRIEngineV2:
             except Exception:
                 pass
         return self.regime_engine.compute(gli_state=gli_state)
-    
+
+    def run_howell(self, prev_phase: Optional[str] = None) -> HowellPhaseState:
+        """Run Layer 0.5 — Howell Phase Engine from sector ETF SRI states."""
+        return self.howell_engine.compute(prev_phase=prev_phase)
+
     def run_ab1(self, regime: RegimeState = None) -> Dict[str, List[Signal]]:
         """Run AB1 pre-breakout scan on all assets"""
         results = {}
@@ -2143,6 +2404,18 @@ class SRIEngineV2:
             except Exception as e:
                 print(f"  [Layer 0] GLI engine error: {e}")
 
+        # Layer 0.5: Howell Phase Engine
+        howell_state = None
+        try:
+            howell_state = self.howell_engine.compute()
+            if verbose:
+                emoji = howell_state.emoji
+                conf  = howell_state.confidence
+                scores = " | ".join(f"{p}:{v:+.0f}" for p, v in howell_state.phase_scores.items())
+                print(f"  [Layer 0.5] Howell Phase: {emoji} {howell_state.phase}  conf={conf:.0f}%  [{scores}]")
+        except Exception as e:
+            print(f"  [Layer 0.5] Howell engine error: {e}")
+
         # Layer 1: Regime Engine (with GLI adjustment)
         reg = self.regime_engine.compute(gli_state=gli_state)
         ab1_sigs = self.run_ab1(reg)
@@ -2184,6 +2457,7 @@ class SRIEngineV2:
         
         return {
             "regime": reg,
+            "howell": howell_state,
             "current_state": current_state,
             "ab1_signals": ab1_sigs,
             "ab2_signals": ab2_sigs,
