@@ -617,6 +617,78 @@ def build_brief():
         sections.append(f"**📝 AB2 PMCC**\n*Gate states unavailable: {type(_pmcc_err).__name__}: {str(_pmcc_err)[:120]}*")
 
     # ============================================
+    # 8.5 PORTFOLIO DEFENSIVE POSTURE (P-BEAR Phase 2)
+    # ============================================
+    try:
+        from sri_engine import (SRIEngineV2, DefensivePostureEngine,
+                                Expression3Engine, PortfolioPosture)
+        _eng = SRIEngineV2()
+        _eng.load_all()
+
+        # Run just P-BEAR + posture engines (skip GLI + full regime for speed)
+        _pbear_sigs = _eng.run_pbear()
+
+        _def_eng  = DefensivePostureEngine()
+        _def_state = _def_eng.compute(_pbear_sigs)
+
+        # mNAV live compute
+        _mnav = 0.0
+        try:
+            _mnav_row = conn.execute(
+                "SELECT mnav_ratio FROM mnav ORDER BY date DESC LIMIT 1"
+            ).fetchone()
+            if _mnav_row:
+                _mnav = float(_mnav_row[0])
+        except Exception:
+            pass
+
+        # Howell from DB
+        _howell_db = conn.execute(
+            "SELECT phase FROM howell_phase_state ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+        _howell_phase = _howell_db[0] if _howell_db else 'Unknown'
+
+        # Build posture section
+        dp = _def_state
+        posture_section  = f"**🛡️ Portfolio Defensive Posture: {dp.emoji} {dp.posture.name}**\n"
+        posture_section += f"_{dp.rationale}_\n"
+        posture_section += (f"AB4 floor: **{dp.ab4_floor_override:.0%}** | "
+                            f"AB3 new entries: {'✅ yes' if dp.ab3_new_entries else '🚫 halted'} | "
+                            f"Expr3 eligible: {'✅ yes' if dp.expression3_eligible else '⬜ no'}\n")
+
+        if dp.posture != PortfolioPosture.NORMAL:
+            if dp.forming_assets:
+                posture_section += "\n**Forming assets (AB2 paused):**\n"
+                for _a in dp.forming_assets:
+                    _s = _pbear_sigs.get(_a)
+                    _st = _s.state.name if _s else 'UNKNOWN'
+                    _em = _s.emoji if _s else '⚪'
+                    posture_section += f"  • {_a}: {_em} {_st}\n"
+            if dp.confirmed_assets:
+                posture_section += "\n**Confirmed assets (hedge zone):**\n"
+                for _a in dp.confirmed_assets:
+                    _s = _pbear_sigs.get(_a)
+                    _st = _s.state.name if _s else 'UNKNOWN'
+                    _em = _s.emoji if _s else '⚪'
+                    posture_section += f"  • {_a}: {_em} {_st}\n"
+
+        # Expression 3 status
+        _e3_bearish_phases = {'Speculation', 'Turbulence'}
+        _mnav_ok   = _mnav > 2.0
+        _pbear_ok  = 'MSTR' in (dp.forming_assets + dp.confirmed_assets)
+        _howell_ok = _howell_phase in _e3_bearish_phases
+        _e3_count  = sum([_mnav_ok, _pbear_ok, _howell_ok])
+        _e3_levels = {4: '🚨 ARMED', 3: '🟠 SETUP', 2: '👁 WATCH', 1: '⚪ INACTIVE', 0: '⚪ INACTIVE'}
+        _e3_label  = _e3_levels.get(_e3_count, '⚪ INACTIVE')
+        posture_section += (f"\n**Expression 3:** {_e3_label} ({_e3_count}/4 conditions) | "
+                            f"mNAV={_mnav:.2f}x [threshold: 2.0x]")
+
+        sections.append(posture_section)
+
+    except Exception as _dp_err:
+        sections.append(f"**🛡️ Portfolio Posture**\n*Unavailable: {type(_dp_err).__name__}: {str(_dp_err)[:120]}*")
+
+    # ============================================
     # 9. BOTTOM LINE
     # ============================================
     if sri and gli:
