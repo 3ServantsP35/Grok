@@ -1320,6 +1320,7 @@ class HowellPhaseEngine:
         'GLD': 'BATS_GLD, 240_',
         'IWM': 'BATS_IWM, 240_',
         'VT':  'BATS_VT, 240_',     # Global equity breadth (world ETF)
+        'DBC': 'BATS_DBC, 240_',    # Diversified commodities — Howell phase signal
     }
 
     # Phase signature matrix
@@ -1328,26 +1329,32 @@ class HowellPhaseEngine:
     #   Calm:        +1  global equities healthy
     #   Speculation:  0  US leads; global breadth may lag — neutral contribution
     #   Turbulence:  -1  global risk-off; broad equity selling
+    #
+    # DBC = Diversified Commodities ETF (Howell traffic light: Commodities row)
+    #   Rebound:     -1  Commodities 🔴 in Rebound — DBC BEAR confirms early-cycle equity phase
+    #   Calm:         0  Commodities 🟠 in Calm — neutral contribution
+    #   Speculation: +1  Commodities 🟢 in Speculation — late-cycle commodity run
+    #   Turbulence:  +1  Commodities 🟢 in Turbulence — inflation/crisis commodity bid
     PHASE_SIGNATURES: Dict[str, Dict[str, int]] = {
         'Rebound': {
             'XLK': +1, 'XLY': +1, 'XLF': +1,
             'XLE': -1, 'XLP': -1, 'TLT': -1, 'GLD': -1, 'IWM': +1,
-            'VT':  +1,
+            'VT':  +1, 'DBC': -1,
         },
         'Calm': {
             'XLK': +1, 'XLY': +1, 'XLF': +1,
             'XLE': +1, 'XLP': +1, 'TLT':  0, 'GLD':  0, 'IWM': +1,
-            'VT':  +1,
+            'VT':  +1, 'DBC':  0,
         },
         'Speculation': {
             'XLK': +1, 'XLY': -1, 'XLF':  0,
             'XLE': +1, 'XLP': +1, 'TLT': -1, 'GLD': +1, 'IWM': -1,
-            'VT':   0,
+            'VT':   0, 'DBC': +1,
         },
         'Turbulence': {
             'XLK': -1, 'XLY': -1, 'XLF': -1,
             'XLE': -1, 'XLP': +1, 'TLT': +1, 'GLD': -1, 'IWM': -1,
-            'VT':  -1,
+            'VT':  -1, 'DBC': +1,
         },
     }
 
@@ -1487,13 +1494,17 @@ class HowellPhaseEngine:
 
 class RegimeEngine:
     """
-    Processes 8 regime input CSVs into a composite regime state.
-    
+    Processes 9 regime input CSVs into a composite regime state.
+
     Scoring:
       BTC avg SRIBI: <-20 bearish(-1), >10 bullish(+1)
       Stablecoin Dom ST: >0 risk-off(-1), <0 risk-on(+1)
       DXY ST: >0 strong dollar(-1), <0 weak dollar(+1)
-      HYG ST: <0 credit stress(-1), >0 credit healthy(+1)
+      HYG ST: <0 credit stress(-1), >0 credit healthy(+1)        ← high yield
+      LQD ST: credit composite — amplifies HYG when both agree:   ← investment grade
+               HYG BEAR + LQD BEAR = −1 additional (systemic stress, total −2)
+               HYG BULL + LQD BULL = +1 additional (broad health, total +2)
+               Diverge = 0 (anomalous; only HYG score applies)
       TLT ST: >0 rates falling(+1), <0 rates rising(-1)
       STRC ST: >0 Saylor engine healthy(+1), <0 weak(-1)
       VIX: >25 high vol(+0 neutral), <18 low vol(-1), 18-25 normal(+0)
@@ -1510,6 +1521,7 @@ class RegimeEngine:
         "TLT":        "BATS_TLT",
         "DXY":        "TVC_DXY",
         "HYG":        "BATS_HYG",
+        "LQD":        "BATS_LQD",              # IG bonds — credit composite with HYG
         "VIX":        "TVC_VIX",
     }
     
@@ -1604,20 +1616,42 @@ class RegimeEngine:
                 sribi.context, s, interp, dxy_df.iloc[-1]['date']
             )
         
-        # 4. HYG (credit stress)
+        # 4. HYG (high-yield credit — first leg of credit composite)
+        hyg_score = 0
         hyg_df = self._load("HYG")
         if hyg_df is not None:
             sribi = self._get_sribi(hyg_df)
             if sribi.st < 0:
-                s = -1; interp = "CREDIT STRESS — risk-off warning"
+                hyg_score = -1; interp = "HY CREDIT STRESS — risk-off warning"
             else:
-                s = +1; interp = "CREDIT HEALTHY — supportive"
-            score += s
+                hyg_score = +1; interp = "HY CREDIT HEALTHY — supportive"
+            score += hyg_score
             state.inputs["HYG"] = RegimeInput(
                 "HYG", float(hyg_df.iloc[-1]['close']), sribi,
-                sribi.context, s, interp, hyg_df.iloc[-1]['date']
+                sribi.context, hyg_score, interp, hyg_df.iloc[-1]['date']
             )
-        
+
+        # 4b. LQD (investment-grade credit — second leg of credit composite)
+        # Amplifies HYG by ±1 only when both agree — divergence scores 0.
+        # Both BEAR = systemic stress (total credit = −2); both BULL = broad health (total = +2)
+        lqd_df = self._load("LQD")
+        if lqd_df is not None and hyg_df is not None:
+            lqd_sribi = self._get_sribi(lqd_df)
+            lqd_bear = lqd_sribi.st < 0
+            hyg_bear  = hyg_score < 0
+            hyg_bull  = hyg_score > 0
+            if lqd_bear and hyg_bear:
+                s = -1; interp = "IG + HY BOTH BEAR — systemic credit stress (−2 total)"
+            elif not lqd_bear and hyg_bull:
+                s = +1; interp = "IG + HY BOTH BULL — broad credit health (+2 total)"
+            else:
+                s = 0;  interp = "IG/HY diverging — anomalous; no additional score"
+            score += s
+            state.inputs["LQD"] = RegimeInput(
+                "LQD", float(lqd_df.iloc[-1]['close']), lqd_sribi,
+                lqd_sribi.context, s, interp, lqd_df.iloc[-1]['date']
+            )
+
         # 5. TLT (rates)
         tlt_df = self._load("TLT")
         if tlt_df is not None:
