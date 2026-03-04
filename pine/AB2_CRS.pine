@@ -1,354 +1,457 @@
 // This source code is subject to the terms of the Mozilla Public License 2.0
 // © 3ServantsP35
 //
-// AB2 Call Ripeness Score (CRS)
+// AB2 Call Ripeness Score (CRS) — v2
 // ─────────────────────────────────────────────────────────────────────────────
-// Measures how attractive it is RIGHT NOW to sell a short call against an
-// existing AB3 LEAP position (PMCC / AB2 strategy).
+// Stage-adaptive income harvesting indicator for AB2 PMCC short calls.
+// Measures when and how aggressively to sell calls against AB3 LEAP positions.
 //
-// Score 0–10 gradient:
-//   0–2  → NO CALLS    (gate closed or conditions too weak)
-//   3–5  → OTM ≤0.25Δ  (minimum conditions met; conservative)
-//   6–8  → ATM ≤0.40Δ  (good conditions; standard AB2 income cycle)
-//   9–10 → DEEP ITM    (maximum income mode; all factors aligned)
+// PHILOSOPHY:
+//   Call-selling is not just a trim tool — it is a stage-adaptive income tool.
+//   Stage 1 (sideways chop) is the PRIMARY income window, not a no-call zone.
+//   The key question is not "should I sell?" but:
+//     1. How attractive is income right now? (Income Score 0–10)
+//     2. How far OTM should the strike be? (Strike Width %)
+//     3. Is there snap-recovery risk? (Exercise Risk)
 //
-// THREE CORE COMPONENTS:
-//   1. LOI Position     (0–4 pts) — where in the cycle; hard gate at LOI < –20
-//   2. Distribution     (0–3 pts) — bearish signals forming (ideal time to sell)
-//   3. IV Premium       (0–3 pts) — HV percentile proxy; is premium worth taking?
+// STAGE MODES:
+//   LOI < −45          → NO CALLS  (stock in active directional decline)
+//   LOI −45 to −20     → S1 CHOP   (primary income window; high-prob sideways)
+//   LOI −20 to  0      → RECOVERY  (calls viable; widen strike; monitor VST)
+//   LOI  0  to +20     → S2 STD    (standard income cycle)
+//   LOI +20 to +40     → TRIM APPROACH (tighten strike; trimming begins)
+//   LOI > +40          → DELTA_MGMT   (ATM/ITM trim; maximum call aggression)
 //
-// HEADWIND / TAILWIND MODIFIERS (±0.5 each):
-//   Howell Phase   — SPECULATION +0.5 | TURBULENCE –0.5 | CONFUSION –0.25
-//   Liquidity Reg  — EXPANDING +0.5   | CONTRACTING –0.5 (auto via HYG+VIX)
+// THREE OUTPUTS:
+//   Income Score 0–10  — Is premium environment worth selling calls?
+//   Strike Width %     — How far OTM? Adapts to stage + exercise risk.
+//   Exercise Risk      — LOW / MED / HIGH based on VST momentum direction.
 //
 // USAGE:
-//   Add this indicator to the same chart as your AB3/LOI indicator.
-//   Set "LOI Source" input to the LOI plot from your AB3 indicator.
-//   Set "Howell Phase" manually from your Howell Phase Engine output.
-//   Liquidity regime is auto-computed from HYG and VIX.
+//   Add to same chart as AB3/LOI indicator.
+//   Set LOI Source to your LOI plot.
+//   Set VST Source to your VST SRI Bias Histogram plot.
+//   Set Howell Phase manually from morning brief.
+//   Liquidity regime auto-computes from HYG + VIX.
 //
-// Framework: SRI Engine v2 | AB2 PMCC Rules | Backtest: 2026-03-03
+// NOTE: STRC hurdle comparison and contract sizing are handled in PPR reports.
+//
+// Framework: SRI Engine v2 | AB2 PMCC Rules | Revised 2026-03-04
 // ─────────────────────────────────────────────────────────────────────────────
 
 //@version=5
-indicator("AB2 Call Ripeness Score (CRS)", shorttitle="AB2 CRS", overlay=false, max_bars_back=500)
+indicator("AB2 Call Ripeness Score v2", shorttitle="AB2 CRS v2", overlay=false, max_bars_back=500)
 
 // ═══════════════════════════════════════════════════════════════════════════
 // INPUTS
 // ═══════════════════════════════════════════════════════════════════════════
 
-var string G1 = "LOI Source"
-loi_source          = input.source(close,  "LOI Plot — select from AB3 indicator", group=G1,
-                       tooltip="Point this at the LOI plot in your AB3/SRI indicator on this chart. If left as 'close', the score will be invalid.")
-loi_no_calls_thresh = input.float(-20.0, "LOI No-Calls Gate (hard zero below this)", group=G1,
-                       tooltip="AB2 rule: no calls sold when LOI is below this level. MOMENTUM default –20.")
-loi_otm_thresh      = input.float(  0.0, "LOI OTM Threshold (≥ this → OTM eligible)", group=G1)
-loi_atm_thresh      = input.float( 20.0, "LOI ATM Threshold (≥ this → ATM eligible)", group=G1)
-loi_deep_thresh     = input.float( 40.0, "LOI Deep ITM Threshold (DELTA_MGMT zone)",  group=G1)
+var string G_SRC = "Signal Sources"
+loi_src = input.source(close, "LOI Plot (from AB3 indicator)",
+            group=G_SRC, tooltip="Select the LOI plot from your AB3/SRI indicator on this chart.")
+vst_src = input.source(close, "VST SRI Bias Histogram (from AB3 indicator)",
+            group=G_SRC, tooltip="Select the VST SRI Bias Histogram from your AB3 indicator. Used for exercise risk detection.")
 
-var string G2 = "IV / Premium"
-hv_period   = input.int(20,  "Historical Vol Period (bars)",        group=G2, minval=5,  maxval=60)
-hv_lookback = input.int(252, "HV Percentile Lookback (bars)",       group=G2, minval=60, maxval=504)
+var string G_LOI = "LOI Stage Thresholds"
+loi_decline  = input.float(-45.0, "Active Decline Gate (below = NO CALLS)",    group=G_LOI)
+loi_chop_lo  = input.float(-45.0, "S1 Chop Zone — lower bound",               group=G_LOI)
+loi_chop_hi  = input.float(-20.0, "S1 Chop Zone — upper bound",               group=G_LOI)
+loi_rec_hi   = input.float(  0.0, "Recovery Zone — upper bound",               group=G_LOI)
+loi_std_hi   = input.float( 20.0, "S2 Standard — upper bound",                group=G_LOI)
+loi_trim_hi  = input.float( 40.0, "Trim Approach — upper bound (above = DELTA_MGMT)", group=G_LOI)
 
-var string G3 = "Headwinds & Tailwinds"
-howell_phase  = input.string("TURBULENCE", "Howell Phase (manual — update from engine)",
-                options=["REBOUND", "SPECULATION", "TURBULENCE", "CONFUSION"], group=G3,
-                tooltip="SPECULATION = best phase for call-selling (+0.5). TURBULENCE = caution (–0.5). Update from your Howell Phase Engine Discord output.")
-use_liq_auto  = input.bool(true, "Auto-detect Liquidity Regime (HYG + VIX)", group=G3,
-                tooltip="Pulls HYG and VIX to classify EXPANDING / CONTRACTING / NEUTRAL. EXPANDING +0.5, CONTRACTING –0.5.")
+var string G_VOL = "Volatility"
+hv_period  = input.int(20,  "Historical Vol Period (bars)", group=G_VOL, minval=5, maxval=60)
+hv_lookback= input.int(252, "HV Percentile Lookback (bars)", group=G_VOL, minval=60, maxval=504)
 
-var string G4 = "Asset"
-asset_class   = input.string("MOMENTUM", "Asset Class",
-                options=["MOMENTUM", "MR", "TRENDING", "BTC_CORRELATED"], group=G4,
-                tooltip="MOMENTUM = MSTR/TSLA/IBIT. MR = SPY/QQQ/IWM/GLD.")
-show_table    = input.bool(true, "Show Info Table", group=G4)
-show_labels   = input.bool(true, "Show Crossover Labels", group=G4)
+var string G_HW = "Headwinds & Tailwinds"
+howell_phase = input.string("TURBULENCE", "Howell Phase",
+                options=["REBOUND","SPECULATION","TURBULENCE","CONFUSION"],
+                group=G_HW, tooltip="Update from morning brief. TURBULENCE: chop thesis strongest (+0.5 income). SPECULATION: recovery risk, widen strikes (−0.5 income).")
+use_liq_auto = input.bool(true, "Auto-detect Liquidity Regime (HYG + VIX)", group=G_HW)
 
-// ═══════════════════════════════════════════════════════════════════════════
-// COMPONENT 1 — LOI POSITION (0–4 pts)
-// Maps directly to AB2 delta gate rules.
-// Hard-zero if LOI < no_calls threshold regardless of other components.
-// ═══════════════════════════════════════════════════════════════════════════
-
-float loi      = loi_source
-bool  gate_open = loi >= loi_no_calls_thresh
-
-float loi_pts = 0.0
-if gate_open
-    if loi >= loi_deep_thresh
-        loi_pts := 4.0
-    else if loi >= loi_atm_thresh
-        loi_pts := 3.0
-    else if loi >= loi_otm_thresh
-        loi_pts := 2.0
-    else
-        loi_pts := 1.0
-
-// LOI trend: rising vs falling (context, not scored — displayed in table)
-float loi_slope = loi - loi[5]
-string loi_dir  = loi_slope > 1.0 ? "↑" : loi_slope < -1.0 ? "↓" : "→"
+var string G_DISP = "Display"
+asset_class = input.string("MOMENTUM", "Asset Class",
+               options=["MOMENTUM","MR","TRENDING","BTC_CORRELATED"], group=G_DISP)
+show_table  = input.bool(true, "Show Info Table",   group=G_DISP)
+show_labels = input.bool(true, "Show Stage Labels", group=G_DISP)
 
 // ═══════════════════════════════════════════════════════════════════════════
-// COMPONENT 2 — IV PREMIUM (0–3 pts)
-// HV percentile over trailing lookback window as IV proxy.
-// Below 30th pctl: premium below STRC hurdle → 0 pts.
+// STAGE CLASSIFICATION FROM LOI
 // ═══════════════════════════════════════════════════════════════════════════
 
-float log_ret   = math.log(close / close[1])
-float hv_raw    = ta.stdev(log_ret, hv_period) * math.sqrt(252) * 100
-float hv_pct    = ta.percentrank(hv_raw, hv_lookback)
+float loi = loi_src
+float vst = vst_src
+
+string stage_code = ""
+string stage_label = ""
+color  stage_color = color.gray
+
+if loi < loi_decline
+    stage_code  := "DECLINE"
+    stage_label := "ACTIVE DECLINE"
+    stage_color := color.new(color.red, 10)
+else if loi <= loi_chop_hi
+    stage_code  := "S1_CHOP"
+    stage_label := "S1 CHOP ZONE ★"
+    stage_color := color.new(color.teal, 10)
+else if loi <= loi_rec_hi
+    stage_code  := "RECOVERY"
+    stage_label := "EARLY RECOVERY"
+    stage_color := color.new(color.yellow, 10)
+else if loi <= loi_std_hi
+    stage_code  := "S2_STD"
+    stage_label := "S2 STANDARD"
+    stage_color := color.new(color.green, 10)
+else if loi <= loi_trim_hi
+    stage_code  := "TRIM_APPR"
+    stage_label := "TRIM APPROACH"
+    stage_color := color.new(color.orange, 10)
+else
+    stage_code  := "DELTA_MGMT"
+    stage_label := "DELTA_MGMT"
+    stage_color := color.new(color.blue, 10)
+
+bool calls_ok = stage_code != "DECLINE"
+
+// ═══════════════════════════════════════════════════════════════════════════
+// COMPONENT A — IV / PREMIUM ATTRACTIVENESS (0–4 pts)
+// HV percentile as IV proxy. Answers: is premium worth taking?
+// ═══════════════════════════════════════════════════════════════════════════
+
+float log_ret = math.log(close / close[1])
+float hv_raw  = ta.stdev(log_ret, hv_period) * math.sqrt(252) * 100
+float hv_pct  = ta.percentrank(hv_raw, hv_lookback)
 
 float iv_pts = 0.0
 if hv_pct >= 70
-    iv_pts := 3.0
+    iv_pts := 4.0
 else if hv_pct >= 50
-    iv_pts := 2.0
+    iv_pts := 3.0
 else if hv_pct >= 30
+    iv_pts := 2.0
+else if hv_pct >= 15
     iv_pts := 1.0
+// below 15th pctl: 0 pts — premium likely insufficient
 
 // ═══════════════════════════════════════════════════════════════════════════
-// COMPONENT 3 — DISTRIBUTION SIGNALS (0–3 pts)
-// Selling calls into forming distribution = ideal AB2 setup.
-// 1 pt each: MACD hist < 0 | RSI divergence | OBV below SMA20
+// COMPONENT B — STAGE INCOME SCORE (0–4 pts)
+// How well does the current stage support income harvesting?
+// S1 Chop = highest conviction (80% call success at +10% OTM in backtest)
 // ═══════════════════════════════════════════════════════════════════════════
 
-// Signal 1: MACD histogram negative
-[_macd, _sig, hist] = ta.macd(close, 12, 26, 9)
-bool sig_macd = hist < 0
-
-// Signal 2: Bearish RSI divergence — price near 20-bar high, RSI not at high
-float rsi14         = ta.rsi(close, 14)
-bool  price_near_hi = close >= ta.highest(close, 20) * 0.98
-bool  rsi_below_hi  = rsi14 < ta.highest(rsi14, 20) * 0.95
-bool  sig_rsi_div   = price_near_hi and rsi_below_hi
-
-// Signal 3: OBV below its 20-bar SMA (volume not confirming price)
-float obv_val  = ta.obv
-bool  sig_obv  = obv_val < ta.sma(obv_val, 20)
-
-float dist_pts  = (sig_macd ? 1.0 : 0.0) + (sig_rsi_div ? 1.0 : 0.0) + (sig_obv ? 1.0 : 0.0)
-int   dist_count = (sig_macd ? 1 : 0) + (sig_rsi_div ? 1 : 0) + (sig_obv ? 1 : 0)
+float stage_pts = 0.0
+if stage_code == "DECLINE"
+    stage_pts := 0.0  // no calls
+else if stage_code == "S1_CHOP"
+    stage_pts := 4.0  // primary income window — sideways chop expected
+else if stage_code == "RECOVERY"
+    stage_pts := 2.0  // viable but risky; strike must widen
+else if stage_code == "S2_STD"
+    stage_pts := 3.0  // standard cycle
+else if stage_code == "TRIM_APPR"
+    stage_pts := 3.0  // trimming adds urgency
+else  // DELTA_MGMT
+    stage_pts := 2.0  // aggressive trim but shorter window
 
 // ═══════════════════════════════════════════════════════════════════════════
-// HEADWIND / TAILWIND MODIFIERS
+// COMPONENT C — CHOP CONFIRMATION (0–2 pts)
+// Are price/volume signals confirming sideways/down momentum?
+// Positive = chop likely = call-selling safer (less recovery risk)
 // ═══════════════════════════════════════════════════════════════════════════
 
-// — Howell Phase modifier (manual input)
-float howell_mod = switch howell_phase
-    "SPECULATION" => 0.5
-    "TURBULENCE"  => -0.5
-    "CONFUSION"   => -0.25
-    => 0.0   // REBOUND
+// MACD histogram negative or near zero = momentum pausing
+[_m, _s, hist] = ta.macd(close, 12, 26, 9)
+bool chop_macd = hist <= 0
 
-// — Liquidity Regime modifier (auto: HYG trend + VIX level)
-float liq_mod      = 0.0
-string liq_regime  = "NEUTRAL"
-float  liq_mod_raw = 0.0
+// OBV below 20-SMA = volume not supporting upside
+float obv_val = ta.obv
+bool chop_obv = obv_val < ta.sma(obv_val, 20)
+
+float chop_pts = (chop_macd ? 1.0 : 0.0) + (chop_obv ? 1.0 : 0.0)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// HEADWIND / TAILWIND MODIFIERS (±1.0 total range)
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Howell Phase
+// TURBULENCE: chop/bearish macro = call-selling safer across all stages (+0.5)
+// SPECULATION: momentum/recovery risk = calls riskier (−0.5)
+// CONFUSION: mild caution (−0.25)
+// REBOUND: neutral (0)
+float howell_mod = 0.0
+if howell_phase == "TURBULENCE"
+    howell_mod := 0.5
+else if howell_phase == "SPECULATION"
+    howell_mod := -0.5
+else if howell_phase == "CONFUSION"
+    howell_mod := -0.25
+
+// Liquidity Regime
+// CONTRACTING: macro flow constrained = momentum limited = safer calls (+0.5)
+// EXPANDING: liquidity driving upside = calls riskier (−0.25)
+float liq_mod     = 0.0
+string liq_regime = "NEUTRAL"
 
 if use_liq_auto
-    float hyg_close  = request.security("AMEX:HYG",  timeframe.period, close,     lookahead=barmerge.lookahead_off)
-    float hyg_sma50  = request.security("AMEX:HYG",  timeframe.period, ta.sma(close, 50), lookahead=barmerge.lookahead_off)
-    float vix_close  = request.security("CBOE:VIX",  timeframe.period, close,     lookahead=barmerge.lookahead_off)
-
-    bool hyg_bull    = not na(hyg_close) and not na(hyg_sma50) and hyg_close > hyg_sma50
-    bool hyg_bear    = not na(hyg_close) and not na(hyg_sma50) and hyg_close < hyg_sma50
-    bool vix_low     = not na(vix_close) and vix_close < 20
-    bool vix_high    = not na(vix_close) and vix_close > 25
-
-    if hyg_bull and vix_low
-        liq_regime  := "EXPANDING"
-        liq_mod_raw := 0.5
-    else if hyg_bear and vix_high
-        liq_regime  := "CONTRACTING"
-        liq_mod_raw := -0.5
+    float hyg_c   = request.security("AMEX:HYG", timeframe.period, close, lookahead=barmerge.lookahead_off)
+    float hyg_s50 = request.security("AMEX:HYG", timeframe.period, ta.sma(close, 50), lookahead=barmerge.lookahead_off)
+    float vix_c   = request.security("CBOE:VIX", timeframe.period, close, lookahead=barmerge.lookahead_off)
+    bool  hyg_bear = not na(hyg_c) and not na(hyg_s50) and hyg_c < hyg_s50
+    bool  hyg_bull = not na(hyg_c) and not na(hyg_s50) and hyg_c > hyg_s50
+    bool  vix_hi   = not na(vix_c) and vix_c > 25
+    bool  vix_lo   = not na(vix_c) and vix_c < 20
+    if hyg_bear and vix_hi
+        liq_regime := "CONTRACTING"
+        liq_mod    := 0.5
+    else if hyg_bull and vix_lo
+        liq_regime := "EXPANDING"
+        liq_mod    := -0.25
     else
-        liq_regime  := "NEUTRAL"
-        liq_mod_raw := 0.0
-
-    liq_mod := liq_mod_raw
+        liq_regime := "NEUTRAL"
+        liq_mod    := 0.0
 
 // ═══════════════════════════════════════════════════════════════════════════
-// COMPOSITE CRS
+// COMPOSITE INCOME SCORE (0–10)
 // ═══════════════════════════════════════════════════════════════════════════
 
-float base_score = gate_open ? (loi_pts + iv_pts + dist_pts) : 0.0
-float modifiers  = gate_open ? (howell_mod + liq_mod)        : 0.0
-float crs_raw    = base_score + modifiers
-float crs        = math.max(0.0, math.min(10.0, crs_raw))
-
-// Previous bar CRS for crossover detection
-float crs_prev   = crs[1]
+float base_score  = iv_pts + stage_pts + chop_pts        // 0–10 raw
+float modifiers   = howell_mod + liq_mod                  // −0.75 to +1.0
+float income_raw  = base_score + modifiers
+float income_score = calls_ok ? math.max(0.0, math.min(10.0, income_raw)) : 0.0
 
 // ═══════════════════════════════════════════════════════════════════════════
-// ACTION TIER & DISPLAY
+// EXERCISE RISK from VST Momentum
+// Measures snap-recovery probability — drives strike-width adjustment
 // ═══════════════════════════════════════════════════════════════════════════
 
-string action     = ""
-string dte_label  = ""
-color  bar_col    = color.gray
-color  txt_col    = color.white
+float vst_slope   = vst - vst[3]            // 3-bar VST direction
+bool  vst_positive = vst > 5.0              // VST above neutral band
+bool  vst_rising   = vst_slope > 3.0        // VST accelerating up
 
-if not gate_open or crs < 3.0
-    action    := "NO CALLS"
-    dte_label := "—"
-    bar_col   := color.new(color.red, 15)
-    txt_col   := color.new(color.red, 0)
-else if crs < 6.0
-    action    := "OTM  ≤ 0.25Δ"
-    dte_label := "DTE: 60–90"
-    bar_col   := color.new(color.orange, 15)
-    txt_col   := color.new(color.orange, 0)
-else if crs < 9.0
-    action    := "ATM  ≤ 0.40Δ"
-    dte_label := "DTE: 45–60"
-    bar_col   := color.new(color.green, 15)
-    txt_col   := color.new(color.green, 0)
+string ex_risk    = "LOW"
+color  ex_color   = color.new(color.green, 20)
+float  strike_adj = 0.0  // additional OTM % to add for snap risk
+
+if vst_positive and vst_rising
+    ex_risk    := "HIGH"
+    ex_color   := color.new(color.red, 20)
+    strike_adj := 5.0     // widen by +5% for snap risk
+else if vst_positive or vst_rising
+    ex_risk    := "MED"
+    ex_color   := color.new(color.orange, 20)
+    strike_adj := 3.0     // widen by +3%
 else
-    action    := "DEEP ITM"
-    dte_label := "DTE: 30–45"
-    bar_col   := color.new(color.aqua, 15)
-    txt_col   := color.new(color.aqua, 0)
+    ex_risk    := "LOW"
+    ex_color   := color.new(color.green, 20)
+    strike_adj := 0.0     // no adjustment needed
 
 // ═══════════════════════════════════════════════════════════════════════════
-// LOI VALIDITY WARNING
-// If LOI source looks like raw price (outside –100 to +100), warn the user
+// RECOMMENDED STRIKE WIDTH
+// Stage baseline + exercise risk adjustment
 // ═══════════════════════════════════════════════════════════════════════════
 
-bool loi_valid = loi >= -150 and loi <= 150
-string loi_warn = loi_valid ? "" : " ⚠ SELECT LOI PLOT"
+float strike_base = 0.0
+string dte_guide  = "—"
+
+if stage_code == "DECLINE"
+    strike_base := 0.0
+    dte_guide   := "NO CALLS"
+else if stage_code == "S1_CHOP"
+    strike_base := 12.0     // +12% OTM baseline — captures income without capping recovery
+    dte_guide   := "45–60d"
+else if stage_code == "RECOVERY"
+    strike_base := 17.0     // wider — protect emerging recovery
+    dte_guide   := "30–45d"
+else if stage_code == "S2_STD"
+    strike_base := 10.0
+    dte_guide   := "30–45d"
+else if stage_code == "TRIM_APPR"
+    strike_base := 5.0
+    dte_guide   := "30d"
+else  // DELTA_MGMT
+    strike_base := 1.0      // near-ATM trim
+    dte_guide   := "21–30d"
+
+float strike_width = strike_base + strike_adj
+string strike_str  = stage_code == "DECLINE" ? "NO CALLS" :
+     strike_width >= 20 ? "+" + str.tostring(strike_width, "#") + "% OTM (wide)" :
+     strike_width >= 10 ? "+" + str.tostring(strike_width, "#") + "% OTM" :
+     strike_width >= 2  ? "+" + str.tostring(strike_width, "#") + "% OTM (tight)" :
+     "ATM / ITM"
 
 // ═══════════════════════════════════════════════════════════════════════════
-// PLOTS
+// COLOUR SCHEME FOR INCOME SCORE
 // ═══════════════════════════════════════════════════════════════════════════
 
-// Main CRS histogram
-plot(loi_valid ? crs : na, "CRS",
+color bar_col = color.gray
+color txt_col = color.gray
+
+if not calls_ok
+    bar_col := color.new(color.red, 20)
+    txt_col := color.new(color.red, 0)
+else if income_score >= 7.0
+    bar_col := color.new(color.teal, 15)
+    txt_col := color.new(color.teal, 0)
+else if income_score >= 5.0
+    bar_col := color.new(color.green, 15)
+    txt_col := color.new(color.green, 0)
+else if income_score >= 3.0
+    bar_col := color.new(color.orange, 15)
+    txt_col := color.new(color.orange, 0)
+else
+    bar_col := color.new(color.red, 30)
+    txt_col := color.new(color.red, 20)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LOI VALIDITY CHECK
+// ═══════════════════════════════════════════════════════════════════════════
+
+bool loi_valid  = loi > -200 and loi < 200
+bool vst_valid  = vst > -200 and vst < 200
+string warn_str = not loi_valid ? " ⚠ SET LOI SOURCE" : not vst_valid ? " ⚠ SET VST SOURCE" : ""
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PLOTS — INCOME SCORE HISTOGRAM
+// ═══════════════════════════════════════════════════════════════════════════
+
+plot(loi_valid ? income_score : na, "Income Score",
      style=plot.style_histogram, color=bar_col, linewidth=3)
 
 // Reference lines
-hline(9, "Deep ITM",   color=color.new(color.aqua,   50), linestyle=hline.style_dashed, linewidth=1)
-hline(6, "ATM Zone",   color=color.new(color.green,  50), linestyle=hline.style_dashed, linewidth=1)
-hline(3, "OTM Zone",   color=color.new(color.orange, 50), linestyle=hline.style_dashed, linewidth=1)
-hline(0, "No Calls",   color=color.new(color.red,    40), linestyle=hline.style_solid,  linewidth=1)
+hline(7, "Strong Income",  color=color.new(color.teal,   50), linestyle=hline.style_dashed, linewidth=1)
+hline(5, "Viable Income",  color=color.new(color.green,  50), linestyle=hline.style_dashed, linewidth=1)
+hline(3, "Marginal",       color=color.new(color.orange, 50), linestyle=hline.style_dashed, linewidth=1)
+hline(0, "",               color=color.new(color.gray,   80))
 
-// Baseline zero line
-hline(0, "", color=color.new(color.gray, 80))
-
-// Background: green tint when calls active, red when gated
-bgcolor(gate_open and crs >= 3 ? color.new(color.green, 93) : color.new(color.red, 93),
-        title="Action Zone Background")
+// Stage background tint
+bgcolor(stage_code == "DECLINE"    ? color.new(color.red,    94) :
+        stage_code == "S1_CHOP"    ? color.new(color.teal,   94) :
+        stage_code == "RECOVERY"   ? color.new(color.yellow, 96) :
+        stage_code == "S2_STD"     ? color.new(color.green,  95) :
+        stage_code == "TRIM_APPR"  ? color.new(color.orange, 95) :
+                                     color.new(color.blue,   95),
+        title="Stage Background")
 
 // ═══════════════════════════════════════════════════════════════════════════
-// CROSSOVER LABELS  (fires once per zone transition)
+// STAGE TRANSITION LABELS
 // ═══════════════════════════════════════════════════════════════════════════
 
 if show_labels and barstate.isconfirmed
-    // CRS enters ATM zone (crosses 6 from below)
-    if crs >= 6 and crs_prev < 6 and gate_open
-        label.new(bar_index, crs + 0.3,
-                  "ATM SELL\n" + str.tostring(crs, "#.#"),
-                  color=color.new(color.green, 20), textcolor=color.white,
+    string prev_stage = stage_code[1]
+
+    // Entering S1 chop zone (primary income window)
+    if stage_code == "S1_CHOP" and prev_stage != "S1_CHOP"
+        label.new(bar_index, income_score + 0.5,
+                  "★ S1 CHOP\nIncome Window",
+                  color=color.new(color.teal, 20), textcolor=color.white,
                   style=label.style_label_down, size=size.small)
 
-    // CRS enters DEEP ITM zone
-    if crs >= 9 and crs_prev < 9 and gate_open
-        label.new(bar_index, crs + 0.3,
-                  "DEEP ITM\n" + str.tostring(crs, "#.#"),
-                  color=color.new(color.aqua, 20), textcolor=color.white,
+    // Entering recovery zone (widen strikes)
+    if stage_code == "RECOVERY" and prev_stage == "S1_CHOP"
+        label.new(bar_index, income_score + 0.5,
+                  "RECOVERY\nWiden Strike",
+                  color=color.new(color.yellow, 20), textcolor=color.black,
                   style=label.style_label_down, size=size.small)
 
-    // CRS falls below OTM zone (stop selling)
-    if crs < 3 and crs_prev >= 3
-        label.new(bar_index, crs - 0.3,
-                  "STOP CALLS\n" + str.tostring(crs, "#.#"),
+    // Entering trim approach
+    if stage_code == "TRIM_APPR" and (prev_stage == "S2_STD" or prev_stage == "RECOVERY")
+        label.new(bar_index, income_score + 0.5,
+                  "TRIM\nTighten Strike",
+                  color=color.new(color.orange, 20), textcolor=color.white,
+                  style=label.style_label_down, size=size.small)
+
+    // Exercise risk turns HIGH
+    if ex_risk == "HIGH" and ex_risk[1] != "HIGH" and calls_ok
+        label.new(bar_index, income_score - 0.5,
+                  "⚠ EX RISK HIGH\nWiden +" + str.tostring(strike_adj, "#") + "%",
                   color=color.new(color.red, 20), textcolor=color.white,
-                  style=label.style_label_up, size=size.small)
-
-    // Gate opens (LOI crosses no-calls threshold)
-    if gate_open and not gate_open[1]
-        label.new(bar_index, 1.0,
-                  "GATE OPEN",
-                  color=color.new(color.yellow, 30), textcolor=color.black,
                   style=label.style_label_up, size=size.tiny)
 
 // ═══════════════════════════════════════════════════════════════════════════
 // ALERT CONDITIONS
 // ═══════════════════════════════════════════════════════════════════════════
 
-alertcondition(ta.crossover(crs,  6.0), "CRS → ATM Zone",    "AB2 CRS {{ticker}}: enters ATM call-selling zone (CRS={{plot_0}})")
-alertcondition(ta.crossover(crs,  9.0), "CRS → Deep ITM",    "AB2 CRS {{ticker}}: DEEP ITM zone (CRS={{plot_0}}) — maximum income mode")
-alertcondition(ta.crossunder(crs, 3.0), "CRS → No Calls",    "AB2 CRS {{ticker}}: drops below OTM floor — review open short calls")
-alertcondition(ta.crossover(loi, loi_no_calls_thresh), "AB2 Gate Opens", "AB2 CRS {{ticker}}: LOI crossed no-calls gate — call selling now permitted")
+alertcondition(stage_code == "S1_CHOP" and stage_code[1] != "S1_CHOP",
+               "Enters S1 Chop Zone", "AB2 CRS {{ticker}}: S1 Chop Zone — primary income window open")
+alertcondition(stage_code == "DELTA_MGMT" and stage_code[1] != "DELTA_MGMT",
+               "Enters DELTA_MGMT Zone", "AB2 CRS {{ticker}}: DELTA_MGMT — ATM/ITM trim mode")
+alertcondition(ex_risk == "HIGH" and ex_risk[1] != "HIGH" and calls_ok,
+               "Exercise Risk → HIGH", "AB2 CRS {{ticker}}: exercise risk HIGH — widen strike or close calls")
+alertcondition(stage_code == "DECLINE" and stage_code[1] != "DECLINE",
+               "Active Decline — Close Calls", "AB2 CRS {{ticker}}: LOI entering decline zone — review all short calls")
 
 // ═══════════════════════════════════════════════════════════════════════════
 // INFO TABLE
 // ═══════════════════════════════════════════════════════════════════════════
 
 if show_table and barstate.islast
-    var table t = table.new(position.top_right, 2, 9,
+    var table t = table.new(position.top_right, 2, 10,
                             bgcolor     = color.new(color.black, 75),
-                            border_color= color.new(color.gray,  40),
+                            border_color= color.new(color.gray, 40),
                             border_width= 1,
-                            frame_color = color.new(color.gray,  40),
+                            frame_color = color.new(color.gray, 40),
                             frame_width = 1)
 
-    // Header
-    table.cell(t, 0, 0, "AB2 CRS" + loi_warn,
-               text_color=color.white, text_halign=text.align_left,  text_size=size.normal)
-    table.cell(t, 1, 0, str.tostring(crs, "#.0") + " / 10",
-               text_color=txt_col,     text_halign=text.align_right, text_size=size.normal)
+    // Row 0: Header — Income Score
+    table.cell(t, 0, 0, "AB2 Income CRS" + warn_str,
+               text_color=color.white, text_halign=text.align_left, text_size=size.normal)
+    table.cell(t, 1, 0, str.tostring(income_score, "#.0") + " / 10",
+               text_color=txt_col, text_halign=text.align_right, text_size=size.normal)
 
-    // Action
-    table.cell(t, 0, 1, "Action",
+    // Row 1: Stage
+    table.cell(t, 0, 1, "Stage",
                text_color=color.new(color.gray, 20), text_halign=text.align_left, text_size=size.small)
-    table.cell(t, 1, 1, action,
-               text_color=txt_col, text_halign=text.align_right, text_size=size.small)
+    table.cell(t, 1, 1, stage_label,
+               text_color=stage_color, text_halign=text.align_right, text_size=size.small)
 
-    // LOI component
-    string loi_str = str.tostring(loi, "#.0") + " " + loi_dir + "  (" + str.tostring(loi_pts, "#") + "/4 pts)"
-    table.cell(t, 0, 2, "LOI",
+    // Row 2: Strike width
+    table.cell(t, 0, 2, "Strike",
                text_color=color.new(color.gray, 20), text_halign=text.align_left, text_size=size.small)
-    table.cell(t, 1, 2, loi_str,
+    table.cell(t, 1, 2, strike_str,
                text_color=color.white, text_halign=text.align_right, text_size=size.small)
 
-    // IV component
-    string iv_str = "HV " + str.tostring(hv_pct, "#") + "%ile  (" + str.tostring(iv_pts, "#") + "/3 pts)"
-    table.cell(t, 0, 3, "IV Premium",
+    // Row 3: Exercise Risk
+    table.cell(t, 0, 3, "Exercise Risk",
                text_color=color.new(color.gray, 20), text_halign=text.align_left, text_size=size.small)
-    table.cell(t, 1, 3, iv_str,
+    table.cell(t, 1, 3, ex_risk + (strike_adj > 0 ? "  (+" + str.tostring(strike_adj, "#") + "% adj)" : ""),
+               text_color=ex_color, text_halign=text.align_right, text_size=size.small)
+
+    // Row 4: DTE
+    table.cell(t, 0, 4, "DTE",
+               text_color=color.new(color.gray, 20), text_halign=text.align_left, text_size=size.small)
+    table.cell(t, 1, 4, dte_guide,
                text_color=color.white, text_halign=text.align_right, text_size=size.small)
 
-    // Distribution signals
-    string dist_sigs = (sig_macd ? "MACD " : "") + (sig_rsi_div ? "RSI " : "") + (sig_obv ? "OBV" : "")
-    string dist_str  = str.tostring(dist_count) + "/3 — " + (dist_count == 0 ? "none" : dist_sigs)
-    table.cell(t, 0, 4, "Distribution",
+    // Row 5: IV component
+    table.cell(t, 0, 5, "HV Percentile",
                text_color=color.new(color.gray, 20), text_halign=text.align_left, text_size=size.small)
-    table.cell(t, 1, 4, dist_str,
+    table.cell(t, 1, 5, str.tostring(hv_pct, "#") + "%ile  (" + str.tostring(iv_pts, "#") + "/4 pts)",
                text_color=color.white, text_halign=text.align_right, text_size=size.small)
 
-    // Howell modifier
-    string how_str = howell_phase + "  (" + (howell_mod >= 0 ? "+" : "") + str.tostring(howell_mod, "#.##") + ")"
-    table.cell(t, 0, 5, "Howell",
+    // Row 6: Howell
+    table.cell(t, 0, 6, "Howell",
                text_color=color.new(color.gray, 20), text_halign=text.align_left, text_size=size.small)
-    table.cell(t, 1, 5, how_str,
+    table.cell(t, 1, 6, howell_phase + "  (" + (howell_mod >= 0 ? "+" : "") + str.tostring(howell_mod, "#.##") + ")",
                text_color=color.white, text_halign=text.align_right, text_size=size.small)
 
-    // Liquidity modifier
-    string liq_str = liq_regime + "  (" + (liq_mod >= 0 ? "+" : "") + str.tostring(liq_mod, "#.##") + ")"
-    table.cell(t, 0, 6, "Liquidity",
+    // Row 7: Liquidity
+    table.cell(t, 0, 7, "Liquidity",
                text_color=color.new(color.gray, 20), text_halign=text.align_left, text_size=size.small)
-    table.cell(t, 1, 6, liq_str,
+    table.cell(t, 1, 7, liq_regime + "  (" + (liq_mod >= 0 ? "+" : "") + str.tostring(liq_mod, "#.##") + ")",
                text_color=color.white, text_halign=text.align_right, text_size=size.small)
 
-    // DTE guidance
-    table.cell(t, 0, 7, dte_label,
-               text_color=color.new(color.yellow, 10), text_halign=text.align_left, text_size=size.small)
-    table.cell(t, 1, 7, asset_class,
-               text_color=color.new(color.gray, 30), text_halign=text.align_right, text_size=size.small)
+    // Row 8: LOI
+    table.cell(t, 0, 8, "LOI",
+               text_color=color.new(color.gray, 20), text_halign=text.align_left, text_size=size.small)
+    table.cell(t, 1, 8, str.tostring(loi, "#.0"),
+               text_color=color.white, text_halign=text.align_right, text_size=size.small)
 
-    // Score breakdown bar (visual)
-    string breakdown = "L:" + str.tostring(loi_pts,"#") + " I:" + str.tostring(iv_pts,"#") + " D:" + str.tostring(dist_count,"#") + " M:" + (modifiers >= 0 ? "+" : "") + str.tostring(modifiers,"#.#")
-    table.cell(t, 0, 8, breakdown,
-               text_color=color.new(color.gray, 40), text_halign=text.align_left,  text_size=size.tiny)
-    table.cell(t, 1, 8, "base " + str.tostring(base_score,"#.#"),
-               text_color=color.new(color.gray, 40), text_halign=text.align_right, text_size=size.tiny)
+    // Row 9: Score breakdown
+    string bd = "IV:" + str.tostring(iv_pts, "#") + " Stg:" + str.tostring(stage_pts, "#") +
+                " Chop:" + str.tostring(chop_pts, "#") + " Mod:" +
+                (modifiers >= 0 ? "+" : "") + str.tostring(modifiers, "#.#")
+    table.cell(t, 0, 9, bd,
+               text_color=color.new(color.gray, 50), text_halign=text.align_left, text_size=size.tiny)
+    table.cell(t, 1, 9, asset_class,
+               text_color=color.new(color.gray, 50), text_halign=text.align_right, text_size=size.tiny)
