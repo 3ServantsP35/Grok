@@ -2268,6 +2268,257 @@ class AllocationEngine:
         return "\n".join(lines)
 
 
+# ============================================================
+# VOL-ADAPTIVE LOI THRESHOLD ENGINE
+# ============================================================
+
+@dataclass
+class AdaptiveLOIThreshold:
+    """Vol-adaptive LOI accumulation threshold.
+
+    Insight (2026-03-03): Fixed thresholds misfire in low-vol regimes.
+    HIGH vol entries: +26.3% 60-bar return on MSTR.
+    LOW vol entries: -26.8%. Formula normalizes by ATR regime.
+
+    In CONTRACTING liquidity regime, LT/VLT confirmation required
+    even after threshold breach (see LiquidityRegime in RegimeEngine).
+    """
+    asset: str
+    asset_class: str  # MOMENTUM / MR / TRENDING / BTC_CORRELATED
+    base_threshold: float
+    current_threshold: float
+    current_atr_ratio: float
+    median_atr_ratio: float
+    vol_multiplier: float
+    vol_regime: str  # HIGH / NORMAL / LOW
+    is_below_threshold: bool  # LOI currently below adaptive threshold
+
+    @property
+    def threshold_label(self) -> str:
+        if self.vol_regime == 'HIGH':
+            return f'{self.current_threshold:.1f} (vol↑ → easier threshold)'
+        elif self.vol_regime == 'LOW':
+            return f'{self.current_threshold:.1f} (vol↓ → harder threshold)'
+        return f'{self.current_threshold:.1f}'
+
+
+class AdaptiveLOIEngine:
+    """Computes vol-adaptive AB3 accumulation thresholds per asset.
+
+    Asset class base thresholds:
+    - MOMENTUM (MSTR/TSLA): -45
+    - BTC_CORRELATED (IBIT): -45
+    - MR (SPY/QQQ/IWM): -40
+    - TRENDING (GLD): -40
+
+    MR and TRENDING assets use flat -40 (vol adaptation unconfirmed for these).
+    Momentum/BTC_CORRELATED use full adaptive formula.
+    """
+
+    BASE_THRESHOLDS = {
+        'MOMENTUM': -45.0,
+        'BTC_CORRELATED': -45.0,
+        'MR': -40.0,
+        'TRENDING': -40.0,
+    }
+
+    # Only adapt for these classes (research confirmed; others use flat)
+    ADAPTIVE_CLASSES = {'MOMENTUM', 'BTC_CORRELATED'}
+
+    # ATR lookback for current ratio
+    ATR_PERIOD = 14
+    # Historical window for median ATR ratio (bars)
+    MEDIAN_WINDOW = 200
+
+    def compute(self, df: pd.DataFrame, asset: str, asset_class: str,
+                loi: float) -> AdaptiveLOIThreshold:
+        base = self.BASE_THRESHOLDS.get(asset_class, -40.0)
+
+        if asset_class not in self.ADAPTIVE_CLASSES:
+            # MR/TRENDING: flat threshold, no adaptation
+            return AdaptiveLOIThreshold(
+                asset=asset, asset_class=asset_class,
+                base_threshold=base, current_threshold=base,
+                current_atr_ratio=0.0, median_atr_ratio=0.0,
+                vol_multiplier=1.0, vol_regime='NORMAL',
+                is_below_threshold=loi <= base
+            )
+
+        try:
+            # Compute ATR/Close ratio
+            if 'ATR' in df.columns:
+                atr = df['ATR'].ffill()
+            else:
+                # Compute ATR(14) from OHLC
+                high = df['high']
+                low = df['low']
+                close_col = df['close']
+                prev_close = close_col.shift(1)
+                tr = pd.concat([
+                    high - low,
+                    (high - prev_close).abs(),
+                    (low - prev_close).abs()
+                ], axis=1).max(axis=1)
+                atr = tr.rolling(self.ATR_PERIOD).mean()
+
+            close_col = df['close']
+            atr_ratio = (atr / close_col).ffill()
+
+            if len(atr_ratio.dropna()) < 20:
+                return AdaptiveLOIThreshold(
+                    asset=asset, asset_class=asset_class,
+                    base_threshold=base, current_threshold=base,
+                    current_atr_ratio=0.0, median_atr_ratio=0.0,
+                    vol_multiplier=1.0, vol_regime='NORMAL',
+                    is_below_threshold=loi <= base
+                )
+
+            current_atr_ratio = float(atr_ratio.dropna().iloc[-1])
+
+            # Median over historical window
+            hist = atr_ratio.dropna().tail(self.MEDIAN_WINDOW)
+            median_atr_ratio = float(hist.median())
+
+            if median_atr_ratio == 0:
+                vol_multiplier = 1.0
+            else:
+                vol_multiplier = median_atr_ratio / current_atr_ratio
+
+            # Cap: floor at base×0.6, ceiling at base×1.3
+            # Note: base is negative, so floor is MORE negative, ceiling is LESS negative
+            floor = base * 1.3    # e.g. -45 × 1.3 = -58.5 (more negative)
+            ceiling = base * 0.6  # e.g. -45 × 0.6 = -27.0 (less negative)
+            current_threshold = max(floor, min(ceiling, base * vol_multiplier))
+
+            # Vol regime classification
+            ratio = current_atr_ratio / median_atr_ratio if median_atr_ratio > 0 else 1.0
+            if ratio > 1.5:
+                vol_regime = 'HIGH'
+            elif ratio < 0.75:
+                vol_regime = 'LOW'
+            else:
+                vol_regime = 'NORMAL'
+
+            return AdaptiveLOIThreshold(
+                asset=asset, asset_class=asset_class,
+                base_threshold=base, current_threshold=round(current_threshold, 1),
+                current_atr_ratio=round(current_atr_ratio, 4),
+                median_atr_ratio=round(median_atr_ratio, 4),
+                vol_multiplier=round(vol_multiplier, 3),
+                vol_regime=vol_regime,
+                is_below_threshold=loi <= current_threshold
+            )
+        except Exception:
+            return AdaptiveLOIThreshold(
+                asset=asset, asset_class=asset_class,
+                base_threshold=base, current_threshold=base,
+                current_atr_ratio=0.0, median_atr_ratio=0.0,
+                vol_multiplier=1.0, vol_regime='NORMAL',
+                is_below_threshold=loi <= base
+            )
+
+
+# ============================================================
+# STAGE CLASSIFICATION — MIXED SUB-CLASSIFICATION + STAGE 1 FIX
+# ============================================================
+
+def classify_mixed_context(vst: float, st: float, lt: float, vlt: float,
+                            neutral_band: float = 5.0) -> str:
+    """Sub-classify MIXED stage into actionable categories.
+
+    MIXED_BULLISH: LT<0, VLT<0, ST>0, VST>0 — Gavin's best entry pattern.
+                   Structural headwind but short-term momentum turning. Prime AB3 watch.
+    MIXED_BEARISH: LT>0, VLT>0, ST<0, VST<0 — Distribution forming. P-BEAR watch.
+    MIXED_CONFUSED: Everything else — no edge, wait.
+    """
+    def s(x):
+        if x >= neutral_band: return 1
+        if x <= -neutral_band: return -1
+        return 0
+
+    sv, ss, sl, svl = s(vst), s(st), s(lt), s(vlt)
+
+    # MIXED_BULLISH: short TFs positive, long TFs negative (best accumulation setup)
+    if sv > 0 and ss > 0 and sl < 0 and svl < 0:
+        return 'MIXED_BULLISH'
+
+    # MIXED_BEARISH: short TFs negative, long TFs positive (distribution setup)
+    if sv < 0 and ss < 0 and sl > 0 and svl > 0:
+        return 'MIXED_BEARISH'
+
+    # Everything else is noise
+    return 'MIXED_CONFUSED'
+
+
+def classify_stage(vst: float, st: float, lt: float, vlt: float,
+                   neutral_band: float = 5.0) -> str:
+    """Classify current market stage from 4-TF SRIBI histogram values.
+
+    Stage taxonomy (from stage-state-framework-v1):
+      S4       — Full bear: all TFs negative
+      S4_to_1  — Bottom formation: LT<0, VLT<0 but VST+ (early recovery signal)
+      S1       — Accumulation: sustained VST+ in bear structure (see promote_stage1)
+      S2       — Markup: all TFs positive
+      S2_to_3  — Partial TF breakdown in bull structure
+      S3_to_4  — Short-term breakdown in bull structure (VST-/ST-)
+      MIXED_BULLISH / MIXED_BEARISH / MIXED_CONFUSED — LT/VLT disagree
+    """
+    def s(x):
+        if x >= neutral_band: return 1
+        if x <= -neutral_band: return -1
+        return 0
+
+    sv, ss, sl, svl = s(vst), s(st), s(lt), s(vlt)
+
+    if sl < 0 and svl < 0:
+        # HEADWIND context
+        if sv > 0 and ss > 0:
+            return 'S4_to_1'   # Both short TFs positive — bottom formation signal
+        elif sv > 0 or ss > 0:
+            return 'S4_to_1'   # One short TF turning — still counts as S4_to_1
+        return 'S4'            # All negative — full bear
+
+    if sl > 0 and svl > 0:
+        # TAILWIND context
+        if sv < 0 and ss < 0:
+            return 'S3_to_4'   # Both short TFs breaking down
+        elif sv < 0 or ss < 0:
+            return 'S2_to_3'   # Partial breakdown — distribution warning
+        return 'S2'            # All positive — full bull
+
+    # LT and VLT disagree → MIXED
+    return classify_mixed_context(vst, st, lt, vlt, neutral_band)
+
+
+def promote_stage1(df: pd.DataFrame, current_stage: str,
+                   neutral_band: float = 5.0, min_bars: int = 5) -> str:
+    """Promote S4_to_1 to S1 if VST has been positive for >= min_bars consecutive bars.
+
+    Stage 1 = genuine accumulation: short-term momentum sustained while
+    structural (LT/VLT) remains negative. S4_to_1 is the initial signal;
+    S1 is the confirmed state after the VST bounce sustains.
+    """
+    if current_stage != 'S4_to_1':
+        return current_stage
+
+    if 'VST SRI Bias Histogram' not in df.columns:
+        return current_stage
+
+    vst_series = df['VST SRI Bias Histogram'].tail(min_bars + 2)
+    consecutive_positive = 0
+    for val in reversed(vst_series.values):
+        if pd.isna(val):
+            break
+        if val >= neutral_band:
+            consecutive_positive += 1
+        else:
+            break
+
+    if consecutive_positive >= min_bars:
+        return 'S1'
+    return current_stage
+
+
 # ═══════════════════════════════════════════════════════════════
 # UPDATED ORCHESTRATOR
 # ═══════════════════════════════════════════════════════════════
@@ -2554,7 +2805,21 @@ class SRIEngineV2:
             )
             loi_arr = self._ab1_engines[asset]._compute_loi_series(df) if asset in self._ab1_engines else []
             loi_now = loi_arr[-1] if loi_arr else 0
-            
+
+            # R1: vol-adaptive LOI threshold
+            _ac_map = {
+                'MSTR': 'MOMENTUM', 'TSLA': 'MOMENTUM',
+                'IBIT': 'BTC_CORRELATED',
+                'SPY': 'MR', 'QQQ': 'MR', 'IWM': 'MR',
+                'GLD': 'TRENDING', 'PURR': 'BTC_CORRELATED',
+            }
+            _asset_class = _ac_map.get(asset, 'MR')
+            _adaptive_threshold = AdaptiveLOIEngine().compute(df, asset, _asset_class, loi_now)
+
+            # R2 + R3: stage classification with MIXED sub-classification and S1 promotion
+            _stage_raw = classify_stage(sribi.vst, sribi.st, sribi.lt, sribi.vlt)
+            _stage = promote_stage1(df, _stage_raw)
+
             current_state[asset] = {
                 "price": float(last['close']),
                 "date": last['date'].strftime('%Y-%m-%d') if hasattr(last['date'], 'strftime') else str(last['date']),
@@ -2562,6 +2827,8 @@ class SRIEngineV2:
                 "context": sribi.context.value,
                 "loi": loi_now,
                 "mode": self.TRADING_ASSETS[asset][1].value,
+                "stage": _stage,
+                "adaptive_threshold": _adaptive_threshold,
                 "pbear_state":   pbear_sigs.get(asset).state.name if pbear_sigs.get(asset) else "INACTIVE",
                 "pbear_emoji":   pbear_sigs.get(asset).emoji if pbear_sigs.get(asset) else '⚪',
                 "pbear_signals": pbear_sigs.get(asset).signals_fired() if pbear_sigs.get(asset) else [],
@@ -2625,6 +2892,13 @@ class SRIEngineV2:
             print(f"  {asset:<6} ${s['price']:>8.2f} {s['date']:>12} "
                   f"{sr['vst']:>+5.0f} {sr['st']:>+5.0f} {sr['lt']:>+5.0f} {sr['vlt']:>+5.0f} "
                   f"{loi_str:>7} {s['context']}")
+            # R1+R2+R3: stage, adaptive threshold
+            thresh = s.get('adaptive_threshold')
+            stage  = s.get('stage', '?')
+            if thresh is not None:
+                print(f"  {'':6} Stage: {stage:<16} | LOI: {s['loi']:+.1f} | "
+                      f"Adaptive Thresh: {thresh.current_threshold:.1f} ({thresh.vol_regime}) | "
+                      f"Thresh met: {thresh.is_below_threshold}")
         
         # AB1 signals (last 2 per asset)
         print(f"\n  AB1 PRE-BREAKOUT SIGNALS")
