@@ -194,7 +194,7 @@ float liq_mod     = 0.0
 string liq_regime = "NEUTRAL"
 
 if use_liq_auto
-    [float hyg_c, float hyg_s50] = request.security("AMEX:HYG", timeframe.period, [close, ta.sma(close, 50)])
+    [hyg_c, hyg_s50] = request.security("AMEX:HYG", timeframe.period, [close, ta.sma(close, 50)])
     float vix_c = request.security("CBOE:VIX", timeframe.period, close)
     bool  hyg_bear = not na(hyg_c) and not na(hyg_s50) and hyg_c < hyg_s50
     bool  hyg_bull = not na(hyg_c) and not na(hyg_s50) and hyg_c > hyg_s50
