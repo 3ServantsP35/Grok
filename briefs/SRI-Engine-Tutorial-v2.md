@@ -1,5 +1,5 @@
 # SRI Decision Engine — Complete Methodology Tutorial
-**Version 2.4 | Date: 2026-03-03 | Author: CIO Engine**
+**Version 2.5 | Date: 2026-03-04 | Author: CIO Engine**
 
 ---
 
@@ -31,6 +31,7 @@
 18. [Current Engine State (2026-03-05)](#18-current-engine-state)
 19. [P-BEAR Signal Layer: Bearish Top Detection](#19-p-bear-signal-layer-bearish-top-detection) *(NEW v2.4)*
 20. [Portfolio Defensive Posture (P-BEAR Phase 2)](#20-portfolio-defensive-posture-p-bear-phase-2) *(NEW v2.4)*
+21. [Liquidity Regime and Timeframe Signal Weighting](#21-liquidity-regime-and-timeframe-signal-weighting) *(NEW v2.5)*
 
 ---
 
@@ -2060,6 +2061,126 @@ Current Expression 3 status: **👁 WATCH (2/4 conditions)**:
 | `EXPRESSION3_ARMED` | Expression 3 reaches 4/4 conditions | 🔴 |
 
 
+---
+
+## 21. Liquidity Regime and Timeframe Signal Weighting
+
+*(New in v2.5 — 2026-03-03 backtest insight)*
+
+### 21.1 The Fundamental Insight
+
+Liquidity conditions modulate which timeframe carries the most predictive signal. This is not a static property of the indicators — it changes with the liquidity cycle.
+
+**Mechanism:**
+- **Expanding liquidity** (central bank balance sheets expanding, credit spreads tightening) → trend momentum is sustained longer. Short-timeframe signals (VST/ST) fire earlier and carry further before mean-reversion kicks in. Momentum lasts because central bank flows keep the environment supportive.
+- **Contracting liquidity** (balance sheets shrinking, credit spreads widening) → mean-reversion dominates. Short-timeframe signals fire prematurely and fade quickly. Longer-timeframe signals (LT/VLT) are more reliable because they smooth through the volatility of liquidity withdrawal.
+
+**ST is the all-weather timeframe.** Across both regimes, ST (4H/Daily) shows the most consistent accuracy — it is least sensitive to liquidity regime. It is the reliable monitoring signal in all conditions.
+
+### 21.2 Regime × Timeframe Table
+
+| Liquidity Regime | Most Accurate TF | AB3 Deployment Rule | Proxy Signal |
+|---|---|---|---|
+| EXPANDING | VST/ST | Standard LOI threshold applies | HYG SRIBI > 0, VIX LOI < 0 |
+| CONTRACTING | LT/VLT | Require LT/VLT confirmation before deployment | HYG SRIBI < 0, VIX LOI > 0 |
+| NEUTRAL | ST (all-weather) | Standard rules | Neither condition met |
+
+**Current regime (2026-03-03): CONTRACTING**
+- HYG SRIBI: -35 (credit stress — negative)
+- VIX LOI: +41.8 (elevated vol — positive)
+- → Require LT/VLT confirmation before any AB3 LEAP deployment
+
+### 21.3 Operational Rules by Regime
+
+**EXPANDING regime:**
+- VST/ST signals carry elevated weight in AB3 entry decisions
+- Standard LOI accumulation thresholds apply (MSTR/TSLA/IBIT: -45; SPY/QQQ/GLD/IWM: -40)
+- AB2: standard call-selling gates; full income harvesting
+- SRI Agent: weight VST and ST SRIBI components higher in LOI composite
+
+**CONTRACTING regime:**
+- LT and VLT confirmation **required** before AB3 capital deployment (AGENTS.md rule)
+- ST serves as monitoring signal only — triggers awareness, not deployment
+- AB2: defer call-selling increases until LT/VLT upward momentum confirmed
+- SRI Agent: weight LT and VLT SRIBI components higher in LOI composite
+- Options Strategist: defer PMCC call-selling increases until LT/VLT aligns
+
+**NEUTRAL regime:**
+- Balanced TF weighting — no adjustment to standard rules
+- ST is the operational signal as usual
+
+### 21.4 Vol-Adaptive LOI Threshold Formula
+
+Fixed LOI thresholds misfire in low-volatility regimes. HIGH vol entries produce dramatically better outcomes than LOW vol entries.
+
+**Backtest evidence:**
+- MSTR: HIGH vol entries → +26.3% median 60-bar return
+- MSTR: LOW vol entries → -26.8% median 60-bar return
+- MSTR fixed threshold (-45): 3 signals / **0% accuracy**
+- MSTR adaptive threshold: 1 signal / **100% accuracy** / +12.2% return
+
+**Why this works:** Low-vol environments produce shallow LOI dips that quickly reverse (head-fakes). High-vol drawdowns produce genuine accumulation opportunities with actual structural bottoms. The adaptive formula normalizes the threshold to the current vol regime.
+
+**Formula:**
+```
+threshold = base_threshold × (median_ATR_ratio / current_ATR_ratio)
+Capped at: base × 0.6 (min compression) to base × 1.3 (max expansion)
+
+Where:
+  ATR_ratio        = ATR(14) / Close  (vol normalized by price)
+  median_ATR_ratio = SMA(ATR_ratio, 200)  (long-run average vol)
+  vol_multiplier   = median_ATR_ratio / current_ATR_ratio
+```
+
+**Intuition:** When current vol is HIGH relative to historical (current_ATR_ratio > median), the multiplier < 1, which compresses the threshold closer to zero — easier to trigger. When vol is LOW, multiplier > 1, which pushes threshold deeper negative — harder to trigger. This exactly matches the empirical finding.
+
+**Pearson r (ATR/Close vs LOI depth at threshold crossings):**
+| Asset | r | p-value |
+|---|---|---|
+| MSTR | -0.383 | 0.012* |
+| TSLA | -0.801 | <0.001*** |
+| SPY  | -0.967 | <0.001*** |
+
+Note: the relationship is **inverted** from the naive hypothesis — high vol produces MORE negative LOI troughs (not less), but the adaptive formula is still valid and outperforms fixed thresholds.
+
+**Asset class application:**
+- MOMENTUM/BTC_CORRELATED (MSTR, TSLA, IBIT): adaptive threshold (live-computed by AdaptiveLOIEngine in sri_engine.py)
+- MR/TRENDING (SPY, QQQ, IWM, GLD): flat -40 (MR assets already have lower thresholds; vol-adaptive formula less impactful given their lower vol baseline)
+
+### 21.5 Current State Example (CONTRACTING, 2026-03-03)
+
+```
+Liquidity Regime: CONTRACTING
+HYG SRIBI:  -35   (credit stress)
+VIX LOI:   +41.8  (elevated fear)
+
+Active Rules:
+  → LT/VLT confirmation required before AB3 deployment
+  → AB2 call-selling: defer increases until LT/VLT momentum confirmed
+  → ST SRIBI: monitoring signal only; do not deploy on ST signal alone
+
+Sample Adaptive Thresholds:
+  MSTR: vol NORMAL  | base -45.0 | adaptive ~-41 to -50 depending on ATR
+  TSLA: vol LOW     | base -45.0 | adaptive pushes deeper (~-55 to -65)
+  IBIT: vol NORMAL  | base -45.0 | adaptive ~-41 to -50
+```
+
+### 21.6 Validation Caveat
+
+**This is an UNVALIDATED insight from a 15-month dataset (Jul 2024 – Oct 2025).**
+
+- Sample sizes are small (n=4 to n=11 per cell)
+- Statistical certainty requires 24+ months of data across multiple liquidity cycles
+- Current finding: directional confidence only
+- **Re-validate at 24+ months (target: Jul 2026)**
+
+The adaptive threshold statistical significance (p<0.05 on MSTR, p<0.001 on TSLA/SPY) is stronger than the liquidity-TF accuracy finding. Both should be treated as directional guidance, not definitive parameters, until validated on a larger dataset.
+
+**Do not use these findings to override core framework rules with high conviction. Use them as probability adjusters — exactly as GLI Z-score adjusts regime calls.**
+
+
+---
+
 ## Appendix A: Decision Tree — New Trade
 
 ```
@@ -2143,3 +2264,5 @@ Incoming signal on asset X:
 *Tutorial v2.3 reflects engine state as of 2026-03-03. Added: Stage State Taxonomy (§3a), Confirmation Ladders (§3b), LEAP Attractiveness Score (§8a), Market Structure Report (§13c), Personalized Portfolio Report (§13d).*
 
 *Tutorial v2.4 reflects engine state as of 2026-03-03. Added: P-BEAR Signal Layer: Bearish Top Detection (§19), Portfolio Defensive Posture / P-BEAR Phase 2 (§20).*
+
+*Tutorial v2.5 reflects engine state as of 2026-03-04. Added: Liquidity Regime and Timeframe Signal Weighting (§21) — vol-adaptive LOI thresholds, liquidity cycle × TF accuracy, CONTRACTING regime deployment rules. UNVALIDATED — 15-month dataset; re-validate at 24+ months.*
