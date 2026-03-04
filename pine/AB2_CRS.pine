@@ -448,9 +448,7 @@ if show_table and barstate.islast
                text_color=color.white, text_halign=text.align_right, text_size=size.small)
 
     // Row 9: Score breakdown
-    string bd = "IV:" + str.tostring(iv_pts, "#") + " Stg:" + str.tostring(stage_pts, "#") +
-                " Chop:" + str.tostring(chop_pts, "#") + " Mod:" +
-                (modifiers >= 0 ? "+" : "") + str.tostring(modifiers, "#.#")
+    string bd = "IV:" + str.tostring(iv_pts, "#") + " Stg:" + str.tostring(stage_pts, "#") + " Chop:" + str.tostring(chop_pts, "#") + " Mod:" + (modifiers >= 0 ? "+" : "") + str.tostring(modifiers, "#.#")
     table.cell(t, 0, 9, bd,
                text_color=color.new(color.gray, 50), text_halign=text.align_left, text_size=size.tiny)
     table.cell(t, 1, 9, asset_class,
