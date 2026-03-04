@@ -1,7 +1,7 @@
 // This source code is subject to the terms of the Mozilla Public License 2.0
 // © 3ServantsP35
 //
-// AB2 Call Ripeness Score (CRS) — v2
+// AB2 Call Ripeness Score (CRS) — v2 (Pine v6)
 // ─────────────────────────────────────────────────────────────────────────────
 // Stage-adaptive income harvesting indicator for AB2 PMCC short calls.
 // Measures when and how aggressively to sell calls against AB3 LEAP positions.
@@ -36,10 +36,10 @@
 //
 // NOTE: STRC hurdle comparison and contract sizing are handled in PPR reports.
 //
-// Framework: SRI Engine v2 | AB2 PMCC Rules | Revised 2026-03-04
+// Framework: SRI Engine v2 | AB2 PMCC Rules | Pine v6 | Revised 2026-03-04
 // ─────────────────────────────────────────────────────────────────────────────
 
-//@version=5
+//@version=6
 indicator("AB2 Call Ripeness Score v2", shorttitle="AB2 CRS v2", overlay=false, max_bars_back=500)
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -194,9 +194,8 @@ float liq_mod     = 0.0
 string liq_regime = "NEUTRAL"
 
 if use_liq_auto
-    float hyg_c   = request.security("AMEX:HYG", timeframe.period, close, lookahead=barmerge.lookahead_off)
-    float hyg_s50 = request.security("AMEX:HYG", timeframe.period, ta.sma(close, 50), lookahead=barmerge.lookahead_off)
-    float vix_c   = request.security("CBOE:VIX", timeframe.period, close, lookahead=barmerge.lookahead_off)
+    [float hyg_c, float hyg_s50] = request.security("AMEX:HYG", timeframe.period, [close, ta.sma(close, 50)])
+    float vix_c = request.security("CBOE:VIX", timeframe.period, close)
     bool  hyg_bear = not na(hyg_c) and not na(hyg_s50) and hyg_c < hyg_s50
     bool  hyg_bull = not na(hyg_c) and not na(hyg_s50) and hyg_c > hyg_s50
     bool  vix_hi   = not na(vix_c) and vix_c > 25
