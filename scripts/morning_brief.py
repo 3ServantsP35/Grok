@@ -352,6 +352,114 @@ def build_brief():
         sections.append(f"**🌍 Howell Phase**\n*Unavailable: {type(_hpe).__name__}: {str(_hpe)[:100]}*")
 
     # ============================================
+    # 4.6 LIQUIDITY REGIME × SIGNAL WEIGHTING (2026-03-03 insight)
+    # ============================================
+    try:
+        from sri_engine import AdaptiveLOIEngine
+
+        # Determine liquidity regime from HYG SRIBI + VIX LOI proxy
+        # HYG ST SRIBI and VIX LOI are stored in gli_proxy or regime tables
+        _hyg_sribi = None
+        _vix_loi   = None
+        try:
+            _hyg_row = conn.execute(
+                "SELECT gli_score FROM gli_proxy ORDER BY timestamp DESC LIMIT 1"
+            ).fetchone()
+            # Try dedicated regime columns if available
+            _reg_row = conn.execute(
+                "SELECT hyg_sribi, vix_loi FROM regime_state ORDER BY timestamp DESC LIMIT 1"
+            ).fetchone()
+            if _reg_row:
+                _hyg_sribi = _reg_row[0]
+                _vix_loi   = _reg_row[1]
+        except Exception:
+            pass
+
+        # Classify liquidity regime
+        if _hyg_sribi is not None and _vix_loi is not None:
+            if _hyg_sribi > 0 and _vix_loi < 0:
+                _liq_regime = "EXPANDING"
+                _tf_guidance = "Short TF signals (VST/ST) elevated weight. Momentum sustains."
+            elif _hyg_sribi < 0 and _vix_loi > 0:
+                _liq_regime = "CONTRACTING"
+                _tf_guidance = "LT/VLT confirmation required for AB3 deployment. ST for monitoring."
+            else:
+                _liq_regime = "NEUTRAL"
+                _tf_guidance = "Balanced TF weighting. No adjustment."
+        else:
+            # Fallback: use gli_score as proxy (positive = expanding, negative = contracting)
+            _gli_z = gli[2] if gli else 0.0
+            if _gli_z > 0.3:
+                _liq_regime = "EXPANDING"
+                _tf_guidance = "Short TF signals (VST/ST) elevated weight. Momentum sustains."
+            elif _gli_z < -0.3:
+                _liq_regime = "CONTRACTING"
+                _tf_guidance = "LT/VLT confirmation required for AB3 deployment. ST for monitoring."
+            else:
+                _liq_regime = "NEUTRAL"
+                _tf_guidance = "Balanced TF weighting. No adjustment."
+
+        # Pull adaptive LOI thresholds from AdaptiveLOIEngine for primary assets
+        DATA_DIR = "/mnt/mstr-data"
+        _adaptive_assets = {
+            "MSTR": f"{DATA_DIR}/BATS_MSTR, 240_7b1cc.csv",
+            "TSLA": f"{DATA_DIR}/BATS_TSLA, 240_b8831.csv",
+            "IBIT": f"{DATA_DIR}/BATS_IBIT, 240_7654d.csv",
+        }
+        import pandas as pd, os as _os
+
+        _adaptive_rows = []
+        for _sym, _csv in _adaptive_assets.items():
+            # Try to find CSV by prefix if exact path missing
+            if not _os.path.exists(_csv):
+                _prefix = f"BATS_{_sym}, 240_"
+                _candidates = [
+                    f for f in _os.listdir(DATA_DIR) if f.startswith(_prefix) and f.endswith(".csv")
+                ]
+                _csv = f"{DATA_DIR}/{_candidates[0]}" if _candidates else None
+
+            if _csv and _os.path.exists(_csv):
+                try:
+                    _df = pd.read_csv(_csv)
+                    _eng = AdaptiveLOIEngine(asset=_sym, asset_class="MOMENTUM")
+                    _result = _eng.compute(_df)
+                    _vol_regime = _result.vol_regime
+                    _adaptive_thresh = _result.adaptive_threshold
+                    _base_thresh     = _result.base_threshold
+                    _loi_val         = _result.current_loi
+                    _below           = "✅ YES" if _loi_val <= _adaptive_thresh else "No"
+                    _adaptive_rows.append(
+                        f"{_sym:<4} vol:{_vol_regime:<7} | Adaptive thresh: {_adaptive_thresh:+.1f}"
+                        f" (base:{_base_thresh:+.1f}) | LOI:{_loi_val:+.1f} → below? {_below}"
+                    )
+                except Exception as _ae:
+                    _adaptive_rows.append(f"{_sym:<4} adaptive threshold unavailable ({type(_ae).__name__})")
+            else:
+                _adaptive_rows.append(f"{_sym:<4} CSV not found — adaptive threshold skipped")
+
+        _liq_emoji = {"EXPANDING": "🟢", "CONTRACTING": "🔴", "NEUTRAL": "🟡"}.get(_liq_regime, "⚪")
+        _liq_section  = "```\n"
+        _liq_section += "── Liquidity Regime Signal Weights ──────────────────────────\n"
+        _liq_section += f"Liquidity: {_liq_emoji} {_liq_regime} | {_tf_guidance}\n"
+        for _row in _adaptive_rows:
+            _liq_section += _row + "\n"
+        _liq_section += "─────────────────────────────────────────────────────────────\n"
+        _liq_section += "```"
+        # Append as sub-section tag to previous GLI/Howell section
+        if sections:
+            sections[-1] = sections[-1] + "\n\n" + _liq_section
+        else:
+            sections.append(_liq_section)
+
+    except ImportError:
+        # AdaptiveLOIEngine not yet available — skip gracefully
+        pass
+    except Exception as _liq_err:
+        # Non-fatal — append a minimal note to the prior section
+        if sections:
+            sections[-1] = sections[-1] + f"\n\n*Liquidity regime weights unavailable: {type(_liq_err).__name__}: {str(_liq_err)[:80]}*"
+
+    # ============================================
     # 5. IV REGIME
     # ============================================
     orats = conn.execute(
