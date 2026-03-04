@@ -300,26 +300,49 @@ if barstate.islast and show_table
 // LEGEND
 // ═══════════════════════════════════════════════════════════════
 
-var table leg = table.new(position.bottom_left, 2, 8,
+var table leg = table.new(position.bottom_left, 2, 16,
     bgcolor=color.new(color.black, 25), border_width=1, border_color=color.new(color.gray, 70))
 
 if barstate.islast and show_legend
-    table.cell(leg, 0, 0, "AB1 v6", text_color=color.white, text_size=size.tiny, bgcolor=color.new(color.gray, 50))
-    table.cell(leg, 1, 0, "CT-Aware", text_color=color.white, text_size=size.tiny, bgcolor=color.new(color.gray, 50))
-    table.cell(leg, 0, 1, "█ Green",  text_color=color.green, text_size=size.tiny)
-    table.cell(leg, 1, 1, "Favorable — enter zone",  text_color=color.white, text_size=size.tiny)
-    table.cell(leg, 0, 2, "█ Yellow", text_color=color.yellow, text_size=size.tiny)
-    table.cell(leg, 1, 2, "Building — watch", text_color=color.white, text_size=size.tiny)
-    table.cell(leg, 0, 3, "█ Orange", text_color=color.orange, text_size=size.tiny)
-    table.cell(leg, 1, 3, "LT catching up / CT trap", text_color=color.white, text_size=size.tiny)
-    table.cell(leg, 0, 4, "█ Red",   text_color=color.red, text_size=size.tiny)
-    table.cell(leg, 1, 4, "Avoid — distribution or IWM trap", text_color=color.white, text_size=size.tiny)
-    table.cell(leg, 0, 5, "○ CT1",   text_color=color.yellow, text_size=size.tiny)
-    table.cell(leg, 1, 5, "CT1 cross (MIXED entry ladder)", text_color=color.gray, text_size=size.tiny)
-    table.cell(leg, 0, 6, "◆ CT3",   text_color=color.green, text_size=size.tiny)
-    table.cell(leg, 1, 6, "CT3 cross (TSLA entry / full align)", text_color=color.gray, text_size=size.tiny)
-    table.cell(leg, 0, 7, "✕ CT4/IWM", text_color=color.red, text_size=size.tiny)
-    table.cell(leg, 1, 7, "Distribution / IWM late-cycle warn", text_color=color.gray, text_size=size.tiny)
+    // ── Header ──
+    table.cell(leg, 0, 0, "SRI AB1 Legend", text_color=color.white, text_size=size.tiny, bgcolor=color.new(color.gray, 50))
+    table.cell(leg, 1, 0, "CT = Concordance Tier (1–4)", text_color=color.white, text_size=size.tiny, bgcolor=color.new(color.gray, 50))
+
+    // ── Background ──
+    table.cell(leg, 0, 1, "BACKGROUND", text_color=color.gray, text_size=size.tiny, bgcolor=color.new(color.gray, 70))
+    table.cell(leg, 1, 1, "ongoing state — whole bars are shaded", text_color=color.gray, text_size=size.tiny, bgcolor=color.new(color.gray, 70))
+    table.cell(leg, 0, 2, "█ Green",  text_color=color.green,  text_size=size.tiny)
+    table.cell(leg, 1, 2, "Favorable CT for this asset — entry zone", text_color=color.white, text_size=size.tiny)
+    table.cell(leg, 0, 3, "█ Yellow", text_color=color.yellow, text_size=size.tiny)
+    table.cell(leg, 1, 3, "Building / suboptimal CT — watch only", text_color=color.white, text_size=size.tiny)
+    table.cell(leg, 0, 4, "█ Orange", text_color=color.orange, text_size=size.tiny)
+    table.cell(leg, 1, 4, "LT catching up — late; monitor for exit", text_color=color.white, text_size=size.tiny)
+    table.cell(leg, 0, 5, "█ Red",    text_color=color.red,    text_size=size.tiny)
+    table.cell(leg, 1, 5, "Avoid — distribution or IWM CT3 trap", text_color=color.white, text_size=size.tiny)
+
+    // ── CT markers ──
+    table.cell(leg, 0, 6, "MARKERS", text_color=color.gray, text_size=size.tiny, bgcolor=color.new(color.gray, 70))
+    table.cell(leg, 1, 6, "appear ONLY when CT tier changes (crossings)", text_color=color.gray, text_size=size.tiny, bgcolor=color.new(color.gray, 70))
+    table.cell(leg, 0, 7, "● Yellow ●", text_color=color.yellow, text_size=size.tiny)
+    table.cell(leg, 1, 7, "CT1 crossed: VST+ST+ but LT still negative (MIXED — sweet spot for MSTR/IBIT)", text_color=color.gray, text_size=size.tiny)
+    table.cell(leg, 0, 8, "● Orange ●", text_color=color.orange, text_size=size.tiny)
+    table.cell(leg, 1, 8, "CT2 crossed: VST+ and LT now positive — structure building (SPY/QQQ entry zone)", text_color=color.gray, text_size=size.tiny)
+    table.cell(leg, 0, 9, "◆ Teal ◆",  text_color=color.teal, text_size=size.tiny)
+    table.cell(leg, 1, 9, "CT3 crossed: all 4 TFs positive — full alignment (TSLA entry; BTC-proxy LT caught up)", text_color=color.gray, text_size=size.tiny)
+    table.cell(leg, 0, 10, "✕ Red ✕",  text_color=color.red,    text_size=size.tiny)
+    table.cell(leg, 1, 10, "CT4 above bar: VLT overextended — distribution warning on Momentum assets", text_color=color.gray, text_size=size.tiny)
+    table.cell(leg, 0, 11, "✕ Orange ✕", text_color=color.orange, text_size=size.tiny)
+    table.cell(leg, 1, 11, "IWM CT3 above bar: late-cycle small-cap trap — do NOT enter; trim AB3 instead", text_color=color.gray, text_size=size.tiny)
+
+    // ── Tracklines ──
+    table.cell(leg, 0, 12, "TRACKLINES", text_color=color.gray, text_size=size.tiny, bgcolor=color.new(color.gray, 70))
+    table.cell(leg, 1, 12, "LT timeframe (4H Fast vs 1W Slow)", text_color=color.gray, text_size=size.tiny, bgcolor=color.new(color.gray, 70))
+    table.cell(leg, 0, 13, "● Dots (teal)", text_color=color.teal, text_size=size.tiny)
+    table.cell(leg, 1, 13, "LT Fast TL: teal = rising, maroon = falling. Tracks short-term trend direction.", text_color=color.gray, text_size=size.tiny)
+    table.cell(leg, 0, 14, "— Line (teal)", text_color=color.teal, text_size=size.tiny)
+    table.cell(leg, 1, 14, "LT Slow TL: teal = price above (bullish), maroon = price below (bearish).", text_color=color.gray, text_size=size.tiny)
+    table.cell(leg, 0, 15, "Fast > Slow", text_color=color.white, text_size=size.tiny)
+    table.cell(leg, 1, 15, "When Fast TL is above Slow TL = LT bullish structure. Cross = trend shift.", text_color=color.gray, text_size=size.tiny)
 
 // ═══════════════════════════════════════════════════════════════
 // ALERTS — CONFIRMATION LADDER ONLY
