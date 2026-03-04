@@ -274,11 +274,7 @@ else  // DELTA_MGMT
     dte_guide   := "21–30d"
 
 float strike_width = strike_base + strike_adj
-string strike_str  = stage_code == "DECLINE" ? "NO CALLS" :
-     strike_width >= 20 ? "+" + str.tostring(strike_width, "#") + "% OTM (wide)" :
-     strike_width >= 10 ? "+" + str.tostring(strike_width, "#") + "% OTM" :
-     strike_width >= 2  ? "+" + str.tostring(strike_width, "#") + "% OTM (tight)" :
-     "ATM / ITM"
+string strike_str = stage_code == "DECLINE" ? "NO CALLS" : strike_width >= 20 ? "+" + str.tostring(strike_width, "#") + "% OTM (wide)" : strike_width >= 10 ? "+" + str.tostring(strike_width, "#") + "% OTM" : strike_width >= 2 ? "+" + str.tostring(strike_width, "#") + "% OTM (tight)" : "ATM / ITM"
 
 // ═══════════════════════════════════════════════════════════════════════════
 // COLOUR SCHEME FOR INCOME SCORE
