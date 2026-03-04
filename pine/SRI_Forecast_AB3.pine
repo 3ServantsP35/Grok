@@ -1,4 +1,5 @@
-// SRI Forecast AB3 — Strategic LEAP Accumulation (v4)
+// SRI Forecast AB3 — Strategic LEAP Accumulation (v5)
+// Vol-adaptive LOI threshold added 2026-03-03 (HIGH vol entries +26% vs LOW -27% on MSTR)
 // P6 Framework — per-asset LOI thresholds and CT4 distribution overlay:
 //
 //   BTC-Proxy (MSTR/IBIT):       Acc=-60, Deep=-80, Trims=40/60/80
@@ -289,6 +290,49 @@ bool deep_bounce = in_deep_zone and confirmed_bounce and depth_ok
 // IWM CT3 warning cross (signal fire even without LOI threshold)
 bool iwm_ct3_cross = is_iwm and ct_tier >= 3 and nz(ct_tier[1]) < 3
 
+
+// ═══════════════════════════════════════════════════════════════
+// VOL-ADAPTIVE LOI THRESHOLD (2026-03-03 insight)
+// Formula: base_thresh × (median_atr_ratio / current_atr_ratio)
+// Intuition: normalize threshold to vol regime
+//   High vol → threshold compresses toward zero (easier to trigger)
+//   Low vol  → threshold pushes deeper negative (harder to trigger)
+// Evidence: MSTR HIGH vol entries +26.3% / LOW vol entries -26.8% (60-bar median)
+// ═══════════════════════════════════════════════════════════════
+
+string grp_adaptive = "Vol-Adaptive Threshold"
+bool show_adaptive  = input.bool(true, "Show Vol-Adaptive Threshold", group=grp_adaptive,
+    tooltip="Dynamic LOI threshold that adjusts for the current volatility regime. High vol = threshold compresses (easier to trigger). Low vol = threshold deepens (harder to trigger). 2026-03-03 backtest insight.")
+int   atr_period_vol    = input.int(14,  "ATR Period (vol-adaptive)",    group=grp_adaptive, minval=5, maxval=50)
+int   median_window_vol = input.int(200, "Median ATR Window (vol-adaptive)", group=grp_adaptive, minval=50, maxval=500,
+    tooltip="Long-run ATR ratio window. 200 bars ≈ ~33 trading days on 4H chart.")
+
+// Vol-adaptive threshold calculation
+float _atr_ratio        = ta.atr(atr_period_vol) / close
+float _median_atr_ratio = ta.sma(_atr_ratio, median_window_vol)
+float _vol_multiplier   = _median_atr_ratio / _atr_ratio
+
+// Apply to acc_level (the primary AB3 accumulation threshold)
+// Cap at 60%–130% of base (prevents extreme multipliers in crisis/calm extremes)
+float _raw_adaptive     = acc_level * _vol_multiplier
+float adaptive_acc      = math.max(acc_level * 1.3, math.min(acc_level * 0.6, _raw_adaptive))
+
+// Vol regime label for display (approximate percentiles)
+string vol_regime_label = _vol_multiplier < 0.8  ? "HIGH VOL"  :
+                          _vol_multiplier > 1.2  ? "LOW VOL"   : "NORMAL VOL"
+
+// Plot adaptive threshold alongside base threshold
+plot(show_adaptive ? adaptive_acc : na,
+    title   = "Adaptive LOI Threshold",
+    color   = color.new(color.orange, 0),
+    linewidth = 2,
+    style   = plot.style_line)
+
+// Background tint when LOI is below adaptive threshold (potential AB3 entry zone)
+bool in_adaptive_zone = loi <= adaptive_acc
+bgcolor(show_adaptive and in_adaptive_zone ? color.new(color.orange, 92) : na,
+    title = "Adaptive Entry Zone")
+
 // ═══════════════════════════════════════════════════════════════
 // PLOTS
 // ═══════════════════════════════════════════════════════════════
@@ -366,6 +410,12 @@ if barstate.islast and show_table
     color loi_clr = loi < deep_acc_level ? #00FF00 : loi < acc_level ? color.green : loi > trim3_level ? color.red : loi > trim1_level ? color.orange : color.gray
     table.cell(t, 0, 1, "LOI", text_color=color.gray, text_size=size.tiny)
     table.cell(t, 1, 1, str.tostring(loi, "#.#"), text_color=loi_clr, text_size=size.small)
+
+    // Vol-Adaptive threshold row
+    color adapt_clr = loi <= adaptive_acc ? color.new(color.orange, 0) : color.gray
+    table.cell(t, 0, 12, "Adaptive Thresh", text_color=color.gray, text_size=size.tiny)
+    table.cell(t, 1, 12, str.format("{0} ({1})", str.tostring(adaptive_acc, "#.#"), vol_regime_label),
+        text_color=adapt_clr, text_size=size.tiny)
 
     // Thresholds
     table.cell(t, 0, 2, "Acc / Deep", text_color=color.gray, text_size=size.tiny)
