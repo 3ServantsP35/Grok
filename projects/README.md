@@ -1,6 +1,6 @@
 # #mstr-cio Project Tracker
 **Managed by:** Gavin (rizenshine5359) — Project Manager
-**Updated:** 2026-03-03
+**Updated:** 2026-03-04
 
 ---
 
@@ -16,19 +16,24 @@
 | P7 | Framework Architecture | ✅ Complete — Approved | Gavin |
 | P8 | Pine Scripts — Mirror Layer | ✅ Pivoted & Stable | Gavin |
 | P9 | MSTR/IBIT Pair Trade | ⏸️ Deferred | Gavin |
-| P10 | Trend Line Engine | ⏸️ Deferred | Greg + Gavin |
+| P10 | Trend Line Engine | 🟡 Live prototype tested 2026-03-04 | CIO |
 | P11 | STRC Spread Monitor | 🟡 Needs cron | Greg |
 | P12 | Python Decision Engine | ✅ Phase 1+2 Complete | CIO |
 | P13 | Trade Journal | 🟡 Schema defined — queued | CIO |
 | P14 | Bearish Bias Indicator Suite | ⏸️ Deferred | Gavin |
+| P-BEAR | Bearish Signal & Adjustment Architecture | ✅ All phases complete | CIO |
 | P-HOWELL | Howell Phase Engine | ✅ Complete — Live | CIO |
 | P-CLASSIFIER | Stage 2 Continuation Classifier | ✅ v1.1 — Pending Gavin review | Gavin |
 | P-GLI | GLI Engine (Layer 0) | ✅ Complete — Live | CIO |
-| P-MSR | Market Structure Reports | ✅ Framework + Prototype complete | CIO |
+| P-MSR | Market Structure Reports | ✅ All 7 assets updated 2026-03-04 | CIO |
 | P-PPR | Personalized Portfolio Report | ✅ Workflow validated | CIO |
 | P-MOCK | Weekly Generic Portfolio Brief | ✅ Live | CIO |
-| P-TUTORIALS | Tutorial v2.2 + Layman's Guide | 🔵 Pending Gavin review | Gavin |
+| P-TUTORIALS | Tutorial v2.5 + Layman's Guide | 🔵 Pending Gavin review | Gavin |
+| P-CRS | AB2 Call Ripeness Score v2 | ✅ Complete — Pine v6 | CIO |
+| P-PINE-GUIDE | Pine Indicator Tutorial Guide | ✅ Complete | CIO |
 | P-UAA | Updated Alert Approach | 🟡 Scope TBD | Gavin |
+| P-BACKTEST | Stage Designation + Vol-Adaptive Research | ✅ Complete — R1/R2/R3 implemented | CIO |
+| P-PINE-V6 | Pine v6 Migration | ✅ All 12 scripts on v6 | CIO |
 
 ---
 
@@ -50,6 +55,8 @@ The automation layer is built. All scripts exist and have been tested. Nothing f
 | Howell phase transition alert | ✅ Built |
 | Discord routing (alerts, Gavin, Gary channels) | ✅ Built |
 | Stage 2 Classifier Gate Zero integration | ✅ Built |
+| Section 4.6 Liquidity Regime × TF Weighting in morning brief | ✅ Built (`9d3de58e`) |
+| Section 8.5 P-BEAR bearish trade block in morning brief | ✅ Built (`57ed37fe`) |
 | **Crontab install** | 🔴 Blocked — Greg must run install script |
 | **DISCORD_WEBHOOK_GREG** | 🔴 Blocked — Greg must verify/recreate webhook |
 | Greg channel automated output | ⬜ Pending webhook |
@@ -62,84 +69,86 @@ Then verify: `sudo -u openclaw crontab -l`
 
 ---
 
-### P-HOWELL: Howell Phase Engine (Layer 0.5)
-**Status:** ✅ Complete — Live
-**Lead:** CIO | **Approver:** Gavin
+### P10: Trend Line Engine
+**Status:** 🟡 Live prototype tested — not yet wired into pipeline
+**Lead:** CIO | **Approver:** Greg + Gavin
 
-Classifies the current macro cycle phase (Rebound / Calm / Speculation / Turbulence) using 8 sector ETFs. Phase determines Gate Zero eligibility for all AB3 entry decisions. Discord alert fires on every phase transition. Morning brief includes §4.5 Howell phase block.
+Objective: CIO reads key trend lines as linear equations on date/price coordinates — visible in analysis without requiring TradingView.
 
-**Current phase:** 🌧️ TURBULENCE (score T=+3, conf 12.5% — Turbulence/Speculation boundary)
+**2026-03-04 live test:** Ran successfully against MSTR and BTC 4H CSV data. Swing high detection, two-point and multi-point linear regression, and forward projection all working. Key outputs demonstrated:
+- MSTR post-ATH descending resistance TL (R²=0.968): anchored Jul-16/Aug-11/Oct-6 highs; current projection $203, slope -$4.70/day
+- BTC Jan–Feb descending resistance TL: confirmed breakout today ($5,820 above projected level)
+- Near-term resistance TL anchored on January swing highs
 
-| Milestone | Status | Commit |
-|---|---|---|
-| Sector ETFs added to CANONICAL_CSVS | ✅ | `2ebe963f` |
-| HowellPhaseEngine + HowellPhaseState in sri_engine.py | ✅ | `df64b23c` |
-| DB tables (howell_phase_state + howell_phase_transitions) | ✅ | `0febb3b1` |
-| DB seeded with first live state | ✅ | — |
-| Daily Discord embed — phase line in morning brief | ✅ | `4a83ba10` |
-| Morning brief §4.5 (phase scores, sector table, AB guidance) | ✅ | `09f662f1` |
-| HOWELL_PHASE_TRANSITION alert in pmcc_alerts.py | ✅ | `0febb3b1` |
-| Gate Zero integrated into Stage 2 Classifier v1.1 | ✅ | `4ae16835` |
-| Layer 0.5 section in Tutorial v2.2 | ✅ | `3bbb7e18` |
-| Seasons analogy in Layman's Guide | ✅ | `d7e6cb2e` |
+**Next step:** Formalize as a reusable function in `sri_engine.py`; integrate into morning brief and MSR generation.
 
-**Howell Asset Allocation Matrix:**
-
-| Asset Class | Rebound | Calm | Speculation | Turbulence |
-|---|---|---|---|---|
-| Equities / Tech | 🟢 | 🟢 | 🟠 | 🔴 |
-| Cyclicals | 🟢 | 🟢 | 🔴 | 🔴 |
-| Commodities | 🔴 | 🟢 | 🟢 | 🔴 |
-| Bond Duration | 🔴 | 🟠 | 🟠 | 🟢 |
-| Defensives | 🔴 | 🟢 | 🟢 | 🟢 |
+| Milestone | Status |
+|---|---|
+| Swing high/low detection algorithm | ✅ Tested live |
+| Two-point and multi-point linear regression | ✅ Tested live |
+| Forward projection (N-day) | ✅ Tested live |
+| R² confidence scoring | ✅ Tested live |
+| TrendLine class in sri_engine.py | ⬜ Queued |
+| Integration into morning brief | ⬜ After class build |
+| Integration into MSR generation | ⬜ After class build |
 
 ---
 
-### P-CLASSIFIER: Stage 2 Continuation Classifier v1.1
-**Status:** ✅ Research complete | 🔵 Pending Gavin review before live wiring
+### P-TUTORIALS: Tutorial v2.5 + Layman's Guide
+**Status:** 🔵 Built — Pending Gavin review
 **Lead:** CIO | **Approver:** Gavin
-**Brief:** `briefs/stage2-continuation-classifier-v1.md`
 
-Distinguishes mid-bull corrections (buy the dip — Stage 2 Continuation) from genuine Stage 3/4 distribution tops. Uses CPS composite score (4 VLT/LT factors) plus Gate Zero (Howell phase + IWM breadth).
+Full 4-layer architecture documentation for Greg (technical) and Gary (educational). Current version: v2.5.
 
-**Key finding:** When IWM is strong while SPY/QQQ corrects, continuation rate is only 10–13% — skip entirely. When IWM also shows headwind at the trough, continuation rises to 62.5% — valid entry zone.
+| Document | Version | Status | Commit |
+|---|---|---|---|
+| SRI-Engine-Tutorial-v2.md | v2.5 | ✅ On GitHub | `cd2efd94` |
+| SRI-Layman-Guide.md | Current | ✅ On GitHub | `d2b4b758` |
+| Gavin review of both | — | 🔵 Pending | — |
 
-| Milestone | Status | Commit |
-|---|---|---|
-| 221-episode dataset labeled | ✅ | — |
-| CPS composite formula validated | ✅ | — |
-| IWM breadth gate research (74 SPY/QQQ episodes) | ✅ | — |
-| v1.1 brief with Gate Zero section | ✅ | `4ae16835` |
-| Gavin review of "What It Doesn't Solve" section | 🔵 Pending | — |
-| CPS wired into live AB3 entry triggers | ⬜ After Gavin approval | — |
+**v2.5 additions over v2.2 (last reviewed):**
+- §19: P-BEAR Signal Layer (7-state machine, per-asset ladders, AB2 fast-gate)
+- §20: Portfolio Defensive Posture (4 levels, Expression 3 trigger spec)
+- §21: Liquidity Regime × TF Weighting (Pearson r evidence, vol-adaptive formula, CONTRACTING/EXPANDING rules)
+- Layman's Guide: "Weather Warnings" P-BEAR barometer analogy
 
 ---
 
-### P-MSR: Market Structure Report Framework
-**Status:** ✅ Framework v1.1 complete | Prototype (MSTR) built
+### P-MSR: Market Structure Reports
+**Status:** ✅ Framework v1.1 complete | All 7 assets updated 2026-03-04
 **Lead:** CIO | **Approver:** Gavin
 **Framework:** `briefs/stage-state-framework-v1.md`
 **Reports:** `market-structure-reports/`
 
 Standardized weekly report for every tracked asset. Declares Stage State (10-state taxonomy), Confirmation Ladder progress (Watch/Forming/Confirmed/Invalidated), LEAP Attractiveness Score (objective, 0–10), upstream macro context (GLI, RORO, Howell), and key transition triggers.
 
-**The 10 Stage States:**
-S1 (Accumulation) → S1→2 (Breakout Formation) → S2 (Markup) → S2C (Stage 2 Continuation) → S2→3 (Distribution Warning) → S3 (Distribution) → S3→4 (Markdown Initiation) → S4 (Markdown) → S4C (Stage 4 Continuation) → S4→1 (Bottom Formation)
+**Current MSR scores (2026-03-04):**
 
-**MSTR current state:** S4→1 Forming | Score: 6/10 | See latest MSR for full analysis.
+| Asset | Score | Stage | Key Note |
+|---|---|---|---|
+| MSTR | 6.5/10 | S2_early → S2 CONFIRMED | VLT turned positive 2026-03-04; all TFs now positive |
+| IBIT | 4.0/10 | S4→1 | LOI surging +13.8/5bars; MIXED_BULLISH pattern |
+| GLD | 2.0/10 | S2 w/ P-BEAR watch | 5/6 P-BEAR signals active; Supertrend watch $469.69 |
+| SPY | 1.0/10 | MIXED_BEARISH | 6/7 P-BEAR signals; LOI collapsing -15/5bars |
+| QQQ | 1.0/10 | S4 | 5/7 P-BEAR signals |
+| IWM | 1.0/10 | S4 | 4/7 P-BEAR signals |
+| TSLA | 1.0/10 | S4 | All TFs deeply negative |
+| PURR | Stub | <500 bars | Observation mode — not yet created |
+
+**Note on MSTR re: 2026-03-04 session:** VLT SRI Bias flipped to +20 on today's close. This upgrades MSTR from S2_early to S2 CONFIRMED (all four timeframes now positive). MSR score likely moves to 7.5–8.0 when re-run with current data. LOI at -14.2, projected to cross zero within 1 trading day.
 
 | Milestone | Status |
 |---|---|
 | 10-state taxonomy defined | ✅ |
-| Confirmation ladders (Watch/Forming/Confirmed/Invalidated) per key transition | ✅ |
-| LEAP Attractiveness Score 0–10 with modifier set | ✅ |
-| Risk/Reward modifier (mNAV, floor proximity, cycle asymmetry) | ✅ |
-| Platform Value modifier spec (in PPR — see below) | ✅ |
+| Confirmation ladders per key transition | ✅ |
+| LEAP Attractiveness Score 0–10 | ✅ |
+| Risk/Reward modifier | ✅ |
+| Platform Value modifier spec (in PPR) | ✅ |
 | Anticipatory Tranche rules | ✅ |
-| Portfolio implications table by stage | ✅ |
-| MSTR prototype report | ✅ |
+| All 7 asset MSRs updated 2026-03-04 | ✅ |
+| Push MSRs to GitHub | 🔵 Pending Gavin clearance |
 | Weekly automation (cron, all assets) | ⬜ Post crontab install |
-| MR vs Momentum threshold differentiation (backtest) | ⬜ Queued |
+| PURR MSR stub | ⬜ Queued |
 
 ---
 
@@ -159,8 +168,6 @@ Per-user report generated on-demand in each user's dedicated channel only. Trans
 | Gavin workflow validated (#mstr-gavin) | ✅ |
 | Standardized code pipeline | ⬜ Queued |
 
-**Default income profile:** Target 2%/month | Acceptable range 0–5% | High volatility tolerance | 10% hard cash floor always maintained | STRC counts as current income at 0.83%/month
-
 ---
 
 ### P-UAA: Updated Alert Approach
@@ -177,45 +184,141 @@ Redesign the alert system to incorporate the new Stage State taxonomy. Current a
 
 ---
 
-### P-TUTORIALS: Tutorial v2.2 + Layman's Guide Layer 0.5
-**Status:** 🔵 Built — Pending Gavin review
+## Recently Completed Projects
+
+---
+
+### P-BEAR: Bearish Signal & Adjustment Architecture
+**Status:** ✅ All phases complete
 **Lead:** CIO | **Approver:** Gavin
 
-Full 4-layer architecture documentation for Greg (technical) and Gary (educational). Includes GLI Engine, Howell Phase "four seasons" analogy, and all signal layer updates.
+Full bearish signal framework layered on top of the existing SRI engine. Covers signal detection, portfolio posture escalation, and directional trade expression.
 
-| Document | Status |
-|---|---|
-| SRI-Engine-Tutorial-v2.md (v2.2) — technical | ✅ On GitHub (`3bbb7e18`) |
-| SRI-Layman-Guide.md — Layer 0.5 section | ✅ On GitHub (`d7e6cb2e`) |
-| Gavin review of both | 🔵 Pending |
+| Item | Description | Status | Commit |
+|---|---|---|---|
+| 1 | P-BEAR signal engine (7-state machine, per-asset ladders) | ✅ | `adecb607` |
+| 2 | Directional bearish trade logic (`bearish_trade_spec()`) | ✅ | `57ed37fe` |
+| 3 | WeeklyStochRSI → CONFIRMED_PLUS gate | ✅ | `adecb607` |
+| 4 | Morning brief §8.5 bearish trade block | ✅ | `57ed37fe` |
+| 5 | Tutorial v2.4 §19–20 + Layman's Guide "Weather Warnings" | ✅ | `caec2180` / `d2b4b758` |
+
+**Portfolio Defensive Posture Matrix:**
+
+| Level | Trigger | AB4 Floor | AB3 New | AB2 | Expr3 |
+|---|---|---|---|---|---|
+| 🟢 NORMAL | No signals | 10% | ✅ | Normal | — |
+| 🟡 CAUTIOUS | 1 FORMING | 10% | ✅ | Paused on asset | — |
+| 🟠 DEFENSIVE | 2 FORMING or 1 CONFIRMED | 15% | ❌ | Under review | — |
+| 🔴 MAX DEFENSIVE | 2 CONFIRMED or CONF+ | 20% | ❌ | Close calls | Eligible |
+
+**Per-asset bearish playbook:** SPY/QQQ/IWM = debit put spread 45–60 DTE; IBIT = long put LEAP 90–120 DTE; GLD = OTM puts 30–45 DTE (3% notional max); TSLA = put spread gated by Howell ≠ Turbulence; MSTR = Expression 3 routing only.
+
+**Spec doc:** `briefs/p-bear-directional-trades-spec-v1.md`
 
 ---
 
-### P-MOCK: Weekly Generic Portfolio Brief
-**Status:** ✅ Live
-**Lead:** CIO | Privacy rule: permanent
+### P-CRS: AB2 Call Ripeness Score v2
+**Status:** ✅ Complete — Pine v6
+**Lead:** CIO | **Approver:** Gavin
+**File:** `pine/AB2_CRS.pine` | **Final commit:** `591cdc84`
 
-Generic $1M model portfolio brief published weekly to GitHub `mock-portfolios/` folder. Greg, Gavin, and Gary calibrate their personal portfolios privately against the model.
+Full rewrite of the AB2 call-selling indicator with corrected philosophy: Stage 1 chop is the **primary income window**, not a no-call zone. Three objective outputs — no portfolio-specific logic (STRC hurdle and contract sizing belong in PPR).
 
-**Privacy rule (non-negotiable):** Only generic model content goes to GitHub. No personal account balances, position sizes, P&L, or identifying information — ever.
+**Architecture:**
+- **Income Score (0–10):** IV premium (0–4) + Stage alignment (0–4) + Chop confirmation (0–2) + modifiers (Howell phase, liquidity regime)
+- **Strike Width (%):** Stage-adaptive baseline; VST momentum direction adjusts ±3–5%
+- **Exercise Risk (LOW/MED/HIGH):** Based on VST SRI Bias Histogram slope
 
-| Milestone | Status |
-|---|---|
-| mock-portfolios/ folder created | ✅ `570ab663` |
-| First brief (2026-03-02) | ✅ `d9499da8` |
-| Second brief due | ⬜ 2026-03-09 |
+**Stage baselines:**
+
+| LOI Zone | Stage | Strike Width |
+|---|---|---|
+| < −45 | DECLINE | NO CALLS |
+| −45 to −20 | S1 CHOP ★ | +12% OTM |
+| −20 to 0 | RECOVERY | +17% OTM |
+| 0 to +20 | S2 STD | +10% OTM |
+| +20 to +40 | TRIM APPROACH | +5% OTM |
+| > +40 | DELTA_MGMT | +1% ATM/ITM |
+
+**Backtest validation:** 80% call success at +10% OTM in S1 chop zone (LOI −45 to −20); 96% at +20% OTM. Prior hard gate at LOI < −20 was blocking calls exactly when they worked best — removed.
+
+**Pine v6 fixes applied:** Multi-line expression collapse (2 instances); `request.security` tuple pattern; type annotation removal from destructuring; `lookahead` parameter removed (v6 default).
 
 ---
 
-## Completed Projects
+### P-PINE-GUIDE: Pine Indicator Tutorial Guide
+**Status:** ✅ Complete
+**Lead:** CIO
+**File:** [`pine/INDICATOR-GUIDE.md`](https://github.com/3ServantsP35/Grok/blob/main/pine/INDICATOR-GUIDE.md) | **Commit:** `044c4130`
+
+Comprehensive tutorial for all 12 Pine Script indicators. Covers all four families: SRI Price Overlays (4), SRIBI Oscillators (4), SRI Forecast Strategy Monitors (3), and AB2 CRS (1). Each indicator includes: what it shows, inputs/settings table, how to use it, key signals, framework connection, common mistakes. Includes "Putting It All Together" section with 4-chart setup and decision hierarchy.
+
+**Direct links by family:**
+
+| Family | Scripts |
+|---|---|
+| SRI Price Overlays | SRI_VST, SRI_ST, SRI_LT, SRI_VLT |
+| SRIBI Oscillators | SRIBI_VST, SRIBI_ST, SRIBI_LT, SRIBI_VLT |
+| SRI Forecast | SRI_Forecast_AB1, SRI_Forecast_AB2, SRI_Forecast_AB3 |
+| Income Tools | AB2_CRS v2 |
+
+---
+
+### P-PINE-V6: Pine v6 Migration
+**Status:** ✅ Complete — all 12 scripts on Pine v6
+**Lead:** CIO
+
+All Pine scripts in the repo are now on `@version=6`. CRS was the only script created under v5; migrated in the same session it was built.
+
+**Pine v6 rules (permanent, all future scripts):**
+1. `@version=6` header on all new scripts
+2. Multi-line expressions must be inside `()` or collapsed to one line — no implicit continuation
+3. `request.security()` tuple pattern: `[a, b] = request.security(sym, tf, [expr1, expr2])` — no type annotations in brackets
+4. `lookahead` parameter omitted (v6 defaults to `barmerge.lookahead_off`)
+
+---
+
+### P-BACKTEST: Stage Designation + Vol-Adaptive LOI Research
+**Status:** ✅ Complete — R1/R2/R3 implemented in `sri_engine.py`
+**Lead:** CIO | **Approver:** Gavin
+**Reports:** `briefs/stage-designation-backtest-v1.md` | `briefs/loi-vol-adaptation-research-v1.md`
+**Engine commit:** `7ee6dafb`
+
+**Key findings:**
+
+**Stage Designation Backtest (`e6ce2e4f`):**
+- LOI Trough = most accurate bullish signal (56.4% cross-asset avg)
+- LOI threshold (−45) virtually never fires — miscalibrated; only 2 signals on MSTR in 15 months
+- Stage 1 never fires — classification logic gap (S4→1 short-circuits S1 condition)
+- MIXED bars = 35–46% of all bars — stage machine ambiguous half the time
+
+**Vol-Adaptive LOI Research (`fbc03fff`):**
+- H1: Direction inverted — HIGH vol → MORE negative LOI troughs (not less); LOW vol entries are the poison (−26.8% median vs HIGH vol +26.3%)
+- H2: CONTRACTING regime → LT/VLT more reliable; EXPANDING → VST/ST elevated; ST is all-weather
+- Adaptive formula validated: `threshold = base × (median_ATR_ratio / current_ATR_ratio)`
+
+**R1/R2/R3 implemented (`7ee6dafb`):**
+
+| Item | Change | Detail |
+|---|---|---|
+| R1 | `AdaptiveLOIEngine` | MOMENTUM/BTC_CORRELATED: adaptive (base −45); MR/TRENDING: flat −40; capped base×0.6/base×1.3 |
+| R2 | `classify_mixed_context()` | MIXED_BULLISH / MIXED_BEARISH / MIXED_CONFUSED sub-classification |
+| R3 | `classify_stage()` + `promote_stage1()` | S4→1 → S1 after VST positive ≥5 consecutive bars |
+
+**Current adaptive thresholds:** MSTR=−43.6 | TSLA=−50.2 | IBIT=−41.5 | MR/TRENDING: −40 flat
+
+**System learnings promoted:** `mstr-knowledge/system-learnings.md` (`35416f46`) — two ACTIVE entries (liquidity-TF weighting + vol-adaptive LOI)
+
+---
+
+## Completed Projects (Legacy)
 
 ---
 
 ### P1: Allocation Bucket Framework — AB1/AB2/AB3/AB4
 **Status:** ✅ v3.0 Complete
-**Final architecture:**
-- **AB3 (Core):** 2-year OTM LEAPs at deep LOI accumulation. Momentum threshold: LOI ≤ -45. MR threshold: LOI ≤ -40.
-- **AB2 (Income Overlay):** PMCC — sell short calls (<90 DTE) against AB3 LEAPs. LOI gate controlled (NO_CALLS / OTM_INCOME / DELTA_MGMT).
+- **AB3 (Core):** 2-year OTM LEAPs at deep LOI accumulation. Vol-adaptive threshold (MOMENTUM/BTC_CORRELATED base −45; MR/TRENDING −40).
+- **AB2 (Income Overlay):** PMCC — sell short calls (<90 DTE) against AB3 LEAPs. Stage-adaptive CRS (S1 chop = primary income window).
 - **AB1 (Tactical):** OTM LEAPs 60–120 DTE at CT1/CT2 pre-breakout signals. S1→2 Watch window.
 - **AB4 (Cash Reserve):** STRC as default staging vehicle. Hard floor 10% true cash. Soft ceiling 25%. STRC yield (0.83%/month) is the universal hurdle rate.
 - **Baseline allocation:** AB3=50% | AB1=25% | AB4=25% | AB2=income overlay only
@@ -224,59 +327,70 @@ Generic $1M model portfolio brief published weekly to GitHub `mock-portfolios/` 
 
 ### P4: RORO / Regime Engine (Layer 1)
 **Status:** ✅ Complete — integrated into Python engine
-- 5-phase capital rotation model built and backtested
-- SRIBI breadth composite operational
-- Howell phase engine (P-HOWELL) built on top of this work
-- Regime Engine live in sri_engine.py
 
 ---
 
-### P6: Multi-TF SRI / Concordance → LOI (Leap Opportunity Index)
+### P6: Multi-TF SRI / Concordance → LOI
 **Status:** ✅ Complete
-- LOI = composite oscillator: VLT SRIBI (40%) + VLT Acceleration (30%) + LT SRIBI (15%) + Concordance (15%)
-- MR vs Momentum asset classification complete (BTC/MSTR/TSLA = Momentum; SPY/QQQ = MR; GLD = Trending)
-- Phased trim schedule: 25% at LOI +20 / 50% at +40 / 75% at +60 / final on 20pt rollover
-- AB3 Pine Script v5 confirmed by Gavin 2026-03-02
+- LOI = VLT SRIBI (40%) + VLT Acceleration (30%) + LT SRIBI (15%) + Concordance (15%)
+- MR vs Momentum classification: BTC/MSTR/TSLA = Momentum; SPY/QQQ = MR; GLD = Trending
+- Vol-adaptive thresholds integrated (R1)
 
 ---
 
 ### P7: Framework Architecture
 **Status:** ✅ Approved by Gavin 2026-03-05
-**Final 4-layer architecture:**
 ```
 Layer 0    — GLI Engine           (global liquidity — FRED proxy + GEGI)
-Layer 0.5  — Howell Phase Engine  (macro cycle phase — Rebound/Calm/Speculation/Turbulence)
-Layer 1    — Regime Engine        (asset-level regime — LOI gate states)
-Layer 2    — Signal Engine        (LOI, CPS, VLT Recovery Clock, episode type)
+Layer 0.5  — Howell Phase Engine  (macro cycle phase)
+Layer 1    — Regime Engine        (asset-level regime)
+Layer 2    — Signal Engine        (LOI, CPS, VLT Recovery Clock)
 Layer 3    — Allocation Engine    (AB1/AB2/AB3/AB4 capital deployment)
 ```
-Gavin: *"Consider the architecture reviewed. The big missing piece has been filled (GLI/GEGI)."*
 
 ---
 
 ### P8: Pine Scripts — Mirror Layer
-**Status:** ✅ Pivoted and stable
-Pine scripts are visual coaching tools for Gavin only. All signal logic lives in Python. Pine scripts never diverge from engine state. AB3 Pine v5 confirmed accurate 2026-03-02.
+**Status:** ✅ Pivoted and stable. All 12 scripts on Pine v6.
+
+---
+
+### P-HOWELL: Howell Phase Engine (Layer 0.5)
+**Status:** ✅ Complete — Live
+**Current phase:** 🌧️ TURBULENCE
+
+| Milestone | Status | Commit |
+|---|---|---|
+| HowellPhaseEngine + HowellPhaseState in sri_engine.py | ✅ | `df64b23c` |
+| DB tables + seeded | ✅ | `0febb3b1` |
+| Morning brief §4.5 | ✅ | `09f662f1` |
+| HOWELL_PHASE_TRANSITION alert | ✅ | `0febb3b1` |
+| Gate Zero in Stage 2 Classifier v1.1 | ✅ | `4ae16835` |
+
+---
+
+### P-CLASSIFIER: Stage 2 Continuation Classifier v1.1
+**Status:** ✅ Research complete | 🔵 Pending Gavin review before live wiring
+**Brief:** `briefs/stage2-continuation-classifier-v1.md`
+
+IWM breadth gate key finding: IWM strong while SPY/QQQ corrects → continuation rate 10–13% (skip). IWM also showing headwind at trough → 62.5% continuation (valid entry zone).
 
 ---
 
 ### P-GLI: GLI Engine (Layer 0)
-**Status:** ✅ Complete — Live
-- FRED-based 6-component global liquidity proxy
-- GEGI (ratio) computed alongside Z-score
-- Z-score applied as ~20% probability modifier on all stage calls
-- GLI Full = $189.2T (record level; rate-of-change peaked Q3 2025)
-- Current Z-score: negative (contraction)
-- Commit: `47c9e02c`
+**Status:** ✅ Complete — Live. Current Z-score: negative (contraction).
 
 ---
 
 ### P12: Python Decision Engine
-**Status:** ✅ Phase 1 + Phase 2 Complete
-- **Phase 1:** Full 4-layer engine. CSV ingest, SRIBI parser, Regime Engine, AB1/AB2/AB3 state machines, Allocation Engine, GLI Engine, Howell Phase Engine. All running end-to-end.
-- **Phase 2:** Web dashboard (`generate_dashboard.py`). Self-contained HTML, all 4 layers visualized.
-- 16 canonical CSVs: 8 trading assets (MSTR, IBIT, SPY, QQQ, GLD, IWM, TSLA, PURR) + 8 regime inputs (BTC, MSTR/IBIT ratio, Stablecoin Dom, STRC, TLT, DXY, HYG, VIX)
-- Phase 3 (cron automation): pending Greg crontab install
+**Status:** ✅ Phase 1+2 Complete. Phase 3 (cron) pending Greg crontab install.
+
+---
+
+### P-MOCK: Weekly Generic Portfolio Brief
+**Status:** ✅ Live
+- First brief: 2026-03-02 | Next due: 2026-03-09 (Monday)
+- **Privacy rule (non-negotiable):** Only generic model content goes to GitHub. No personal account balances, position sizes, P&L, or identifying information — ever.
 
 ---
 
@@ -286,7 +400,6 @@ Pine scripts are visual coaching tools for Gavin only. All signal logic lives in
 |---|---|---|---|
 | **P2 — Bear Indicators** | Short-side signal generation for bear market opportunities | Gavin decides | Gavin |
 | **P9 — MSTR/IBIT Pair Trade** | Systematic pair trading on relative SRI divergence | Gavin decides | Gavin |
-| **P10 — Trend Line Engine** | CIO reads trend lines as linear equations on date/price coordinates | Greg + Gavin align on format spec | Greg + Gavin |
 | **P14 — Bearish Bias Indicator Suite** | Symmetric bearish framework (DOI) with same rigor as SRI | Gavin decides | Gavin |
 | **PURR Asset** | Full trading signals when bar count is sufficient | Auto-activates at 500+ bars | CIO (auto) |
 | **Howell T1/T2/T3 Wave Mapping** | Map Howell capital flow wave structure onto IWM breadth findings | Gavin commits Howell Asset Alloc images to GitHub briefs/ | Gavin |
@@ -298,19 +411,22 @@ Pine scripts are visual coaching tools for Gavin only. All signal logic lives in
 | # | Project | Objective | Priority | Blocker |
 |---|---|---|---|---|
 | 1 | VLT Recovery Clock Alert | Alert when VLT crosses zero post-trough — the AB3 scaling gate | 🔴 HIGH | Crontab (Greg) |
-| 2 | Episode-Type Classifier | Real-time Transient/Structural/Extended label + CPS in daily scan | 🔴 HIGH | Crontab (Greg) |
-| 3 | CPS in Morning Brief | Early warning when any asset within 10 pts of threshold | 🔴 HIGH | #2 first |
-| 4 | MSR Weekly Automation | Auto-generate MSRs every Monday AM for all assets | 🔴 HIGH | Crontab (Greg) |
-| 5 | PPR Code Pipeline | Standardize intake + generation per user profile | 🔴 HIGH | None |
-| 6 | Updated Alert Approach | Redesign alerts around Stage State events + ladder rung changes | 🔴 HIGH | **Gavin defines scope** |
-| 7 | Trade Recommendation Engine | Structured executable trade recs with ORATS PoP, Greeks, hypothesis blocks, trade_log writes | 🟡 MED | PPR pipeline |
-| 8 | Signal Accuracy Tracking | Measure signal prediction accuracy; weight by track record | 🟡 MED | None |
-| 9 | Post-Mortem Process | Score closed trade hypotheses; extract structured lessons | 🟡 MED | #7 first |
-| 10 | MR vs Momentum Threshold Differentiation | Backtest confirmation ladder thresholds by asset class | 🟡 MED | None |
-| 11 | Classifier Dataset Re-labeling | Fix false negatives using "new high within 120 bars" metric | 🔵 LOW | None |
-| 12 | Regime-Conditioned Classifier | Separate CPS models for GLI Z>0 vs Z<0 | 🔵 LOW | #11 first |
-| 13 | Intraday Alert Frequency | Tune alert cadence for live trading hours | 🔵 LOW | Greg/Gavin requirements |
-| 14 | Multi-Agent Sub-Analyst System | Activate mstr-macro/technical/options/sri as independent domain specialists | 🔵 LOW | None |
+| 2 | Trend Line Engine (P10) | Formalize TrendLine class in `sri_engine.py`; wire into morning brief + MSR | 🔴 HIGH | None — prototype proven |
+| 3 | Episode-Type Classifier | Real-time Transient/Structural/Extended label + CPS in daily scan | 🔴 HIGH | Crontab (Greg) |
+| 4 | CPS in Morning Brief | Early warning when any asset within 10 pts of threshold | 🔴 HIGH | #3 first |
+| 5 | MSR Weekly Automation | Auto-generate MSRs every Monday AM for all assets | 🔴 HIGH | Crontab (Greg) |
+| 6 | PPR Code Pipeline | Standardize intake + generation per user profile | 🔴 HIGH | None |
+| 7 | Updated Alert Approach | Redesign alerts around Stage State events + ladder rung changes | 🔴 HIGH | **Gavin defines scope** |
+| 8 | classify_stage() Bug Fix | Returns MIXED_CONFUSED for MSTR (should be S2_early/S2); fix condition sequencing | 🟡 MED | None |
+| 9 | Trade Recommendation Engine | Structured executable trade recs with ORATS PoP, Greeks, hypothesis blocks, trade_log writes | 🟡 MED | PPR pipeline |
+| 10 | Signal Accuracy Tracking | Measure signal prediction accuracy; weight by track record | 🟡 MED | None |
+| 11 | Post-Mortem Process | Score closed trade hypotheses; extract structured lessons | 🟡 MED | #9 first |
+| 12 | PURR MSR Stub | Create observation-mode stub MSR for PURR | 🟡 MED | None |
+| 13 | MR vs Momentum Threshold Differentiation | Backtest confirmation ladder thresholds by asset class | 🟡 MED | None |
+| 14 | Re-run Vol-Adaptive + Stage Backtest | Increase confidence at 24+ months data | 🔵 LOW | Time |
+| 15 | Classifier Dataset Re-labeling | Fix false negatives using "new high within 120 bars" metric | 🔵 LOW | None |
+| 16 | Regime-Conditioned Classifier | Separate CPS models for GLI Z>0 vs Z<0 | 🔵 LOW | #15 first |
+| 17 | Multi-Agent Sub-Analyst System | Activate mstr-macro/technical/options/sri as independent domain specialists | 🔵 LOW | None |
 
 ---
 
@@ -320,8 +436,9 @@ Pine scripts are visual coaching tools for Gavin only. All signal logic lives in
 |---|---|---|
 | **Crontab install** | `sudo -u openclaw bash /home/openclaw/mstr-engine/scripts/install_crontab.sh` | **Greg** |
 | **DISCORD_WEBHOOK_GREG** | Verify/recreate webhook in #mstr-greg; update config .env on host | **Greg** |
-| **Tutorial v2.2 review** | Review both documents on GitHub | **Gavin** |
+| **Tutorial v2.5 review** | Review SRI-Engine-Tutorial-v2.md (v2.5) and SRI-Layman-Guide.md on GitHub | **Gavin** |
 | **Stage 2 Classifier "What It Doesn't Solve"** | Sign-off before CPS wired into live entries | **Gavin** |
+| **MSR push to GitHub** | Open questions cleared before publishing MSRs | **Gavin** |
 | **P-UAA scope definition** | Define alert event vocabulary before build begins | **Gavin** |
 | **Howell images** | Commit Howell Asset Alloc.png + Howell Asset Alloc2.png to GitHub briefs/ | **Gavin** |
 
@@ -340,16 +457,20 @@ P-GLI (Layer 0)
 P12 (Python Engine)
     └──→ P5 (Alerts — needs crontab)
     └──→ P-HOWELL (runs inside engine)
+    └──→ P-BACKTEST R1/R2/R3 (integrated)
     └──→ VLT Recovery Clock (post-launch #1)
-    └──→ Episode Classifier (post-launch #2)
-    └──→ Trade Rec Engine (post-launch #7)
+    └──→ P10 Trend Line Engine (post-launch #2)
+    └──→ Episode Classifier (post-launch #3)
+    └──→ Trade Rec Engine (post-launch #9)
 
 P6 (LOI) ──→ P1 (AB framework) ──→ P-MSR (score inputs)
+P-CRS (AB2 CRS v2) ──→ P-PPR (strike width inputs)
+P-PINE-GUIDE ──→ Greg + Gary onboarding
 ```
 
 **Critical path to full live operation:** Greg installs crontab → all automation starts → post-launch build queue opens
 
 ---
 
-*Last updated: 2026-03-03 by CIO. Gavin manages priorities and sequencing.*
+*Last updated: 2026-03-04 by CIO. Gavin manages priorities and sequencing.*
 *Privacy rule: This tracker contains no personal portfolio data. Personal trade history, P&L, and positions live exclusively in the private database.*
