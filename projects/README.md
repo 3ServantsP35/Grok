@@ -35,6 +35,7 @@
 | P-PINE-V6 | Pine v6 Migration | ✅ All 12 scripts on v6 | CIO |
 | P-DOI | Distribution Signal Layer (Momentum assets) | 🔴 HIGH — Pine v1 live; CRS integration queued | CIO |
 | P-MR-ENTRY | Cross-Asset LEAP Opportunity Framework (all in-scope assets) | 🟡 MED — Phase 1 research complete; calibrations live | CIO |
+| P-MSTR-SUITE | MSTR Chart Suite — 5-chart weekly confirmation ladder | 🔴 HIGH — Active build | Gavin/CIO |
 
 ---
 
@@ -562,5 +563,45 @@ P-PINE-GUIDE ──→ Greg + Gary onboarding
 
 ---
 
-*Last updated: 2026-03-04 by CIO. Gavin manages priorities and sequencing.*
+## P-MSTR-SUITE — MSTR Chart Suite
+
+**Owner:** Gavin (methodology), CIO (build)  
+**Initiated:** 2026-03-05  
+**Priority:** HIGH — Weekend advisory tool for Greg, Gavin, Gary
+
+### Hypothesis
+5 SRI charts (MSTR LT, STRC LT, Stablecoin Dom LT, STRF/LQD LT, MSTR/IBIT LT) form a confirmation ladder that can assess MSTR's 30–60 day directional outlook with high confidence when 4+ signals align.
+
+### Deliverables
+| Item | Status |
+|------|--------|
+| Phase 1: Hypothesis document | ✅ `briefs/mstr-chart-suite-hypothesis-v1.md` |
+| Report script `mstr_suite_report.py` | 🔄 Building |
+| Cron: Friday 3:30 PM ET reminder | ⬜ Pending crontab install |
+| Cron: Friday 4:30 PM ET report | ⬜ Pending crontab install |
+| Phase 2: Quantitative backtest | ⬜ After Phase 1 validated |
+| Phase 3: Composite score validation | ⬜ After Phase 2 |
+| Optional: Add BTC SRI LT as Chart 6 | ⬜ Proposed for Phase 2 |
+
+### CSV Mapping (Friday push required)
+| Chart | CSV Pattern |
+|-------|------------|
+| MSTR SRI LT | `BATS_MSTR, 240_*.csv` |
+| STRC SRI LT | `BATS_STRC, 240_*.csv` |
+| Stablecoin Dom SRI LT | `CRYPTOCAP_STABLE.C.D, 240_*.csv` |
+| STRF/LQD SRI LT | `BATS_STRF_BATS_LQD, 240_*.csv` |
+| MSTR/IBIT SRI LT | `BATS_MSTR_BATS_IBIT, 240_*.csv` |
+
+### Cron Schedule (to be added to host crontab)
+```cron
+# MSTR Chart Suite — Friday CSV reminder (3:30 PM ET = 20:30 UTC)
+30 20 * * 5 /usr/bin/python3 /mnt/mstr-scripts/mstr_suite_report.py reminder >> /mnt/mstr-logs/suite_report.log 2>&1
+
+# MSTR Chart Suite — Friday weekly report (4:30 PM ET = 21:30 UTC)
+30 21 * * 5 /usr/bin/python3 /mnt/mstr-scripts/mstr_suite_report.py report >> /mnt/mstr-logs/suite_report.log 2>&1
+```
+
+---
+
+*Last updated: 2026-03-05 by CIO. Gavin manages priorities and sequencing.*
 *Privacy rule: This tracker contains no personal portfolio data. Personal trade history, P&L, and positions live exclusively in the private database.*
