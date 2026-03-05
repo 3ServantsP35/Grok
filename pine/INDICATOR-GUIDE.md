@@ -1,7 +1,7 @@
 # SRI Pine Indicator Guide
 
 **Repo:** 3ServantsP35/Grok  
-**Last updated:** 2026-03-05  
+**Last updated:** 2026-03-04  
 **Pine version:** v6  
 
 ---
@@ -22,7 +22,6 @@
 | SRI Forecast AB2 | [SRI_Forecast_AB2.pine](https://github.com/3ServantsP35/Grok/blob/main/pine/SRI_Forecast_AB2.pine) | Price overlay | PMCC conditions | AB2 spread setup |
 | SRI Forecast AB3 | [SRI_Forecast_AB3.pine](https://github.com/3ServantsP35/Grok/blob/main/pine/SRI_Forecast_AB3.pine) | Oscillator | LEAP accumulation | AB3 core signal |
 | AB2 CRS v2 | [AB2_CRS.pine](https://github.com/3ServantsP35/Grok/blob/main/pine/AB2_CRS.pine) | Oscillator | Call-selling ripeness | AB2 income sizing |
-| SRI Forecast DOI | [SRI_Forecast_DOI.pine](https://github.com/3ServantsP35/Grok/blob/main/pine/SRI_Forecast_DOI.pine) | Oscillator | Distribution pressure | AB3 trim/exit signals |
 
 All files: https://github.com/3ServantsP35/Grok/tree/main/pine
 
@@ -46,7 +45,6 @@ There are four families of indicators in this suite:
 2. **SRIBI Oscillators** (SRIBI VST/ST/LT/VLT) — Bias Histograms in a separate pane. Measure momentum numerically and feed the LOI composite.
 3. **SRI Forecast Strategy Indicators** (AB1/AB2/AB3) — Strategy-specific decision tools, each covering one of the three trade buckets.
 4. **AB2 CRS** — Standalone call-selling scoring tool for the AB2 income overlay.
-5. **SRI Forecast DOI** — Distribution Opportunity Index. Mirror of AB3 LOI for the distribution side. Momentum assets only (MSTR/IBIT/TSLA).
 
 ---
 
@@ -798,6 +796,9 @@ AB3 is the core portfolio engine. The LOI generated here feeds into every other 
 - **Ignoring the vol-adaptive threshold.** The fixed green line is a reference; the orange adaptive line is the actual entry signal. Entering only when LOI crosses the fixed line misses the vol-adjustment entirely.
 - **Entering in deep accumulation (< -65) and not sizing up.** Deep accumulation is where the best expected returns occur. This is the signal to add to position, not to wait for "more confirmation."
 - **Not respecting the trim schedule.** The trim levels are mechanical. Overriding them because "the asset feels strong" defeats the risk management purpose. Trim at the levels; re-enter if LOI re-enters accumulation.
+- **Treating CT4 as a buy signal for TSLA.** On TSLA specifically, TF concordance is *inverted* — 3 TFs positive = 23.6% WR vs 0 TFs positive = 78.6% WR (N>200, HIGH confidence). CT4 on TSLA signals distribution, not accumulation. The validated TSLA entry is LOI acc (-40 to -20) + VLT negative.
+- **Using mixed context as a universal entry signal.** Mixed context (VLT negative, LT positive) is the primary MSTR entry signal (72% WR) but is actively harmful for GLD (5.4% WR) and QQQ (13.9% WR). Always check which asset you're analyzing before applying mixed_ctx logic.
+- **Ignoring the SMA200 for GLD.** GLD is a trending asset. Price below the 200-day SMA reduces 180d WR from 68.5% to 38.2% (N=996). Never enter GLD LEAPs below the SMA200.
 
 ---
 
@@ -929,70 +930,6 @@ The Howell Phase input connects to the macro regime from the morning brief. When
 - **Not connecting the LOI source.** If you leave "LOI Plot" on the default `close`, the stage classification will be wrong. Always connect it to the actual LOI plot from AB3.
 - **Treating S2 STANDARD as better than S1 CHOP.** Counterintuitively, S1 CHOP scores higher income quality (4 pts vs 3 pts). This is because the chop thesis has higher directional certainty — the stock is not going anywhere fast.
 
-
----
-
-## Family 5: Distribution Opportunity Index
-
-### SRI Forecast DOI v1
-
-**File:** `pine/SRI_Forecast_DOI.pine`
-**Commit:** `411044f7`
-**Type:** Oscillator (separate pane)
-**Asset scope:** MSTR, IBIT, TSLA only. MR assets (SPY/QQQ/GLD/IWM) are explicitly unsupported — distribution signals reach only 54.8% win rate, below the 60% threshold. Indicator displays a warning if applied to an MR asset.
-
-#### What It Shows
-
-The DOI (Distribution Opportunity Index) is the **mirror of AB3** — where AB3 watches the negative side of LOI for accumulation signals, DOI watches the positive side for distribution signals. It uses the **identical LOI computation** as AB3 (same four components, same weights) and adds dedicated distribution signal detection.
-
-Two empirically validated exit signals, both researched on MSTR:
-- **`loi_rollover`** — 89% win rate (3% drawdown / 60 bars). LOI declines ≥25 points from its 20-bar peak while above Trim 1.
-- **`vlt_above_20`** — 100% win rate. VLT SRI Bias crosses above +20.
-
-#### Inputs
-
-| Input | Default | Notes |
-|---|---|---|
-| Asset Class | Auto-Detect | BTC-Proxy / TSLA / MR (warning). Auto-detect uses ticker. |
-| Trim 1 / Trim 2 / Trim 3 | 40 / 60 / 80 | LOI levels for trim ladder. Matches AB3 Momentum defaults. |
-| LOI Rollover Threshold | 25 pts | LOI must decline this far from its 20-bar peak to fire EXIT. |
-| VLT Peak Threshold | +20 | VLT SRI Bias level for the 100% validated trim signal. |
-| LOI Weights | 40/30/15/15 | Must match AB3. Do not change independently. |
-| ATR Period / Coefficient | 14 / 1.0 | Must match AB3. |
-
-#### How to Use It
-
-1. **Add in a separate pane alongside AB3.** They share LOI computation — the DOI amplifies the trim/exit zone detail that AB3 shows only briefly in its upper range.
-2. **Watch the DOI Score histogram (0–10).** Rising score = increasing distribution pressure. Score ≥ 8 = strong distribution signal.
-3. **T1/T2/T3 markers** fire as LOI crosses each trim level — use these to advance your trim phase in the position.
-4. **VLT ★ marker** (red star above bar) = VLT SRI Bias crossed +20. This is the highest-confidence single signal. Size out aggressively on this.
-5. **EXIT ✕ marker** (purple X above bar) = LOI rollover confirmed. Close the remaining position.
-6. **Purple background** = active rollover zone. DOI score is suppressed (distribution exhausting); the exit signal has fired.
-
-#### Key Signals
-
-| Signal | Marker | Win Rate | Action |
-|---|---|---|---|
-| LOI crosses Trim 1 (40) | T1 ▲ orange | — | Begin monitoring; advance trim phase |
-| LOI crosses Trim 2 (60) | T2 ▲ red | — | Trim 50% of remaining position |
-| LOI crosses Trim 3 (80) | T3 ▲ red (lg) | — | Trim 75%; prepare final exit |
-| VLT SRI Bias > +20 | VLT ★ red | **100%** (MSTR) | Advance trim phase; size out now |
-| LOI rollover from peak | EXIT ✕ purple | **89%** (MSTR) | Close remaining position |
-| CT4 new entry | CT4 ● red | — | All 4 TFs+ and VLT > +20; distribution confirmed |
-
-#### Framework Connection
-
-DOI sits at **Layer 2 (Signal Engine)** alongside AB3 and AB1. It does not replace AB3's trim markers — it amplifies them with a dedicated distribution lens and the two validated high-conviction signals.
-
-The **STRF/LQD credit divergence** (credit side of distribution) is handled in the **Python engine** at Layer 1 (Block 6b, `STRF_LQD` regime input). When STRF/LQD is declining while DOI signals are elevated, that credit/equity divergence is the strongest combined exit signal in the framework.
-
-#### Common Mistakes
-
-- **Applying to SPY/QQQ/GLD/IWM.** Distribution signals are not validated for MR assets. The indicator will warn you, but will still compute — the output is not reliable on MR assets.
-- **Treating T1/T2/T3 as hard exits.** They are trim ladder crossings — advance your trim *phase*, not your entire position.
-- **Ignoring the rollover when score is still high.** The EXIT signal fires at the *start* of the rollover. Even if DOI score looks elevated, the rollover has begun — close the position.
-- **Changing LOI weights independently of AB3.** Both indicators compute the same LOI. If you change one, change both. Mismatched weights produce inconsistent trim signals.
-
 ---
 
 ## Putting It All Together
@@ -1013,12 +950,11 @@ For a complete view, use four panels:
 | Am I in a structural bull? | SRI LT + SRIBI LT |
 | Is the trend extended or depressed? | LOI in AB3 (green = depressed, red = extended) |
 | Should I open an AB3 LEAP? | LOI < adaptive threshold + ST 4→1 bounce |
+| Asset calibration check | See per-asset calibration rules: TSLA (inverted concordance), GLD (SMA200 + VLT req), QQQ (VLT+ required), MSTR/IWM (mixed_ctx valid) |
 | Which CT tier is the asset in? | SRI Forecast AB1 background color |
 | Is the AB2 window open? | SRI Forecast AB2 background color (Green) |
 | Should I sell a call today? | AB2 CRS Income Score + Strike Width + Exercise Risk |
 | When do I trim? | AB3 trim level crossings (25% → 50% → 75% → close) |
-| Distribution pressure building? | SRI Forecast DOI — DOI Score, VLT ★, EXIT ✕ |
-| Credit diverging at the top? | STRF/LQD Block 6b (Python engine) — regime output |
 
 ### Confirmation Ladder
 
@@ -1036,4 +972,4 @@ Never skip steps. When you enter on step 6 without step 3, you're front-running 
 
 ---
 
-*Guide updated 2026-03-05. 13 indicators. All scripts: Pine v6. Repo: [3ServantsP35/Grok](https://github.com/3ServantsP35/Grok/tree/main/pine).*
+*Guide generated 2026-03-04. All scripts: Pine v6. Repo: [3ServantsP35/Grok](https://github.com/3ServantsP35/Grok/tree/main/pine).*
