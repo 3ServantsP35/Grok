@@ -1,6 +1,6 @@
 # #mstr-cio Project Tracker
 **Managed by:** Gavin (rizenshine5359) — Project Manager
-**Updated:** 2026-03-04
+**Updated:** 2026-03-05
 
 ---
 
@@ -9,9 +9,9 @@
 | Project | Name | Status | Owner |
 |---|---|---|---|
 | P1 | Allocation Bucket Framework (AB1/AB2/AB3/AB4) | ✅ v3.0 Complete | CIO |
-| P2 | Bear Indicators | ⏸️ Deferred | Gavin |
+| P2 | Bear Indicators | ✅ Closed — delivered by P-BEAR | CIO |
 | P4 | RORO / Howell Phase Engine | ✅ Complete | CIO |
-| P5 | Daily Alerts & Automation | 🔴 Blocked — crontab | Greg |
+| P5 | Alerts & Automation (incl. UAA) | 🔴 Blocked — crontab + scope | Greg/Gavin |
 | P6 | Multi-TF SRI / Concordance (LOI) | ✅ Complete | CIO |
 | P7 | Framework Architecture | ✅ Complete — Approved | Gavin |
 | P8 | Pine Scripts — Mirror Layer | ✅ Pivoted & Stable | Gavin |
@@ -20,7 +20,7 @@
 | P11 | STRC Spread Monitor | 🟡 Needs cron | Greg |
 | P12 | Python Decision Engine | ✅ Phase 1+2 Complete | CIO |
 | P13 | Trade Journal | 🟡 Schema defined — queued | CIO |
-| P14 | Bearish Bias Indicator Suite | ⏸️ Deferred | Gavin |
+| P14 | Bearish Bias Indicator Suite | ✅ Retired — scope superseded by P-DOI | Gavin |
 | P-BEAR | Bearish Signal & Adjustment Architecture | ✅ All phases complete | CIO |
 | P-HOWELL | Howell Phase Engine | ✅ Complete — Live | CIO |
 | P-CLASSIFIER | Stage 2 Continuation Classifier | ✅ v1.1 — Pending Gavin review | Gavin |
@@ -31,9 +31,9 @@
 | P-TUTORIALS | Tutorial v2.5 + Layman's Guide | 🔵 Pending Gavin review | Gavin |
 | P-CRS | AB2 Call Ripeness Score v2 | ✅ Complete — Pine v6 | CIO |
 | P-PINE-GUIDE | Pine Indicator Tutorial Guide | ✅ Complete | CIO |
-| P-UAA | Updated Alert Approach | 🟡 Scope TBD | Gavin |
 | P-BACKTEST | Stage Designation + Vol-Adaptive Research | ✅ Complete — R1/R2/R3 implemented | CIO |
 | P-PINE-V6 | Pine v6 Migration | ✅ All 12 scripts on v6 | CIO |
+| P-DOI | Distribution Signal Layer (Momentum assets) | 🟡 Scoped — queued | CIO |
 
 ---
 
@@ -41,11 +41,15 @@
 
 ---
 
-### P5: Daily Alerts & Engine Automation
-**Status:** 🔴 Blocked — awaiting crontab install
-**Lead:** CIO | **Approver:** Greg
+### P5: Alerts & Automation *(merged with P-UAA)*
+**Status:** 🔴 Blocked — crontab (Greg) + alert event vocabulary (Gavin)
+**Lead:** CIO | **Approver:** Greg + Gavin
 
-The automation layer is built. All scripts exist and have been tested. Nothing fires automatically until the cron schedule is installed on the host.
+Two distinct blockers. The automation plumbing is fully built and tested. Nothing fires until Greg installs crontab. In parallel, the alert event vocabulary must be redesigned around the Stage State taxonomy — that design work (owned by Gavin) can proceed independently of the cron install.
+
+**P-UAA merger rationale:** P5 (plumbing) and P-UAA (vocabulary redesign) are the same system. Maintaining them separately created false separation. Combined scope: build the right alerts *and* make them run automatically.
+
+**Phase 1 — Plumbing (built, blocked on crontab):**
 
 | Milestone | Status |
 |---|---|
@@ -61,7 +65,20 @@ The automation layer is built. All scripts exist and have been tested. Nothing f
 | **DISCORD_WEBHOOK_GREG** | 🔴 Blocked — Greg must verify/recreate webhook |
 | Greg channel automated output | ⬜ Pending webhook |
 
-**Greg action required:**
+**Phase 2 — Alert Vocabulary Redesign (P-UAA scope, pending Gavin):**
+
+Current alerts cover PMCC gate changes and Howell phase transitions. The Stage State taxonomy introduced a richer event vocabulary that the alert system doesn't yet surface. Gavin must define the event list before build begins.
+
+| Milestone | Status |
+|---|---|
+| Gavin defines alert event vocabulary | 🔴 Pending Gavin |
+| Confirmation ladder rung events (Watch/Forming/Confirmed/Invalidated) | ⬜ After vocab defined |
+| LEAP Attractiveness Score change alerts | ⬜ After vocab defined |
+| Anticipatory tranche trigger alerts | ⬜ After vocab defined |
+| PPR-relevant signal routing | ⬜ After vocab defined |
+| Integrate Stage State events into `pmcc_alerts.py` | ⬜ After vocab defined |
+
+**Greg action required (Phase 1):**
 ```bash
 sudo -u openclaw bash /home/openclaw/mstr-engine/scripts/install_crontab.sh
 ```
@@ -170,17 +187,29 @@ Per-user report generated on-demand in each user's dedicated channel only. Trans
 
 ---
 
-### P-UAA: Updated Alert Approach
-**Status:** 🟡 New project — scope TBD
-**Lead:** Gavin (scope) → CIO (build)
+### P-DOI: Distribution Signal Layer *(Momentum assets only)*
+**Status:** 🟡 Scoped — queued
+**Lead:** CIO | **Approver:** Gavin
 
-Redesign the alert system to incorporate the new Stage State taxonomy. Current alerts cover PMCC gate changes and Howell phase transitions. The new framework requires a richer event vocabulary: confirmation ladder rung events (Watch/Forming/Confirmed/Invalidated), LEAP Attractiveness Score changes, anticipatory tranche triggers, PPR-relevant signals.
+**Origin:** P14 (Bearish Bias Indicator Suite) retired. The original "symmetric DOI with same rigor as SRI across all assets" scope was invalidated by the SPY/QQQ AB1 signal research, which found `loi_rollover` reaches only 54.8% win rate on MR assets — below the 60% threshold. P2 (Bear Indicators) was fully delivered by P-BEAR. P-DOI is the remaining gap: **a purpose-built Pine distribution indicator for Momentum assets**, where the signals are empirically validated.
+
+**Research finding that scopes this project:**
+- MSTR `loi_rollover`: **89% win rate** at 3% drawdown / 60 bars ✅
+- MSTR `vlt_above_20`: **100%** ✅
+- QQQ/SPY `loi_rollover`: **54.8%** ❌ — excluded from scope
+- MR assets: distribution signals do not clear threshold — explicitly out of scope
+
+**In scope (Momentum: MSTR, IBIT, TSLA):**
 
 | Milestone | Status |
 |---|---|
-| Gavin defines alert event vocabulary and routing | 🔴 Pending Gavin |
-| Design spec | ⬜ After scope definition |
-| Build in pmcc_alerts.py | ⬜ After spec |
+| Formalize `loi_rollover` as validated distribution marker (MSTR/IBIT/TSLA) | ⬜ Queued |
+| Formalize `vlt_above_20` as trim/exit signal | ⬜ Queued |
+| STRF/LQD topping divergence as credit-side distribution confirmation | ✅ Engine block 6b live |
+| Build Pine distribution indicator (DOI oscillator — Momentum assets only) | ⬜ Queued |
+| Wire into CRS and AB2 trim-zone precision | ⬜ After Pine build |
+
+**Explicitly excluded:** SPY, QQQ, IWM, GLD — distribution signals unreliable on MR assets; CRS handles trim-zone guidance adequately for those.
 
 ---
 
@@ -398,9 +427,7 @@ IWM breadth gate key finding: IWM strong while SPY/QQQ corrects → continuation
 
 | Project | Objective | Trigger to Reactivate | Owner |
 |---|---|---|---|
-| **P2 — Bear Indicators** | Short-side signal generation for bear market opportunities | Gavin decides | Gavin |
 | **P9 — MSTR/IBIT Pair Trade** | Systematic pair trading on relative SRI divergence | Gavin decides | Gavin |
-| **P14 — Bearish Bias Indicator Suite** | Symmetric bearish framework (DOI) with same rigor as SRI | Gavin decides | Gavin |
 | **PURR Asset** | Full trading signals when bar count is sufficient | Auto-activates at 500+ bars | CIO (auto) |
 | **Howell T1/T2/T3 Wave Mapping** | Map Howell capital flow wave structure onto IWM breadth findings | Gavin commits Howell Asset Alloc images to GitHub briefs/ | Gavin |
 
@@ -416,13 +443,14 @@ IWM breadth gate key finding: IWM strong while SPY/QQQ corrects → continuation
 | 4 | CPS in Morning Brief | Early warning when any asset within 10 pts of threshold | 🔴 HIGH | #3 first |
 | 5 | MSR Weekly Automation | Auto-generate MSRs every Monday AM for all assets | 🔴 HIGH | Crontab (Greg) |
 | 6 | PPR Code Pipeline | Standardize intake + generation per user profile | 🔴 HIGH | None |
-| 7 | Updated Alert Approach | Redesign alerts around Stage State events + ladder rung changes | 🔴 HIGH | **Gavin defines scope** |
+| 7 | P5 Phase 2 — Alert Vocabulary Redesign | Stage State events, ladder rung changes, LAS alerts, PPR routing (P-UAA merged into P5) | 🔴 HIGH | **Gavin defines vocab** |
 | 8 | classify_stage() Bug Fix | Returns MIXED_CONFUSED for MSTR (should be S2_early/S2); fix condition sequencing | 🟡 MED | None |
 | 9 | Trade Recommendation Engine | Structured executable trade recs with ORATS PoP, Greeks, hypothesis blocks, trade_log writes | 🟡 MED | PPR pipeline |
 | 10 | Signal Accuracy Tracking | Measure signal prediction accuracy; weight by track record | 🟡 MED | None |
 | 11 | Post-Mortem Process | Score closed trade hypotheses; extract structured lessons | 🟡 MED | #9 first |
 | 12 | PURR MSR Stub | Create observation-mode stub MSR for PURR | 🟡 MED | None |
 | 13 | MR vs Momentum Threshold Differentiation | Backtest confirmation ladder thresholds by asset class | 🟡 MED | None |
+| 13b | P-DOI: Distribution Signal Layer | Pine DOI oscillator for MSTR/IBIT/TSLA; `loi_rollover` + `vlt_above_20` formalized; STRF/LQD divergence layer already live | 🟡 MED | None |
 | 14 | Re-run Vol-Adaptive + Stage Backtest | Increase confidence at 24+ months data | 🔵 LOW | Time |
 | 15 | Classifier Dataset Re-labeling | Fix false negatives using "new high within 120 bars" metric | 🔵 LOW | None |
 | 16 | Regime-Conditioned Classifier | Separate CPS models for GLI Z>0 vs Z<0 | 🔵 LOW | #15 first |
@@ -439,7 +467,7 @@ IWM breadth gate key finding: IWM strong while SPY/QQQ corrects → continuation
 | **Tutorial v2.5 review** | Review SRI-Engine-Tutorial-v2.md (v2.5) and SRI-Layman-Guide.md on GitHub | **Gavin** |
 | **Stage 2 Classifier "What It Doesn't Solve"** | Sign-off before CPS wired into live entries | **Gavin** |
 | **MSR push to GitHub** | Open questions cleared before publishing MSRs | **Gavin** |
-| **P-UAA scope definition** | Define alert event vocabulary before build begins | **Gavin** |
+| **P5 Phase 2 — Alert vocabulary** | Define Stage State event vocabulary before redesign builds (P-UAA merged into P5) | **Gavin** |
 | **Howell images** | Commit Howell Asset Alloc.png + Howell Asset Alloc2.png to GitHub briefs/ | **Gavin** |
 
 ---
@@ -452,7 +480,7 @@ P-GLI (Layer 0)
               └──→ P-CLASSIFIER (Gate Zero)
                         └──→ P-MSR (stage declarations)
                                   └──→ P-PPR (personalized layer)
-                                  └──→ P-UAA (alert redesign)
+                                  └──→ P5 Phase 2 (alert redesign — P-UAA merged)
 
 P12 (Python Engine)
     └──→ P5 (Alerts — needs crontab)
@@ -465,6 +493,7 @@ P12 (Python Engine)
 
 P6 (LOI) ──→ P1 (AB framework) ──→ P-MSR (score inputs)
 P-CRS (AB2 CRS v2) ──→ P-PPR (strike width inputs)
+P-BEAR (signal engine) ──→ P-DOI (Pine distribution layer — MSTR/IBIT/TSLA only)
 P-PINE-GUIDE ──→ Greg + Gary onboarding
 ```
 
