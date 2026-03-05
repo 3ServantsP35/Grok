@@ -34,6 +34,7 @@
 | P-BACKTEST | Stage Designation + Vol-Adaptive Research | ✅ Complete — R1/R2/R3 implemented | CIO |
 | P-PINE-V6 | Pine v6 Migration | ✅ All 12 scripts on v6 | CIO |
 | P-DOI | Distribution Signal Layer (Momentum assets) | 🔴 HIGH — Pine v1 live; CRS integration queued | CIO |
+| P-MR-ENTRY | MR-Large Entry Framework (SPY/QQQ AB3) | 🟡 MED — Scoped; research phase | CIO |
 
 ---
 
@@ -210,6 +211,73 @@ Per-user report generated on-demand in each user's dedicated channel only. Trans
 | Wire into CRS and AB2 trim-zone precision | ⬜ Next step |
 
 **Explicitly excluded:** SPY, QQQ, IWM, GLD — distribution signals unreliable on MR assets; CRS handles trim-zone guidance adequately for those.
+
+---
+
+### P-MR-ENTRY: MR-Large Entry Framework *(SPY/QQQ AB3)*
+**Status:** 🟡 MED — Scoped; research phase
+**Lead:** CIO | **Approver:** Gavin
+
+**Problem statement:**
+The current AB3 framework rates SPY/QQQ entry quality at **3/10**. LOI never reaches the -40 threshold on SPY (min -24.9) or QQQ (min -26.0), the primary entry signal `mixed_context` hits only 38.5% win rate, and more backtesting within the existing LOI framework will not improve this — the model is structurally mis-specified for MR-Large assets. SPY/QQQ AB3 entries currently rely on reasoning rather than validated signals.
+
+**Core hypothesis:**
+SPY/QQQ AB3 LEAP entries are not LOI-depth events. They are **transient macro dislocation events** — sharp drawdowns where the underlying long-term regime remains constructive but an exogenous shock temporarily prices the asset below fair value. The entry signal is primarily about correctly classifying the *episode type*, not measuring accumulation pressure.
+
+Classic example: April/May 2025 tariff crisis created a sharp SPY/QQQ drawdown on an event that proved transient. LEAP entries during that window would have been highly profitable. This is the archetype — but the framework must generalize beyond any single episode.
+
+**Primary gate — Episode Type:**
+The most important question is not "how far has LOI fallen?" but "is this drawdown Transient or Structural?"
+- **Transient:** exogenous shock (policy, geopolitical, short-term sentiment) on a constructive long-term regime → valid AB3 entry
+- **Structural:** regime change (GLI breakdown, Howell entering sustained contraction, fundamental earnings deterioration) → avoid; LOI will keep falling
+
+The Episode Type Classifier (post-launch build #3) is the foundational dependency for this project.
+
+**Proposed signal stack (research targets):**
+
+| Layer | Signal | Role | Status |
+|---|---|---|---|
+| Layer 0 | GLI Z-score > -0.5 | Macro regime not in structural contraction | ✅ Wired |
+| Layer 0.5 | Howell Phase ≠ sustained Contraction | Cycle phase not against entry | ✅ Wired |
+| Layer 1 | Episode Type = TRANSIENT | Primary gate — shock is recoverable | ⬜ Needs classifier |
+| Layer 2 | VIX > 20 (elevated IV) | LEAPs cheaper, validates the dislocation | ⬜ Research |
+| Layer 2 | IWM at or below its own trough | Breadth confirming shared bottom | ⬜ Research |
+| Layer 2 | Price at statistical support (P10 TL) | Technical anchor for entry | ⬜ Needs P10 |
+| Layer 2 | SRI ST negative → turning | Timing confirmation (not entry gate) | ⬜ Research |
+| Layer 3 | LOI < -15 (weaker condition) | Mild LOI signal, not depth-gated | ⬜ Research |
+
+**Exit framework (separate from Momentum):**
+MR-Large assets mean-revert faster. The trim schedule (10/30/50) is reasonable but unvalidated. Exit research questions:
+- Does LOI > +10 reliably mark the reversion-complete point on SPY/QQQ?
+- Is SRI ST returning to TAILWIND a better exit signal than LOI threshold?
+- Does the Episode Type classifier signal "recovery complete" vs "extended"?
+
+**Key design constraint:**
+SRI LOI is a **secondary filter** only on MR-Large assets — confirming direction, not triggering entry. The primary entry logic belongs to macro/episode layers that are already partially wired (GLI, Howell) but need a new signal on top: Episode Type.
+
+**Dependencies:**
+
+| Dependency | Project | Status |
+|---|---|---|
+| Episode Type Classifier | Post-launch build #3 | ⬜ Not yet built |
+| Trend Line Engine (price anchors) | P10 | 🟡 Prototype tested |
+| GLI + Howell regime layers | P-GLI, P-HOWELL | ✅ Live |
+| IWM breadth research | P-CLASSIFIER (partial) | ✅ Some findings available |
+
+**Research milestones:**
+
+| Milestone | Status |
+|---|---|
+| Define episode taxonomy (Transient / Structural / Extended) | ✅ Conceptual — needs formalization |
+| Identify historical SPY/QQQ macro dislocation events (2018–2025) | ⬜ Research |
+| Backtest: entry win rates conditioned on Howell Phase × GLI × VIX threshold | ⬜ Research |
+| Backtest: IWM breadth condition at entry — does shared trough matter? | ⬜ Research |
+| Backtest: exit — LOI threshold vs ST returning to TAILWIND vs time-stop | ⬜ Research |
+| Build Episode Type Classifier | ⬜ Post-launch #3 |
+| Wire into morning brief as MR entry alert | ⬜ After classifier |
+| Pine indicator mirror for MR entry signals | ⬜ After research |
+
+**Note on over-indexing:** The April/May 2025 tariff shock is a useful archetype but must not dominate the research. The framework must generalize to: Fed pivot scares, geopolitical shocks, regional bank contagion events, earnings-season dislocations, and liquidity squeezes — not just tariff-driven events.
 
 ---
 
@@ -451,6 +519,7 @@ IWM breadth gate key finding: IWM strong while SPY/QQQ corrects → continuation
 | 12 | PURR MSR Stub | Create observation-mode stub MSR for PURR | 🟡 MED | None |
 | 13 | MR vs Momentum Threshold Differentiation | Backtest confirmation ladder thresholds by asset class | 🟡 MED | None |
 | 13b | P-DOI: Distribution Signal Layer | Pine DOI oscillator for MSTR/IBIT/TSLA; `loi_rollover` + `vlt_above_20` formalized; STRF/LQD divergence layer already live | 🔴 HIGH | None |
+| 13c | P-MR-ENTRY: MR-Large Entry Framework | Macro-driven entry logic for SPY/QQQ AB3; Episode Type × Howell × GLI × VIX × IWM breadth; replaces LOI-depth as primary gate | 🟡 MED | Episode Type Classifier (#3), P10 |
 | 14 | Re-run Vol-Adaptive + Stage Backtest | Increase confidence at 24+ months data | 🔵 LOW | Time |
 | 15 | Classifier Dataset Re-labeling | Fix false negatives using "new high within 120 bars" metric | 🔵 LOW | None |
 | 16 | Regime-Conditioned Classifier | Separate CPS models for GLI Z>0 vs Z<0 | 🔵 LOW | #15 first |
@@ -494,6 +563,10 @@ P12 (Python Engine)
 P6 (LOI) ──→ P1 (AB framework) ──→ P-MSR (score inputs)
 P-CRS (AB2 CRS v2) ──→ P-PPR (strike width inputs)
 P-BEAR (signal engine) ──→ P-DOI (Pine distribution layer — MSTR/IBIT/TSLA only)
+
+Episode Classifier (post-launch #3)
+    └──→ P-MR-ENTRY (primary gate for SPY/QQQ AB3 entries)
+              └──→ P10 Trend Lines (price anchor layer for MR entries)
 P-PINE-GUIDE ──→ Greg + Gary onboarding
 ```
 
