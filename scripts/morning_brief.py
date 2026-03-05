@@ -701,6 +701,51 @@ def build_brief():
             section += "⚪=Inactive 👁=Watch 🟡=Forming 🟠=Forming+ 🔴=Confirmed 🚨=Conf+ ✅=Invalidated\n"
             section += f"*Momentum (MSTR/TSLA/IBIT) DELTA\\_MGMT threshold: LOI>+40 | MR: LOI>+20*\n\n"
 
+            # ── Cross-Asset Accumulation Count (multi-asset deployment signal) ──────
+            # Per backtest 2026-03-05: 3+ assets LOI<-20 simultaneously = max AB4 deploy
+            acc_count = sum(1 for _, _, _, loi_v, *_ in gate_rows if loi_v < -20)
+            _acc_emoji = "🟢" if acc_count <= 1 else ("🟡" if acc_count == 2 else "🔴")
+            _acc_note  = ("Normal" if acc_count <= 1
+                          else "Elevated — consider adding positions" if acc_count == 2
+                          else "⚠ MAXIMUM DEPLOYMENT SIGNAL — 3+ assets accumulating")
+            section += f"{_acc_emoji} **Cross-Asset Accumulation: {acc_count}/7 assets LOI<−20** — {_acc_note}\n\n"
+
+            # ── Per-asset entry calibration notes (cross-asset LEAP backtest 2026-03-05) ──
+            calib_notes = []
+            for asset, _, _, loi_v, ct_v, ctx_v, *_ in gate_rows:
+                if asset == "TSLA":
+                    # Inverted concordance: 0 TFs+ = 78% WR; 3 TFs+ = 24% WR
+                    tf_count = ct_v  # ct_tier ≈ TF concordance level
+                    if tf_count >= 3:
+                        calib_notes.append(f"⚠ **TSLA**: CT{tf_count} — inverted concordance; 24% 180d WR at full alignment. Entry quality degraded.")
+                    elif loi_v < -20:
+                        calib_notes.append(f"✓ **TSLA**: LOI={loi_v:+.1f}, CT{tf_count} — acc zone + low concordance = optimal entry setup (77%+ WR).")
+                elif asset == "GLD":
+                    # SMA200 structural filter: +30pp WR difference
+                    try:
+                        import glob
+                        _gld_files = sorted(glob.glob("/mnt/mstr-data/BATS_GLD, 240_*.csv"))
+                        if _gld_files:
+                            _gdf = pd.read_csv(_gld_files[-1])
+                            _gclose = float(_gdf.iloc[-1]["close"])
+                            _gsma200 = float(_gdf["close"].tail(1200).mean()) if len(_gdf) >= 200 else None
+                            if _gsma200:
+                                if _gclose > _gsma200:
+                                    calib_notes.append(f"✓ **GLD**: Above SMA200 (${_gclose:.2f} > ${_gsma200:.2f}) — structural entry gate OPEN (69% WR).")
+                                else:
+                                    calib_notes.append(f"⚠ **GLD**: Below SMA200 (${_gclose:.2f} < ${_gsma200:.2f}) — structural entry gate CLOSED (38% WR). Do not open new LEAPs.")
+                    except Exception:
+                        pass
+                elif asset == "QQQ":
+                    # Mixed context is counter-signal for QQQ (13.9% WR)
+                    if ctx_v.startswith("MIXE"):
+                        calib_notes.append(f"⚠ **QQQ**: Mixed context detected — COUNTER-SIGNAL (13.9% 180d WR). Do not enter. Requires VLT+ alignment.")
+            if calib_notes:
+                section += "**Entry Calibration:**\n"
+                for note in calib_notes:
+                    section += f"  {note}\n"
+                section += "\n"
+
             # Open short calls from trade_log
             open_calls = conn.execute(
                 """SELECT asset, strategy, strikes, expiry, entry_price, status
