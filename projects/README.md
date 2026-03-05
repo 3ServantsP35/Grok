@@ -33,7 +33,7 @@
 | P-PINE-GUIDE | Pine Indicator Tutorial Guide | ✅ Complete | CIO |
 | P-BACKTEST | Stage Designation + Vol-Adaptive Research | ✅ Complete — R1/R2/R3 implemented | CIO |
 | P-PINE-V6 | Pine v6 Migration | ✅ All 12 scripts on v6 | CIO |
-| P-DOI | Distribution Signal Layer (Momentum assets) | 🔴 HIGH — Ready to build | CIO |
+| P-DOI | Distribution Signal Layer (Momentum assets) | 🔴 HIGH — Pine v1 live; CRS integration queued | CIO |
 
 ---
 
@@ -188,7 +188,7 @@ Per-user report generated on-demand in each user's dedicated channel only. Trans
 ---
 
 ### P-DOI: Distribution Signal Layer *(Momentum assets only)*
-**Status:** 🔴 HIGH — Scoped, ready to build
+**Status:** 🔴 HIGH — Pine v1 built; CRS integration queued
 **Lead:** CIO | **Approver:** Gavin
 
 **Origin:** P14 (Bearish Bias Indicator Suite) retired. The original "symmetric DOI with same rigor as SRI across all assets" scope was invalidated by the SPY/QQQ AB1 signal research, which found `loi_rollover` reaches only 54.8% win rate on MR assets — below the 60% threshold. P2 (Bear Indicators) was fully delivered by P-BEAR. P-DOI is the remaining gap: **a purpose-built Pine distribution indicator for Momentum assets**, where the signals are empirically validated.
@@ -203,11 +203,11 @@ Per-user report generated on-demand in each user's dedicated channel only. Trans
 
 | Milestone | Status |
 |---|---|
-| Formalize `loi_rollover` as validated distribution marker (MSTR/IBIT/TSLA) | ⬜ Queued |
-| Formalize `vlt_above_20` as trim/exit signal | ⬜ Queued |
+| Formalize `loi_rollover` as validated distribution marker (MSTR/IBIT/TSLA) | ✅ Implemented in DOI v1 |
+| Formalize `vlt_above_20` as trim/exit signal | ✅ Implemented in DOI v1 |
 | STRF/LQD topping divergence as credit-side distribution confirmation | ✅ Engine block 6b live |
-| Build Pine distribution indicator (DOI oscillator — Momentum assets only) | ⬜ Queued |
-| Wire into CRS and AB2 trim-zone precision | ⬜ After Pine build |
+| Build Pine distribution indicator (DOI oscillator — Momentum assets only) | ✅ `pine/SRI_Forecast_DOI.pine` (`411044f7`) |
+| Wire into CRS and AB2 trim-zone precision | ⬜ Next step |
 
 **Explicitly excluded:** SPY, QQQ, IWM, GLD — distribution signals unreliable on MR assets; CRS handles trim-zone guidance adequately for those.
 
