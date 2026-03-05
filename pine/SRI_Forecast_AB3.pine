@@ -164,6 +164,16 @@ bool ct4_active  = ct_tier == 4 and is_momentum
 bool iwm_ct3_warn = ct_tier >= 3 and is_iwm
 
 // ═══════════════════════════════════════════════════════════════
+// GLD: 200-DAY SMA STRUCTURAL FILTER
+// Cross-asset LEAP backtest 2026-03-05 (N=996, HIGH confidence):
+//   GLD above SMA200: 68.5% 180d WR  |  GLD below SMA200: 38.2% WR (+30pp delta)
+// GLD LEAP entries should be blocked when price is below the 200-day SMA.
+// ═══════════════════════════════════════════════════════════════
+float gld_sma200      = request.security(syminfo.tickerid, "D", ta.sma(close, 200))
+bool  gld_above_sma200 = is_gld and close > gld_sma200
+bool  gld_sma200_warn  = is_gld and close <= gld_sma200
+
+// ═══════════════════════════════════════════════════════════════
 // ZONE CLASSIFICATION
 // ═══════════════════════════════════════════════════════════════
 
@@ -346,6 +356,8 @@ plot(trim2_level,    "Trim 50%", color=color.new(color.orange, 30), linewidth=1,
 plot(trim3_level,    "Trim 75%", color=color.new(color.red, 40),    linewidth=1, style=plot.style_line)
 
 bgcolor(show_zones ? zone_bg : na)
+// GLD: red tint when below SMA200 — entry blocked per calibration
+bgcolor(gld_sma200_warn and show_zones ? color.new(color.red, 88) : na, title="GLD Below SMA200 — Entry Blocked")
 
 // Signal markers
 // Stage 1: Zone entry markers (triangle at LOI level — awareness, not yet actionable)
@@ -381,7 +393,7 @@ float total_pnl = has_qty ? ct_pnl * leap_qty : 0
 // INFO TABLE
 // ═══════════════════════════════════════════════════════════════
 
-var table t = table.new(position.bottom_right, 2, 17,
+var table t = table.new(position.bottom_right, 2, 18,
     bgcolor=color.new(color.black, 30), border_width=1, border_color=color.new(color.gray, 60))
 
 if barstate.islast and show_table
@@ -436,8 +448,10 @@ if barstate.islast and show_table
     // CT4 / IWM warning
     if ct4_active
         table.cell(t, 0, 7, "CT4 ⚠", text_color=color.red, text_size=size.tiny)
-        table.cell(t, 1, 7, "VLT > +20, all TFs+. Do NOT add. Consider trim schedule.",
-            text_color=color.red, text_size=size.tiny)
+        string _ct4msg = (is_tsla
+            ? "TSLA INVERTED: 3 TFs+ = 24% 180d WR. Entry quality severely degraded. Advance trim phase."
+            : "VLT > +20, all TFs+. Do NOT add. Consider trim schedule.")
+        table.cell(t, 1, 7, _ct4msg, text_color=color.red, text_size=size.tiny)
     else if iwm_ct3_warn
         table.cell(t, 0, 7, "IWM CT3 ⚠", text_color=color.orange, text_size=size.tiny)
         table.cell(t, 1, 7, "Late-cycle small-cap. Advance trim phase.",
@@ -488,6 +502,32 @@ if barstate.islast and show_table
         table.cell(t, 0, row, "Total P&L", text_color=color.gray, text_size=size.tiny)
         table.cell(t, 1, row, str.format("${0}", str.tostring(total_pnl,"#,###.00")),
             text_color=total_pnl>0?color.green:color.red, text_size=size.tiny)
+
+    // Row 13: Per-asset entry calibration (cross-asset LEAP backtest 2026-03-05)
+    string _cal_str = ""
+    color  _cal_col = color.gray
+    if is_tsla
+        _cal_str := ("TF " + str.tostring(bull_count) + "/3: "
+            + (bull_count == 0 ? "78% ✓ optimal"
+            : bull_count == 1 ? "56% ok"
+            : bull_count == 2 ? "39% ⚠ caution"
+            : "24% ✗ degraded — do not enter"))
+        _cal_col  := (bull_count <= 1 ? color.green
+            : bull_count == 2 ? color.orange : color.red)
+    else if is_gld
+        _cal_str := (gld_above_sma200
+            ? "SMA200 ✓ above — entry valid (69% structural WR)"
+            : "SMA200 ✗ below — BLOCKED (38% WR per backtest)")
+        _cal_col  := gld_above_sma200 ? color.green : color.red
+    else if is_mr_large
+        _cal_str := "QQQ: VLT+ required. Mixed ctx = 14% WR (COUNTER-signal). 3 TFs+ = best."
+        _cal_col  := color.orange
+    else if is_btc_proxy
+        _cal_str := "Deep acc + VLT- = 79% WR. Mixed ctx = 72% WR."
+        _cal_col  := color.new(color.teal, 20)
+    if _cal_str != ""
+        table.cell(t, 0, 13, "Entry Cal", text_color=color.gray, text_size=size.tiny)
+        table.cell(t, 1, 13, _cal_str, text_color=_cal_col, text_size=size.tiny)
 
 // ═══════════════════════════════════════════════════════════════
 // LEGEND
