@@ -25,8 +25,10 @@ from dataclasses import dataclass, field
 from typing import Optional, List, Dict, Tuple, Any
 from datetime import datetime, timedelta
 from enum import Enum
+from pathlib import Path
 import json
 import math
+import glob as _glob
 
 # Layer 0: GLI Engine (optional import — engine runs without it if unavailable)
 try:
@@ -459,6 +461,66 @@ def compute_loi(sribi: SRIBIState, prev_vlt: float = 0.0) -> float:
     roc_norm = max(-100, min(100, vlt_accel / 40 * 100))
     
     return (vlt_norm * 40 + roc_norm * 30 + lt_norm * 15 + conc_norm * 15) / 100
+
+# ═══════════════════════════════════════════════════════════════
+# SRIBI ROC (Rate-of-Change) DERIVATIVE — ENGINE SYNC
+# ═══════════════════════════════════════════════════════════════
+#
+# Mirrors the SRIBI_VST/ST/LT/VLT Pine indicators' ROC wave line.
+# Lookbacks calibrated per timeframe's natural periodicity (4H bars):
+#   VST lb=5 (20h), ST lb=6 (24h), LT lb=7 (28h), VLT lb=8 (32h)
+# EMA smoothing = 3 bars (same as Pine).
+#
+# ROC states (used in dashboard Panel 2 and PMCC gate output):
+#   Accel Bull    : ROC > 0 AND SRIBI > 0  — momentum building
+#   Decel Bull    : ROC < 0 AND SRIBI > 0  — early warning, still positive
+#   Drag Diffusing: ROC > 0 AND SRIBI < 0  — ★ bottom signal, momentum turning
+#   Accel Bear    : ROC < 0 AND SRIBI < 0  — full momentum to downside
+
+_SRIBI_ROC_PARAMS = {
+    'vst': ('VST SRI Bias Histogram', 5),
+    'st':  ('ST SRI Bias Histogram',  6),
+    'lt':  ('LT SRI Bias Histogram',  7),
+    'vlt': ('VLT SRI Bias Histogram', 8),
+}
+
+def add_sribi_roc_columns(df: 'pd.DataFrame', smooth: int = 3) -> 'pd.DataFrame':
+    """
+    Add vst_roc / st_roc / lt_roc / vlt_roc columns to a DataFrame in-place.
+
+    Formula (matches Pine exactly):
+      roc_raw  = bias_score - bias_score[lb]   (difference, not %)
+      roc_line = EMA(roc_raw, smooth)
+
+    Call this once on any CSV DataFrame before passing to PMCC engine or
+    dashboard to ensure ROC columns are available.
+    """
+    import pandas as pd
+    for tf, (col, lb) in _SRIBI_ROC_PARAMS.items():
+        roc_col = f'{tf}_roc'
+        if col not in df.columns:
+            df[roc_col] = 0.0
+            continue
+        vals    = pd.to_numeric(df[col], errors='coerce').fillna(0.0)
+        roc_raw = vals - vals.shift(lb).fillna(0.0)
+        df[roc_col] = roc_raw.ewm(span=smooth, adjust=False).mean()
+    return df
+
+
+def roc_state_label(roc: float, sribi: float) -> str:
+    """
+    Classify a single bar's ROC + SRIBI into a human-readable state.
+
+    Mirrors the four Pine SRIBI indicator label states.
+    The 'Drag Diffusing' state is the primary bottom-detection signal —
+    momentum turns positive before the zero-line cross (100% lead rate
+    at 27 MSTR cycle bottoms, lb=7, 2022-2026 backtest).
+    """
+    if roc >= 0 and sribi >= 0:  return "Accel Bull"
+    if roc <  0 and sribi >= 0:  return "Decel Bull"
+    if roc >= 0 and sribi <  0:  return "Drag Diffusing"   # ★ bottom signal
+    return "Accel Bear"
+
 
 # ═══════════════════════════════════════════════════════════════
 # ST-PRIMARY SIGNAL ENGINE
@@ -986,12 +1048,12 @@ if __name__ == "__main__":
     # Auto-discover CSV files
     data_dir = "/mnt/mstr-data"
     csv_map = {
-        "MSTR": f"{data_dir}/BATS_MSTR, 240_7f820.csv",
-        "BTC": f"{data_dir}/BITSTAMP_BTCUSD, 240_fe30c.csv",
-        "SPY": f"{data_dir}/BATS_SPY, 240_981cd.csv",
-        "QQQ": f"{data_dir}/BATS_QQQ, 240_21e37.csv",
-        "GLD": f"{data_dir}/BATS_GLD, 240_bfd71.csv",
-        "IWM": f"{data_dir}/BATS_IWM, 240_cfcaf.csv",
+        "MSTR": f"{data_dir}/BATS_MSTR, 240_7b1cc.csv",
+        "BTC":  f"{data_dir}/INDEX_BTCUSD, 240_6739b.csv",
+        "SPY":  f"{data_dir}/BATS_SPY, 240_8f6d8.csv",
+        "QQQ":  f"{data_dir}/BATS_QQQ, 240_5de53.csv",
+        "GLD":  f"{data_dir}/BATS_GLD, 240_41f2b.csv",
+        "IWM":  f"{data_dir}/BATS_IWM, 240_9624e.csv",
     }
     
     print("Loading assets...")
@@ -1156,18 +1218,293 @@ class AB1Trade:
 
 
 # ═══════════════════════════════════════════════════════════════
+# HOWELL PHASE ENGINE  (Layer 0.5)
+# ═══════════════════════════════════════════════════════════════
+
+@dataclass
+class HowellPhaseState:
+    """
+    Current Howell macro phase + per-sector signals.
+    Four phases: Rebound → Calm → Speculation → Turbulence → repeat
+    """
+    timestamp: datetime
+    phase: str                          # Rebound | Calm | Speculation | Turbulence
+    confidence: float                   # Score gap to next-best (0–100 normalised)
+    phase_scores: Dict[str, float]      # raw score per phase
+    sector_signals: Dict[str, str]      # ticker → BULL | BEAR | NEUTRAL
+    sector_sribi: Dict[str, float]      # ticker → LT SRIBI value
+    prev_phase: Optional[str] = None
+    is_transition: bool = False
+
+    PHASE_ORDER  = ['Rebound', 'Calm', 'Speculation', 'Turbulence']
+    PHASE_EMOJIS = {'Rebound': '🌱', 'Calm': '☀️', 'Speculation': '🍂', 'Turbulence': '🌧️'}
+
+    @property
+    def emoji(self) -> str:
+        return self.PHASE_EMOJIS.get(self.phase, '❓')
+
+    @property
+    def ab3_beta_eligible(self) -> bool:
+        """MSTR / IBIT AB3 full sizing allowed."""
+        return self.phase in ('Rebound', 'Calm')
+
+    @property
+    def ab3_beta_caution(self) -> bool:
+        """MSTR / IBIT AB3 at 50 % max sizing."""
+        return self.phase == 'Speculation'
+
+    @property
+    def ab3_equity_eligible(self) -> bool:
+        """SPY / QQQ AB3 — Turbulence flush entry only."""
+        return self.phase == 'Turbulence'
+
+    @property
+    def ab3_cyclicals_eligible(self) -> bool:
+        """TSLA / IWM AB3 entry window."""
+        return self.phase in ('Rebound', 'Calm')
+
+    @property
+    def ab2_paused(self) -> bool:
+        """Pause AB2 call-selling across all assets."""
+        return self.phase == 'Turbulence'
+
+    @property
+    def ab2_delta_cap_adjustment(self) -> float:
+        """
+        Adjustment to apply to max_delta in AB2 gate.
+        Speculation → reduce by 0.05 on equity / cyclical assets.
+        """
+        return -0.05 if self.phase == 'Speculation' else 0.0
+
+    def ab3_size_multiplier(self, asset_class: str) -> float:
+        """
+        Phase-conditioned size multiplier for AB3 entries.
+        asset_class: 'beta' (MSTR/IBIT), 'equity' (SPY/QQQ),
+                     'cyclical' (TSLA/IWM), 'commodity' (GLD),
+                     'bond' (TLT)
+        """
+        table = {
+            # phase      beta  equity  cyclical  commodity  bond
+            'Rebound':   (1.0,  1.0,    1.0,      0.0,       0.0),
+            'Calm':      (1.0,  1.0,    1.0,      1.0,       0.0),
+            'Speculation':(0.5, 0.0,    0.0,      0.75,      0.0),
+            'Turbulence': (0.0, 1.0,    0.0,      0.0,       1.0),
+        }
+        idx = {'beta': 0, 'equity': 1, 'cyclical': 2, 'commodity': 3, 'bond': 4}
+        row = table.get(self.phase, (0.5,)*5)
+        return row[idx.get(asset_class, 0)]
+
+
+class HowellPhaseEngine:
+    """
+    Detects the current Howell macro phase by reading LT SRIBI from
+    sector ETF CSV exports (downloaded alongside the 16 trading CSVs).
+
+    Phase signature matrix (sign = expected LT SRIBI direction):
+      +1 → expect BULL   −1 → expect BEAR   0 → neutral (no contribution)
+
+    Sectors:
+        XLK = Technology     XLY = Cyclicals      XLF = Financials
+        XLE = Energy         XLP = Defensives      TLT = Bond Duration
+        GLD = Commodities    IWM = Cyclicals broad
+    """
+
+    # Glob prefix per sector (scans DATA_DIR for latest matching file)
+    SECTOR_PREFIXES: Dict[str, str] = {
+        'XLK': 'BATS_XLK, 240_',
+        'XLY': 'BATS_XLY, 240_',
+        'XLF': 'BATS_XLF, 240_',
+        'XLE': 'BATS_XLE, 240_',
+        'XLP': 'BATS_XLP, 240_',
+        'TLT': 'BATS_TLT, 240_',
+        'GLD': 'BATS_GLD, 240_',
+        'IWM': 'BATS_IWM, 240_',
+        'VT':  'BATS_VT, 240_',     # Global equity breadth (world ETF)
+        'DBC': 'BATS_DBC, 240_',    # Diversified commodities — Howell phase signal
+    }
+
+    # Phase signature matrix
+    # VT = World ETF — global equity breadth signal
+    #   Rebound:     +1  global equities recovering alongside domestic
+    #   Calm:        +1  global equities healthy
+    #   Speculation:  0  US leads; global breadth may lag — neutral contribution
+    #   Turbulence:  -1  global risk-off; broad equity selling
+    #
+    # DBC = Diversified Commodities ETF (Howell traffic light: Commodities row)
+    #   Rebound:     -1  Commodities 🔴 in Rebound — DBC BEAR confirms early-cycle equity phase
+    #   Calm:         0  Commodities 🟠 in Calm — neutral contribution
+    #   Speculation: +1  Commodities 🟢 in Speculation — late-cycle commodity run
+    #   Turbulence:  +1  Commodities 🟢 in Turbulence — inflation/crisis commodity bid
+    PHASE_SIGNATURES: Dict[str, Dict[str, int]] = {
+        'Rebound': {
+            'XLK': +1, 'XLY': +1, 'XLF': +1,
+            'XLE': -1, 'XLP': -1, 'TLT': -1, 'GLD': -1, 'IWM': +1,
+            'VT':  +1, 'DBC': -1,
+        },
+        'Calm': {
+            'XLK': +1, 'XLY': +1, 'XLF': +1,
+            'XLE': +1, 'XLP': +1, 'TLT':  0, 'GLD':  0, 'IWM': +1,
+            'VT':  +1, 'DBC':  0,
+        },
+        'Speculation': {
+            'XLK': +1, 'XLY': -1, 'XLF':  0,
+            'XLE': +1, 'XLP': +1, 'TLT': -1, 'GLD': +1, 'IWM': -1,
+            'VT':   0, 'DBC': +1,
+        },
+        'Turbulence': {
+            'XLK': -1, 'XLY': -1, 'XLF': -1,
+            'XLE': -1, 'XLP': +1, 'TLT': +1, 'GLD': -1, 'IWM': -1,
+            'VT':  -1, 'DBC': +1,
+        },
+    }
+
+    # SRIBI neutral band — signals within ±THRESHOLD treated as NEUTRAL
+    BULL_THRESHOLD = +5.0
+    BEAR_THRESHOLD = -5.0
+
+    # Asset-class classification for AB3 size multiplier lookup
+    ASSET_CLASS_MAP: Dict[str, str] = {
+        'MSTR':  'beta',    'IBIT':  'beta',
+        'SPY':   'equity',  'QQQ':   'equity',
+        'TSLA':  'cyclical','IWM':   'cyclical',
+        'GLD':   'commodity',
+        'TLT':   'bond',
+        'PURR':  'beta',
+    }
+
+    def __init__(self, data_dir: str = "/mnt/mstr-data"):
+        self.data_dir = Path(data_dir)
+
+    # ── Internal helpers ─────────────────────────────────────────
+
+    def _find_csv(self, ticker: str) -> Optional[Path]:
+        """Return the latest (alphabetically last) CSV matching the prefix."""
+        prefix = self.SECTOR_PREFIXES[ticker]
+        matches = sorted(self.data_dir.glob(f'{prefix}*.csv'))
+        if not matches:
+            return None
+        # Prefer files with LOI data (larger = more columns); pick the newest
+        # by choosing the last sorted match (TradingView names have hash suffix)
+        return matches[-1]
+
+    def _load_df(self, ticker: str) -> Optional[pd.DataFrame]:
+        """Load sector CSV; return None if unavailable."""
+        try:
+            path = self._find_csv(ticker)
+            if path is None:
+                return None
+            df = pd.read_csv(path)
+            if df.empty:
+                return None
+            return df
+        except Exception:
+            return None
+
+    def _classify_signal(self, df: Optional[pd.DataFrame]) -> tuple:
+        """
+        Extract LT SRIBI from the last bar and classify as BULL/BEAR/NEUTRAL.
+        Falls back to VLT if LT is not present.
+        Returns (lt_value: float, signal: str)
+        """
+        if df is None or len(df) == 0:
+            return 0.0, 'NEUTRAL'
+        last = df.iloc[-1]
+        lt  = float(last.get('LT SRI Bias Histogram',  last.get('LT_SRIBI',  0)) or 0)
+        vlt = float(last.get('VLT SRI Bias Histogram', last.get('VLT_SRIBI', 0)) or 0)
+        # Primary signal: LT. If zero (column missing), use VLT with higher bar.
+        if lt > self.BULL_THRESHOLD or (lt == 0.0 and vlt > 20.0):
+            return lt, 'BULL'
+        if lt < self.BEAR_THRESHOLD or (lt == 0.0 and vlt < -20.0):
+            return lt, 'BEAR'
+        return lt, 'NEUTRAL'
+
+    # ── Public API ───────────────────────────────────────────────
+
+    def compute(self, prev_phase: Optional[str] = None) -> HowellPhaseState:
+        """
+        Load all sector CSVs, score each Howell phase, return HowellPhaseState.
+        prev_phase: pass the last known phase to detect transitions.
+        """
+        sector_sribi:   Dict[str, float] = {}
+        sector_signals: Dict[str, str]   = {}
+        latest_ts = datetime.utcnow()
+
+        for ticker in self.SECTOR_PREFIXES:
+            df = self._load_df(ticker)
+            if df is not None and len(df) > 0:
+                try:
+                    bar_ts = datetime.utcfromtimestamp(int(df.iloc[-1]['time']))
+                    if bar_ts > latest_ts:
+                        latest_ts = bar_ts
+                except Exception:
+                    pass
+            lt_val, sig = self._classify_signal(df)
+            sector_sribi[ticker]   = lt_val
+            sector_signals[ticker] = sig
+
+        # Score each phase
+        phase_scores: Dict[str, float] = {}
+        for phase, sigs in self.PHASE_SIGNATURES.items():
+            score = 0.0
+            for ticker, expected in sigs.items():
+                if expected == 0:
+                    continue
+                actual = sector_signals.get(ticker, 'NEUTRAL')
+                actual_val = +1 if actual == 'BULL' else (-1 if actual == 'BEAR' else 0)
+                score += expected * actual_val
+            phase_scores[phase] = score
+
+        # Rank
+        ranked = sorted(phase_scores, key=phase_scores.get, reverse=True)
+        best_phase  = ranked[0]
+        best_score  = phase_scores[best_phase]
+        second_score = phase_scores[ranked[1]] if len(ranked) > 1 else 0.0
+
+        # Confidence: score gap normalised to max possible (non-zero expected entries)
+        n_active = sum(1 for v in self.PHASE_SIGNATURES[best_phase].values() if v != 0)
+        gap = best_score - second_score
+        confidence = round(min(100.0, (gap / max(n_active, 1)) * 100), 1)
+
+        is_transition = (prev_phase is not None and best_phase != prev_phase)
+
+        return HowellPhaseState(
+            timestamp      = latest_ts,
+            phase          = best_phase,
+            confidence     = confidence,
+            phase_scores   = phase_scores,
+            sector_signals = sector_signals,
+            sector_sribi   = sector_sribi,
+            prev_phase     = prev_phase,
+            is_transition  = is_transition,
+        )
+
+    def asset_class(self, asset: str) -> str:
+        """Return the Howell asset class string for a given trading asset."""
+        return self.ASSET_CLASS_MAP.get(asset.upper(), 'equity')
+
+    def ab3_size_multiplier(self, asset: str, phase_state: HowellPhaseState) -> float:
+        """Convenience wrapper: return size multiplier for asset given current phase."""
+        ac = self.asset_class(asset)
+        return phase_state.ab3_size_multiplier(ac)
+
+
+# ═══════════════════════════════════════════════════════════════
 # REGIME ENGINE
 # ═══════════════════════════════════════════════════════════════
 
 class RegimeEngine:
     """
-    Processes 8 regime input CSVs into a composite regime state.
-    
+    Processes 9 regime input CSVs into a composite regime state.
+
     Scoring:
       BTC avg SRIBI: <-20 bearish(-1), >10 bullish(+1)
       Stablecoin Dom ST: >0 risk-off(-1), <0 risk-on(+1)
       DXY ST: >0 strong dollar(-1), <0 weak dollar(+1)
-      HYG ST: <0 credit stress(-1), >0 credit healthy(+1)
+      HYG ST: <0 credit stress(-1), >0 credit healthy(+1)        ← high yield
+      LQD ST: credit composite — amplifies HYG when both agree:   ← investment grade
+               HYG BEAR + LQD BEAR = −1 additional (systemic stress, total −2)
+               HYG BULL + LQD BULL = +1 additional (broad health, total +2)
+               Diverge = 0 (anomalous; only HYG score applies)
       TLT ST: >0 rates falling(+1), <0 rates rising(-1)
       STRC ST: >0 Saylor engine healthy(+1), <0 weak(-1)
       VIX: >25 high vol(+0 neutral), <18 low vol(-1), 18-25 normal(+0)
@@ -1177,13 +1514,15 @@ class RegimeEngine:
     DATA_DIR = "/mnt/mstr-data"
     
     REGIME_FILES = {
-        "BTC":        "BITSTAMP_BTCUSD",
+        "BTC":        "INDEX_BTCUSD",          # switched from BITSTAMP to INDEX source
         "MSTR_IBIT":  "BATS_MSTR_BATS_IBIT",
         "STABLE":     "CRYPTOCAP_STABLE.C.D",
         "STRC":       "BATS_STRC",
         "TLT":        "BATS_TLT",
         "DXY":        "TVC_DXY",
         "HYG":        "BATS_HYG",
+        "LQD":        "BATS_LQD",              # IG bonds — credit composite with HYG
+        "STRF":       "NASDAQ_STRF",           # Saylor perpetual preferred — credit precision
         "VIX":        "TVC_VIX",
     }
     
@@ -1278,20 +1617,42 @@ class RegimeEngine:
                 sribi.context, s, interp, dxy_df.iloc[-1]['date']
             )
         
-        # 4. HYG (credit stress)
+        # 4. HYG (high-yield credit — first leg of credit composite)
+        hyg_score = 0
         hyg_df = self._load("HYG")
         if hyg_df is not None:
             sribi = self._get_sribi(hyg_df)
             if sribi.st < 0:
-                s = -1; interp = "CREDIT STRESS — risk-off warning"
+                hyg_score = -1; interp = "HY CREDIT STRESS — risk-off warning"
             else:
-                s = +1; interp = "CREDIT HEALTHY — supportive"
-            score += s
+                hyg_score = +1; interp = "HY CREDIT HEALTHY — supportive"
+            score += hyg_score
             state.inputs["HYG"] = RegimeInput(
                 "HYG", float(hyg_df.iloc[-1]['close']), sribi,
-                sribi.context, s, interp, hyg_df.iloc[-1]['date']
+                sribi.context, hyg_score, interp, hyg_df.iloc[-1]['date']
             )
-        
+
+        # 4b. LQD (investment-grade credit — second leg of credit composite)
+        # Amplifies HYG by ±1 only when both agree — divergence scores 0.
+        # Both BEAR = systemic stress (total credit = −2); both BULL = broad health (total = +2)
+        lqd_df = self._load("LQD")
+        if lqd_df is not None and hyg_df is not None:
+            lqd_sribi = self._get_sribi(lqd_df)
+            lqd_bear = lqd_sribi.st < 0
+            hyg_bear  = hyg_score < 0
+            hyg_bull  = hyg_score > 0
+            if lqd_bear and hyg_bear:
+                s = -1; interp = "IG + HY BOTH BEAR — systemic credit stress (−2 total)"
+            elif not lqd_bear and hyg_bull:
+                s = +1; interp = "IG + HY BOTH BULL — broad credit health (+2 total)"
+            else:
+                s = 0;  interp = "IG/HY diverging — anomalous; no additional score"
+            score += s
+            state.inputs["LQD"] = RegimeInput(
+                "LQD", float(lqd_df.iloc[-1]['close']), lqd_sribi,
+                lqd_sribi.context, s, interp, lqd_df.iloc[-1]['date']
+            )
+
         # 5. TLT (rates)
         tlt_df = self._load("TLT")
         if tlt_df is not None:
@@ -1322,6 +1683,39 @@ class RegimeEngine:
                 "STRC", price, sribi, sribi.context, s, interp, strc_df.iloc[-1]['date']
             )
         
+        # 6b. STRF/LQD — Saylor credit precision (IG-normalised preferred signal)
+        # Strips interest-rate noise from STRF by dividing against LQD.
+        # Isolates MSTR-specific credit premium — leads MSTR equity by 3-7 bars.
+        # Scored independently; amplifies STRC signal when both agree.
+        strf_df = self._load("STRF")
+        if strf_df is not None and lqd_df is not None:
+            strf_price = float(strf_df.iloc[-1]['close'])
+            lqd_price  = float(lqd_df.iloc[-1]['close'])
+            ratio_now  = strf_price / lqd_price
+            # Percentile vs rolling 252-bar (1yr) window
+            window = min(252, len(strf_df))
+            strf_series = strf_df['close'].iloc[-window:].values
+            lqd_aligned = lqd_df['close'].iloc[-window:].values
+            if len(lqd_aligned) == len(strf_series):
+                ratio_series = strf_series / lqd_aligned
+                r_min, r_max = ratio_series.min(), ratio_series.max()
+                r_range      = r_max - r_min if r_max > r_min else 1e-9
+                pctl         = (ratio_now - r_min) / r_range * 100
+            else:
+                pctl = 50.0
+            if pctl <= 20:
+                s = -1; interp = f"STRF/LQD STRESS ({pctl:.0f}th pctl) — MSTR credit cheap vs IG; leading bear/bottom signal"
+            elif pctl >= 60:
+                s = +1; interp = f"STRF/LQD HEALTHY ({pctl:.0f}th pctl) — MSTR credit premium firm vs IG"
+            else:
+                s =  0; interp = f"STRF/LQD NEUTRAL ({pctl:.0f}th pctl) — no directional credit edge"
+            score += s
+            sribi_strf = self._get_sribi(strf_df)
+            state.inputs["STRF_LQD"] = RegimeInput(
+                "STRF_LQD", round(ratio_now, 4), sribi_strf,
+                sribi_strf.context, s, interp, strf_df.iloc[-1]['date']
+            )
+
         # 7. VIX (vol regime — informs strategy, not direction)
         vix_df = self._load("VIX")
         if vix_df is not None:
@@ -1908,6 +2302,257 @@ class AllocationEngine:
         return "\n".join(lines)
 
 
+# ============================================================
+# VOL-ADAPTIVE LOI THRESHOLD ENGINE
+# ============================================================
+
+@dataclass
+class AdaptiveLOIThreshold:
+    """Vol-adaptive LOI accumulation threshold.
+
+    Insight (2026-03-03): Fixed thresholds misfire in low-vol regimes.
+    HIGH vol entries: +26.3% 60-bar return on MSTR.
+    LOW vol entries: -26.8%. Formula normalizes by ATR regime.
+
+    In CONTRACTING liquidity regime, LT/VLT confirmation required
+    even after threshold breach (see LiquidityRegime in RegimeEngine).
+    """
+    asset: str
+    asset_class: str  # MOMENTUM / MR / TRENDING / BTC_CORRELATED
+    base_threshold: float
+    current_threshold: float
+    current_atr_ratio: float
+    median_atr_ratio: float
+    vol_multiplier: float
+    vol_regime: str  # HIGH / NORMAL / LOW
+    is_below_threshold: bool  # LOI currently below adaptive threshold
+
+    @property
+    def threshold_label(self) -> str:
+        if self.vol_regime == 'HIGH':
+            return f'{self.current_threshold:.1f} (vol↑ → easier threshold)'
+        elif self.vol_regime == 'LOW':
+            return f'{self.current_threshold:.1f} (vol↓ → harder threshold)'
+        return f'{self.current_threshold:.1f}'
+
+
+class AdaptiveLOIEngine:
+    """Computes vol-adaptive AB3 accumulation thresholds per asset.
+
+    Asset class base thresholds:
+    - MOMENTUM (MSTR/TSLA): -45
+    - BTC_CORRELATED (IBIT): -45
+    - MR (SPY/QQQ/IWM): -40
+    - TRENDING (GLD): -40
+
+    MR and TRENDING assets use flat -40 (vol adaptation unconfirmed for these).
+    Momentum/BTC_CORRELATED use full adaptive formula.
+    """
+
+    BASE_THRESHOLDS = {
+        'MOMENTUM': -45.0,
+        'BTC_CORRELATED': -45.0,
+        'MR': -40.0,
+        'TRENDING': -40.0,
+    }
+
+    # Only adapt for these classes (research confirmed; others use flat)
+    ADAPTIVE_CLASSES = {'MOMENTUM', 'BTC_CORRELATED'}
+
+    # ATR lookback for current ratio
+    ATR_PERIOD = 14
+    # Historical window for median ATR ratio (bars)
+    MEDIAN_WINDOW = 200
+
+    def compute(self, df: pd.DataFrame, asset: str, asset_class: str,
+                loi: float) -> AdaptiveLOIThreshold:
+        base = self.BASE_THRESHOLDS.get(asset_class, -40.0)
+
+        if asset_class not in self.ADAPTIVE_CLASSES:
+            # MR/TRENDING: flat threshold, no adaptation
+            return AdaptiveLOIThreshold(
+                asset=asset, asset_class=asset_class,
+                base_threshold=base, current_threshold=base,
+                current_atr_ratio=0.0, median_atr_ratio=0.0,
+                vol_multiplier=1.0, vol_regime='NORMAL',
+                is_below_threshold=loi <= base
+            )
+
+        try:
+            # Compute ATR/Close ratio
+            if 'ATR' in df.columns:
+                atr = df['ATR'].ffill()
+            else:
+                # Compute ATR(14) from OHLC
+                high = df['high']
+                low = df['low']
+                close_col = df['close']
+                prev_close = close_col.shift(1)
+                tr = pd.concat([
+                    high - low,
+                    (high - prev_close).abs(),
+                    (low - prev_close).abs()
+                ], axis=1).max(axis=1)
+                atr = tr.rolling(self.ATR_PERIOD).mean()
+
+            close_col = df['close']
+            atr_ratio = (atr / close_col).ffill()
+
+            if len(atr_ratio.dropna()) < 20:
+                return AdaptiveLOIThreshold(
+                    asset=asset, asset_class=asset_class,
+                    base_threshold=base, current_threshold=base,
+                    current_atr_ratio=0.0, median_atr_ratio=0.0,
+                    vol_multiplier=1.0, vol_regime='NORMAL',
+                    is_below_threshold=loi <= base
+                )
+
+            current_atr_ratio = float(atr_ratio.dropna().iloc[-1])
+
+            # Median over historical window
+            hist = atr_ratio.dropna().tail(self.MEDIAN_WINDOW)
+            median_atr_ratio = float(hist.median())
+
+            if median_atr_ratio == 0:
+                vol_multiplier = 1.0
+            else:
+                vol_multiplier = median_atr_ratio / current_atr_ratio
+
+            # Cap: floor at base×0.6, ceiling at base×1.3
+            # Note: base is negative, so floor is MORE negative, ceiling is LESS negative
+            floor = base * 1.3    # e.g. -45 × 1.3 = -58.5 (more negative)
+            ceiling = base * 0.6  # e.g. -45 × 0.6 = -27.0 (less negative)
+            current_threshold = max(floor, min(ceiling, base * vol_multiplier))
+
+            # Vol regime classification
+            ratio = current_atr_ratio / median_atr_ratio if median_atr_ratio > 0 else 1.0
+            if ratio > 1.5:
+                vol_regime = 'HIGH'
+            elif ratio < 0.75:
+                vol_regime = 'LOW'
+            else:
+                vol_regime = 'NORMAL'
+
+            return AdaptiveLOIThreshold(
+                asset=asset, asset_class=asset_class,
+                base_threshold=base, current_threshold=round(current_threshold, 1),
+                current_atr_ratio=round(current_atr_ratio, 4),
+                median_atr_ratio=round(median_atr_ratio, 4),
+                vol_multiplier=round(vol_multiplier, 3),
+                vol_regime=vol_regime,
+                is_below_threshold=loi <= current_threshold
+            )
+        except Exception:
+            return AdaptiveLOIThreshold(
+                asset=asset, asset_class=asset_class,
+                base_threshold=base, current_threshold=base,
+                current_atr_ratio=0.0, median_atr_ratio=0.0,
+                vol_multiplier=1.0, vol_regime='NORMAL',
+                is_below_threshold=loi <= base
+            )
+
+
+# ============================================================
+# STAGE CLASSIFICATION — MIXED SUB-CLASSIFICATION + STAGE 1 FIX
+# ============================================================
+
+def classify_mixed_context(vst: float, st: float, lt: float, vlt: float,
+                            neutral_band: float = 5.0) -> str:
+    """Sub-classify MIXED stage into actionable categories.
+
+    MIXED_BULLISH: LT<0, VLT<0, ST>0, VST>0 — Gavin's best entry pattern.
+                   Structural headwind but short-term momentum turning. Prime AB3 watch.
+    MIXED_BEARISH: LT>0, VLT>0, ST<0, VST<0 — Distribution forming. P-BEAR watch.
+    MIXED_CONFUSED: Everything else — no edge, wait.
+    """
+    def s(x):
+        if x >= neutral_band: return 1
+        if x <= -neutral_band: return -1
+        return 0
+
+    sv, ss, sl, svl = s(vst), s(st), s(lt), s(vlt)
+
+    # MIXED_BULLISH: short TFs positive, long TFs negative (best accumulation setup)
+    if sv > 0 and ss > 0 and sl < 0 and svl < 0:
+        return 'MIXED_BULLISH'
+
+    # MIXED_BEARISH: short TFs negative, long TFs positive (distribution setup)
+    if sv < 0 and ss < 0 and sl > 0 and svl > 0:
+        return 'MIXED_BEARISH'
+
+    # Everything else is noise
+    return 'MIXED_CONFUSED'
+
+
+def classify_stage(vst: float, st: float, lt: float, vlt: float,
+                   neutral_band: float = 5.0) -> str:
+    """Classify current market stage from 4-TF SRIBI histogram values.
+
+    Stage taxonomy (from stage-state-framework-v1):
+      S4       — Full bear: all TFs negative
+      S4_to_1  — Bottom formation: LT<0, VLT<0 but VST+ (early recovery signal)
+      S1       — Accumulation: sustained VST+ in bear structure (see promote_stage1)
+      S2       — Markup: all TFs positive
+      S2_to_3  — Partial TF breakdown in bull structure
+      S3_to_4  — Short-term breakdown in bull structure (VST-/ST-)
+      MIXED_BULLISH / MIXED_BEARISH / MIXED_CONFUSED — LT/VLT disagree
+    """
+    def s(x):
+        if x >= neutral_band: return 1
+        if x <= -neutral_band: return -1
+        return 0
+
+    sv, ss, sl, svl = s(vst), s(st), s(lt), s(vlt)
+
+    if sl < 0 and svl < 0:
+        # HEADWIND context
+        if sv > 0 and ss > 0:
+            return 'S4_to_1'   # Both short TFs positive — bottom formation signal
+        elif sv > 0 or ss > 0:
+            return 'S4_to_1'   # One short TF turning — still counts as S4_to_1
+        return 'S4'            # All negative — full bear
+
+    if sl > 0 and svl > 0:
+        # TAILWIND context
+        if sv < 0 and ss < 0:
+            return 'S3_to_4'   # Both short TFs breaking down
+        elif sv < 0 or ss < 0:
+            return 'S2_to_3'   # Partial breakdown — distribution warning
+        return 'S2'            # All positive — full bull
+
+    # LT and VLT disagree → MIXED
+    return classify_mixed_context(vst, st, lt, vlt, neutral_band)
+
+
+def promote_stage1(df: pd.DataFrame, current_stage: str,
+                   neutral_band: float = 5.0, min_bars: int = 5) -> str:
+    """Promote S4_to_1 to S1 if VST has been positive for >= min_bars consecutive bars.
+
+    Stage 1 = genuine accumulation: short-term momentum sustained while
+    structural (LT/VLT) remains negative. S4_to_1 is the initial signal;
+    S1 is the confirmed state after the VST bounce sustains.
+    """
+    if current_stage != 'S4_to_1':
+        return current_stage
+
+    if 'VST SRI Bias Histogram' not in df.columns:
+        return current_stage
+
+    vst_series = df['VST SRI Bias Histogram'].tail(min_bars + 2)
+    consecutive_positive = 0
+    for val in reversed(vst_series.values):
+        if pd.isna(val):
+            break
+        if val >= neutral_band:
+            consecutive_positive += 1
+        else:
+            break
+
+    if consecutive_positive >= min_bars:
+        return 'S1'
+    return current_stage
+
+
 # ═══════════════════════════════════════════════════════════════
 # UPDATED ORCHESTRATOR
 # ═══════════════════════════════════════════════════════════════
@@ -1947,12 +2592,16 @@ class SRIEngineV2:
     OBS_MIN_BARS = 500
     
     def __init__(self):
-        self.regime_engine = RegimeEngine(self.DATA_DIR)
-        self.pc_val_engine = PCValEngine()
+        self.regime_engine  = RegimeEngine(self.DATA_DIR)
+        self.howell_engine  = HowellPhaseEngine(self.DATA_DIR)
+        self.pc_val_engine  = PCValEngine()
         self.allocation_engine = AllocationEngine()
         self._dfs: Dict[str, pd.DataFrame] = {}
         self._ab3_machines: Dict[str, AB3StateMachine] = {}
         self._ab1_engines: Dict[str, AB1PreBreakoutEngine] = {}
+        self._pbear_engines: Dict[str, 'PBearEngine'] = {}
+        self._defensive_engine = None   # initialised post-class-definitions
+        self._expr3_engine     = None   # initialised post-class-definitions
     
     def _load_asset(self, asset: str, prefix: str) -> Optional[pd.DataFrame]:
         if asset in self._dfs:
@@ -1962,7 +2611,18 @@ class SRIEngineV2:
         if not matches:
             return None
         try:
-            df = pd.read_csv(matches[-1])
+            # Prefer the file with the most columns (v2 102-col files have bearish indicators).
+            # When multiple files match (e.g. old 71-col + new 102-col), pick richest.
+            best = matches[-1]
+            if len(matches) > 1:
+                col_counts = {}
+                for m in matches:
+                    try:
+                        col_counts[m] = len(pd.read_csv(m, nrows=0).columns)
+                    except:
+                        col_counts[m] = 0
+                best = max(col_counts, key=col_counts.get)
+            df = pd.read_csv(best)
             df['date'] = pd.to_datetime(df['time'], unit='s')
             self._dfs[asset] = df
             return df
@@ -1990,7 +2650,11 @@ class SRIEngineV2:
             except Exception:
                 pass
         return self.regime_engine.compute(gli_state=gli_state)
-    
+
+    def run_howell(self, prev_phase: Optional[str] = None) -> HowellPhaseState:
+        """Run Layer 0.5 — Howell Phase Engine from sector ETF SRI states."""
+        return self.howell_engine.compute(prev_phase=prev_phase)
+
     def run_ab1(self, regime: RegimeState = None) -> Dict[str, List[Signal]]:
         """Run AB1 pre-breakout scan on all assets"""
         results = {}
@@ -2032,12 +2696,27 @@ class SRIEngineV2:
                 continue
             results[asset] = machine.scan(df)
         return results
-    
+
+    def run_pbear(self) -> Dict[str, 'PBearSignal']:
+        """Layer 2 — P-BEAR bearish top detection for all trading assets."""
+        results: Dict[str, 'PBearSignal'] = {}
+        for asset, (prefix, mode) in self.TRADING_ASSETS.items():
+            if asset in self.OBS_ASSETS:
+                continue
+            df = self._dfs.get(asset)
+            if df is None or len(df) == 0:
+                continue
+            if asset not in self._pbear_engines:
+                self._pbear_engines[asset] = PBearEngine(asset)
+            results[asset] = self._pbear_engines[asset].compute(df)
+        return results
+
     def run_ab2(self, regime: RegimeState = None,
-                gli_state=None) -> Dict[str, Any]:
+                gli_state=None, pbear_sigs: Dict = None) -> Dict[str, Any]:
         """
         Run AB2 PMCC gate scan on all assets (Framework v3.0).
         GLI state (Layer 0) adjusts the DELTA_MGMT LOI threshold per asset.
+        pbear_sigs (Layer 2) fast-gates AB2 on assets with FORMING+ P-BEAR state.
         Returns per-asset gate state + income window summary.
         """
         results = {}
@@ -2045,18 +2724,25 @@ class SRIEngineV2:
         pmcc    = AB2PMCCEngine()
 
         # Extract GLI inputs for threshold adjustment
-        gli_z  = getattr(gli_state, 'z_score', 0.0) or 0.0
-        gegi   = getattr(gli_state, 'gegi',    0.0) or 0.0
+        # gli_state.gegi is a GEGIState object — extract scalar composite value
+        gli_z  = float(getattr(gli_state, 'z_score',  0.0) or 0.0)
+        _gegi  = getattr(gli_state, 'gegi', None)
+        gegi   = float(_gegi.composite if hasattr(_gegi, 'composite') else (_gegi or 0.0))
 
         for asset in self.TRADING_ASSETS:
             df = self._dfs.get(asset)
             if df is None or len(df) == 0:
                 continue
+            # Extract P-BEAR fast-gate flag for this asset
+            pbear_forming_sig = (pbear_sigs or {}).get(asset, None)
+            pbear_flag = pbear_forming_sig.ab2_fast_gate if pbear_forming_sig else False
+
             signals = pmcc.scan(df, asset,
                                 regime_score=reg.composite_score,
-                                gli_z=gli_z, gegi=gegi)
+                                gli_z=gli_z, gegi=gegi, pbear_forming=pbear_flag)
             windows = pmcc.income_windows(signals)
-            current = pmcc.current_signal(df, asset, gli_z=gli_z, gegi=gegi)
+            current = pmcc.current_signal(df, asset, gli_z=gli_z, gegi=gegi,
+                                          pbear_forming=pbear_flag)
             results[asset] = {
                 'current': current,
                 'windows': windows,
@@ -2081,10 +2767,62 @@ class SRIEngineV2:
             except Exception as e:
                 print(f"  [Layer 0] GLI engine error: {e}")
 
+        # Layer 0.5: Howell Phase Engine
+        howell_state = None
+        try:
+            howell_state = self.howell_engine.compute()
+            if verbose:
+                emoji = howell_state.emoji
+                conf  = howell_state.confidence
+                scores = " | ".join(f"{p}:{v:+.0f}" for p, v in howell_state.phase_scores.items())
+                print(f"  [Layer 0.5] Howell Phase: {emoji} {howell_state.phase}  conf={conf:.0f}%  [{scores}]")
+        except Exception as e:
+            print(f"  [Layer 0.5] Howell engine error: {e}")
+
         # Layer 1: Regime Engine (with GLI adjustment)
         reg = self.regime_engine.compute(gli_state=gli_state)
         ab1_sigs = self.run_ab1(reg)
-        ab2_sigs = self.run_ab2(reg, gli_state=gli_state)
+
+        # Layer 2a: P-BEAR bearish top detection (must run before AB2 for fast-gate wiring)
+        pbear_sigs = self.run_pbear()
+
+        # Layer 2b: Portfolio defensive posture (cross-asset P-BEAR synthesis)
+        if self._defensive_engine is None:
+            self._defensive_engine = DefensivePostureEngine()
+        defensive_state = self._defensive_engine.compute(pbear_sigs)
+
+        # Layer 2c: Expression 3 trigger monitoring
+        if self._expr3_engine is None:
+            self._expr3_engine = Expression3Engine()
+        mstr_pbear = pbear_sigs.get('MSTR')
+        btc_df     = self.regime_engine._cache.get('BTC') if hasattr(self.regime_engine, '_cache') else None
+        if btc_df is None:
+            try:
+                btc_df = self.regime_engine._load('BTC')
+            except Exception:
+                pass
+        mnav = 0.0
+        try:
+            if btc_df is not None and len(btc_df) > 0:
+                btc_price  = float(btc_df.iloc[-1]['close'])
+                mstr_price = float(self._dfs['MSTR'].iloc[-1]['close']) if 'MSTR' in self._dfs else 0
+                if mstr_price > 0 and btc_price > 0:
+                    mstr_mc = mstr_price * 333_750_000
+                    btc_nav = 717_130 * btc_price
+                    mnav    = round(mstr_mc / btc_nav, 3)
+        except Exception:
+            pass
+        expr3_state = self._expr3_engine.compute(mnav, mstr_pbear, howell_state, btc_df)
+
+        if verbose and defensive_state:
+            dp = defensive_state
+            print(f"  [Layer 2b] Portfolio Posture: {dp.emoji} {dp.posture.name}  [{dp.rationale}]")
+            e3 = expr3_state
+            if e3 and e3.level != 'INACTIVE':
+                print(f"  [Layer 2c] Expression 3: {e3.emoji} {e3.level} ({e3.conditions_met}/4 conditions) mNAV={e3.mnav:.2f}x")
+
+        # AB2 with P-BEAR fast-gate wired in
+        ab2_sigs = self.run_ab2(reg, gli_state=gli_state, pbear_sigs=pbear_sigs)
         ab3_sigs = self.run_ab3()
         
         # Current state summary
@@ -2101,7 +2839,21 @@ class SRIEngineV2:
             )
             loi_arr = self._ab1_engines[asset]._compute_loi_series(df) if asset in self._ab1_engines else []
             loi_now = loi_arr[-1] if loi_arr else 0
-            
+
+            # R1: vol-adaptive LOI threshold
+            _ac_map = {
+                'MSTR': 'MOMENTUM', 'TSLA': 'MOMENTUM',
+                'IBIT': 'BTC_CORRELATED',
+                'SPY': 'MR', 'QQQ': 'MR', 'IWM': 'MR',
+                'GLD': 'TRENDING', 'PURR': 'BTC_CORRELATED',
+            }
+            _asset_class = _ac_map.get(asset, 'MR')
+            _adaptive_threshold = AdaptiveLOIEngine().compute(df, asset, _asset_class, loi_now)
+
+            # R2 + R3: stage classification with MIXED sub-classification and S1 promotion
+            _stage_raw = classify_stage(sribi.vst, sribi.st, sribi.lt, sribi.vlt)
+            _stage = promote_stage1(df, _stage_raw)
+
             current_state[asset] = {
                 "price": float(last['close']),
                 "date": last['date'].strftime('%Y-%m-%d') if hasattr(last['date'], 'strftime') else str(last['date']),
@@ -2109,6 +2861,12 @@ class SRIEngineV2:
                 "context": sribi.context.value,
                 "loi": loi_now,
                 "mode": self.TRADING_ASSETS[asset][1].value,
+                "stage": _stage,
+                "adaptive_threshold": _adaptive_threshold,
+                "pbear_state":   pbear_sigs.get(asset).state.name if pbear_sigs.get(asset) else "INACTIVE",
+                "pbear_emoji":   pbear_sigs.get(asset).emoji if pbear_sigs.get(asset) else '⚪',
+                "pbear_signals": pbear_sigs.get(asset).signals_fired() if pbear_sigs.get(asset) else [],
+                "ab2_fast_gate": pbear_sigs.get(asset).ab2_fast_gate if pbear_sigs.get(asset) else False,
             }
         
         # Open AB3 positions (last signal type)
@@ -2121,11 +2879,15 @@ class SRIEngineV2:
             self._print_report(reg, current_state, ab1_sigs, ab2_sigs, ab3_sigs, ab3_last)
         
         return {
-            "regime": reg,
-            "current_state": current_state,
-            "ab1_signals": ab1_sigs,
-            "ab2_signals": ab2_sigs,
-            "ab3_signals": ab3_sigs,
+            "regime":            reg,
+            "howell":            howell_state,
+            "current_state":     current_state,
+            "ab1_signals":       ab1_sigs,
+            "ab2_signals":       ab2_sigs,
+            "ab3_signals":       ab3_sigs,
+            "pbear_signals":     pbear_sigs,
+            "defensive_posture": defensive_state,
+            "expression3":       expr3_state,
         }
     
     def _print_report(self, reg, current_state, ab1_sigs, ab2_sigs, ab3_sigs, ab3_last):
@@ -2164,6 +2926,13 @@ class SRIEngineV2:
             print(f"  {asset:<6} ${s['price']:>8.2f} {s['date']:>12} "
                   f"{sr['vst']:>+5.0f} {sr['st']:>+5.0f} {sr['lt']:>+5.0f} {sr['vlt']:>+5.0f} "
                   f"{loi_str:>7} {s['context']}")
+            # R1+R2+R3: stage, adaptive threshold
+            thresh = s.get('adaptive_threshold')
+            stage  = s.get('stage', '?')
+            if thresh is not None:
+                print(f"  {'':6} Stage: {stage:<16} | LOI: {s['loi']:+.1f} | "
+                      f"Adaptive Thresh: {thresh.current_threshold:.1f} ({thresh.vol_regime}) | "
+                      f"Thresh met: {thresh.is_below_threshold}")
         
         # AB1 signals (last 2 per asset)
         print(f"\n  AB1 PRE-BREAKOUT SIGNALS")
@@ -2400,8 +3169,8 @@ class AB2EngineV2:
 class PMCCGateState(Enum):
     NO_POSITION = "NO_POSITION"  # No AB3 LEAP to write against
     NO_CALLS    = "NO_CALLS"     # LOI < -20: accumulation — preserve upside
-    OTM_INCOME  = "OTM_INCOME"   # LOI -20 to +20: standard income mode, δ ≤ 0.25
-    DELTA_MGMT  = "DELTA_MGMT"   # LOI > +20 + CT ≥ 3: trim via calls, δ ≤ 0.40
+    OTM_INCOME  = "OTM_INCOME"   # LOI -20 to thresh: standard income mode, δ ≤ 0.25
+    DELTA_MGMT  = "DELTA_MGMT"   # LOI ≥ thresh + CT ≥ 3: trim via calls, δ ≤ 0.40
     PAUSED_AB1  = "PAUSED_AB1"   # AB1 breakout active: don't cap the move
 
 
@@ -2415,20 +3184,26 @@ class AB2PMCCEngine:
     AB2  →  short calls <90 DTE sold against AB3 LEAPs (income overlay)
 
     Gate states (LOI + CT tier → max short call delta):
-      NO_CALLS   : LOI < -20                  → δ = 0.00  (accumulation — preserve upside)
-      OTM_INCOME : LOI -20 to +20             → δ ≤ 0.25  (income mode)
-      DELTA_MGMT : LOI > +20  AND  CT ≥ 3    → δ ≤ 0.40  (trim exposure via calls)
-      PAUSED_AB1 : AB1 signal active          → δ = 0.00  (don't cap the breakout)
+      NO_CALLS   : LOI < -20                       → δ = 0.00  (accumulation — preserve upside)
+      OTM_INCOME : LOI -20 to thresh               → δ ≤ 0.25  (income mode)
+      DELTA_MGMT : LOI ≥ thresh  AND  CT ≥ 3      → δ ≤ 0.40  (trim exposure via calls)
+      PAUSED_AB1 : AB1 signal active               → δ = 0.00  (don't cap the breakout)
+
+    DELTA_MGMT threshold (approved 2026-03-02, Gavin):
+      Momentum assets (MSTR, TSLA, IBIT) : base = +40  (avoid capping momentum runs)
+      MR assets (SPY, QQQ, GLD, IWM)     : base = +20  (mean-reversion — earlier reduction fine)
+      GLI Z > +0.5 or GEGI > 1.0         : min(base + 20, 40)  — liquidity-driven, cap at 40
+      GLI Z < -0.5                        : max(base - 10, 10)  — contraction, reduce earlier
 
     Upside protection (OTM_INCOME): never sell calls within 20% of spot.
     Income target: 2–5%/month of LEAP cost basis (cycle average, not monthly floor).
     IBIT re-enabled — prior restriction was specific to Bull Put Spreads.
     """
 
+    MOMENTUM_ASSETS    = frozenset({'MSTR', 'TSLA', 'IBIT'})  # High-momentum: delay DELTA_MGMT
     LOI_NO_CALL_FLOOR  = -20.0  # Below: no calls (accumulation — preserve upside)
-    LOI_TRIM_BASE      = +20.0  # Default DELTA_MGMT threshold (GLI-adjusted at runtime)
-    LOI_TRIM_BULL      = +40.0  # GLI bullish (Z>0.5 or GEGI>1.0): delay delta reduction
-    LOI_TRIM_BEAR      = +10.0  # GLI bearish (Z<-0.5): start reducing exposure earlier
+    LOI_TRIM_BASE_MR   = +20.0  # MR assets: standard DELTA_MGMT threshold
+    LOI_TRIM_BASE_TR   = +40.0  # Momentum assets: raised base — avoid capping big runs
     CT_DELTA_MGMT_MIN  =  3     # CT tier required to enter DELTA_MGMT
 
     DELTA_LIMITS: Dict[PMCCGateState, float] = {
@@ -2473,52 +3248,71 @@ class AB2PMCCEngine:
 
     # ── gate logic ─────────────────────────────────────────────────
 
-    def _trim_threshold(self, gli_z: float = 0.0, gegi: float = 0.0) -> float:
+    def _trim_threshold(self, asset: str = '', gli_z: float = 0.0, gegi: float = 0.0) -> float:
         """
-        GLI-adjusted DELTA_MGMT threshold.
+        Asset-class + GLI-adjusted DELTA_MGMT threshold.
 
-        Insight (Gavin, 2026-03-02): monster bull runs on Momentum assets are
-        driven by optimal liquidity conditions. When GLI is in expansion, the
-        cycle likely has more to run — delay delta reduction to avoid capping it.
-        When GLI is contracting, start reducing exposure earlier.
+        Approved 2026-03-02 (Gavin): Momentum assets (MSTR, TSLA, IBIT) use a
+        higher base threshold (+40) to avoid capping monster momentum runs — e.g.
+        MSTR rallied 152% during the Sep'24–Jan'25 cycle while LOI was in the
+        +20 to +60 range. MR assets use the original +20 base (shallower moves,
+        earlier delta reduction is appropriate).
 
-          GLI Z > +0.5  OR  GEGI > 1.0  →  +40  (delay — liquidity-driven run)
-          -0.5 ≤ GLI Z ≤ +0.5           →  +20  (base — neutral liquidity)
-          GLI Z < -0.5                  →  +10  (earlier reduction — contraction)
+        GLI layer then adjusts on top of the asset-class base:
+          GLI Z > +0.5 or GEGI > 1.0  →  min(base + 20, 40)  liquidity-driven, cap at 40
+          -0.5 ≤ GLI Z ≤ +0.5         →  base                 neutral — no adjustment
+          GLI Z < -0.5                 →  max(base - 10, 10)  contraction — reduce earlier
+
+        Asset class base:
+          Momentum (MSTR/TSLA/IBIT)  →  +40
+          MR (SPY/QQQ/GLD/IWM)       →  +20
         """
+        is_momentum = asset.upper() in self.MOMENTUM_ASSETS
+        base = self.LOI_TRIM_BASE_TR if is_momentum else self.LOI_TRIM_BASE_MR
         if gli_z > 0.5 or gegi > 1.0:
-            return self.LOI_TRIM_BULL   # +40 — don't cap a liquidity-driven rally
+            return min(base + 20.0, 40.0)   # cap at 40 — Momentum already there; MR hits 40
         if gli_z < -0.5:
-            return self.LOI_TRIM_BEAR   # +10 — reduce early in contraction
-        return self.LOI_TRIM_BASE       # +20 — default
+            return max(base - 10.0, 10.0)   # floor at 10 — Momentum=30, MR=10
+        return base                          # neutral: Momentum=40, MR=20
 
     def gate_state(self, loi: float, ct_tier: int,
                    ab1_active: bool = False,
                    has_position: bool = True,
+                   asset: str = '',
                    gli_z: float = 0.0,
-                   gegi: float = 0.0) -> PMCCGateState:
+                   gegi: float = 0.0,
+                   pbear_forming: bool = False) -> PMCCGateState:
         if not has_position:
             return PMCCGateState.NO_POSITION
         if ab1_active:
             return PMCCGateState.PAUSED_AB1
+        if pbear_forming:
+            return PMCCGateState.NO_CALLS  # P-BEAR fast-gate: distribution top forming
         if loi < self.LOI_NO_CALL_FLOOR:
             return PMCCGateState.NO_CALLS
-        trim_thresh = self._trim_threshold(gli_z, gegi)
+        trim_thresh = self._trim_threshold(asset, gli_z, gegi)
         if loi >= trim_thresh and ct_tier >= self.CT_DELTA_MGMT_MIN:
             return PMCCGateState.DELTA_MGMT
         return PMCCGateState.OTM_INCOME
 
     def _rationale(self, state: PMCCGateState, loi: float, ct_tier: int,
-                   gli_z: float = 0.0, gegi: float = 0.0) -> str:
+                   asset: str = '', gli_z: float = 0.0, gegi: float = 0.0,
+                   pbear_forming: bool = False) -> str:
         d      = self.DELTA_LIMITS[state]
-        thresh = self._trim_threshold(gli_z, gegi)
+        thresh = self._trim_threshold(asset, gli_z, gegi)
+        is_momentum = asset.upper() in self.MOMENTUM_ASSETS
+        asset_tag = f" [{asset.upper()} Momentum base=40]" if is_momentum else ""
         gli_tag = (f" [GLI Z={gli_z:+.2f}, GEGI={gegi:.2f} → thresh={thresh:.0f}]"
                    if gli_z != 0.0 or gegi != 0.0 else "")
         return {
             PMCCGateState.NO_POSITION: "No AB3 LEAP — nothing to write against",
-            PMCCGateState.NO_CALLS:    f"LOI {loi:.1f} < {self.LOI_NO_CALL_FLOOR:.0f} — accumulation, preserve upside",
-            PMCCGateState.OTM_INCOME:  f"LOI {loi:.1f} in neutral zone, CT{ct_tier} — OTM calls δ≤{d}{gli_tag}",
-            PMCCGateState.DELTA_MGMT:  f"LOI {loi:.1f} ≥ {thresh:.0f} (GLI-adj), CT{ct_tier} — delta reduction δ≤{d}{gli_tag}",
+            PMCCGateState.NO_CALLS: (
+                f"P-BEAR fast-gate: distribution forming ({asset})"
+                if pbear_forming
+                else f"LOI {loi:.1f} < {self.LOI_NO_CALL_FLOOR:.0f} — accumulation, preserve upside"
+            ),
+            PMCCGateState.OTM_INCOME:  f"LOI {loi:.1f} in neutral zone, CT{ct_tier} — OTM calls δ≤{d}{asset_tag}{gli_tag}",
+            PMCCGateState.DELTA_MGMT:  f"LOI {loi:.1f} ≥ {thresh:.0f} (asset+GLI adj), CT{ct_tier} — delta reduction δ≤{d}{asset_tag}{gli_tag}",
             PMCCGateState.PAUSED_AB1:  "AB1 breakout active — call selling paused",
         }.get(state, "")
 
@@ -2527,57 +3321,101 @@ class AB2PMCCEngine:
     def scan(self, df: pd.DataFrame, asset: str,
              regime_score: int = 0,
              gli_z: float = 0.0,
-             gegi: float = 0.0) -> List[Dict]:
+             gegi: float = 0.0,
+             pbear_forming: bool = False) -> List[Dict]:
         """
         Per-bar PMCC gate state across the full history.
         gli_z / gegi adjust the DELTA_MGMT LOI threshold (Layer 0 integration).
+        pbear_forming applies the P-BEAR fast-gate on the most recent bar only.
         Returns list of signal dicts (one per bar).
         """
         df = df.copy().reset_index(drop=True)
         if 'date' not in df.columns:
             df['date'] = pd.to_datetime(df['time'], unit='s')
 
+        # Add SRIBI ROC derivative columns (mirrors Pine SRIBI_VST/ST/LT/VLT wave lines)
+        df = add_sribi_roc_columns(df)
+
         signals    = []
         prev_state: Optional[PMCCGateState] = None
-        trim_thresh = self._trim_threshold(gli_z, gegi)
+        trim_thresh = self._trim_threshold(asset, gli_z, gegi)
+        last_idx    = len(df) - 1
 
         for i, row in df.iterrows():
             loi_val    = self._get_loi(row)
             ct_tier    = self._get_ct_tier(row)
             ab1_active = self._check_ab1_active(row)
             price      = float(row['close'])
+            # Apply pbear_forming fast-gate only on the most recent bar
+            bar_pbear  = pbear_forming if i == last_idx else False
             state      = self.gate_state(loi_val, ct_tier, ab1_active,
-                                         gli_z=gli_z, gegi=gegi)
+                                         asset=asset, gli_z=gli_z, gegi=gegi,
+                                         pbear_forming=bar_pbear)
+
+            # ROC values + state labels
+            lt_roc  = float(row.get('lt_roc',  0) or 0)
+            st_roc  = float(row.get('st_roc',  0) or 0)
+            vst_roc = float(row.get('vst_roc', 0) or 0)
+            vlt_roc = float(row.get('vlt_roc', 0) or 0)
+            lt_sribi  = float(row.get('LT SRI Bias Histogram',  0) or 0)
+            st_sribi  = float(row.get('ST SRI Bias Histogram',  0) or 0)
+            vst_sribi = float(row.get('VST SRI Bias Histogram', 0) or 0)
+            vlt_sribi = float(row.get('VLT SRI Bias Histogram', 0) or 0)
+
             signals.append({
-                'bar':           i,
-                'date':          row['date'],
-                'price':         price,
-                'loi':           loi_val,
-                'ct_tier':       ct_tier,
-                'context':       self._context(row),
-                'gate_state':    state.value,
-                'max_delta':     self.DELTA_LIMITS[state],
+                'bar':            i,
+                'date':           row['date'],
+                'price':          price,
+                'loi':            loi_val,
+                'ct_tier':        ct_tier,
+                'context':        self._context(row),
+                'gate_state':     state.value,
+                'max_delta':      self.DELTA_LIMITS[state],
                 'trim_threshold': trim_thresh,
-                'gli_z':         gli_z,
-                'gegi':          gegi,
-                'rationale':     self._rationale(state, loi_val, ct_tier, gli_z, gegi),
-                'state_changed': state != prev_state,
-                'ab1_active':    ab1_active,
+                'asset_class':    'Momentum' if asset.upper() in self.MOMENTUM_ASSETS else 'MR',
+                'gli_z':          gli_z,
+                'gegi':           gegi,
+                'rationale':      self._rationale(state, loi_val, ct_tier, asset, gli_z, gegi, bar_pbear),
+                'state_changed':  state != prev_state,
+                'ab1_active':     ab1_active,
+                # ROC derivative (mirrors Pine SRIBI indicator wave lines)
+                'lt_roc':         lt_roc,
+                'st_roc':         st_roc,
+                'vst_roc':        vst_roc,
+                'vlt_roc':        vlt_roc,
+                'lt_roc_state':   roc_state_label(lt_roc,  lt_sribi),
+                'st_roc_state':   roc_state_label(st_roc,  st_sribi),
+                'vst_roc_state':  roc_state_label(vst_roc, vst_sribi),
+                'vlt_roc_state':  roc_state_label(vlt_roc, vlt_sribi),
             })
             prev_state = state
 
         return signals
 
     def current_signal(self, df: pd.DataFrame, asset: str,
-                       gli_z: float = 0.0, gegi: float = 0.0) -> Dict:
-        """Gate state for the most recent bar (GLI-adjusted)."""
+                       gli_z: float = 0.0, gegi: float = 0.0,
+                       pbear_forming: bool = False) -> Dict:
+        """Gate state for the most recent bar (asset-class + GLI-adjusted, with ROC)."""
         if len(df) < 1:
             return {'gate_state': PMCCGateState.NO_POSITION.value, 'max_delta': 0.0}
+        # Enrich with ROC columns before reading last bar
+        df = add_sribi_roc_columns(df.copy())
         row     = df.iloc[-1]
         loi_val = self._get_loi(row)
         ct_tier = self._get_ct_tier(row)
         ab1_act = self._check_ab1_active(row)
-        state   = self.gate_state(loi_val, ct_tier, ab1_act, gli_z=gli_z, gegi=gegi)
+        state   = self.gate_state(loi_val, ct_tier, ab1_act, asset=asset, gli_z=gli_z, gegi=gegi,
+                                  pbear_forming=pbear_forming)
+
+        lt_roc   = float(row.get('lt_roc',  0) or 0)
+        st_roc   = float(row.get('st_roc',  0) or 0)
+        vst_roc  = float(row.get('vst_roc', 0) or 0)
+        vlt_roc  = float(row.get('vlt_roc', 0) or 0)
+        lt_sribi = float(row.get('LT SRI Bias Histogram',  0) or 0)
+        st_sribi = float(row.get('ST SRI Bias Histogram',  0) or 0)
+        vst_sribi= float(row.get('VST SRI Bias Histogram', 0) or 0)
+        vlt_sribi= float(row.get('VLT SRI Bias Histogram', 0) or 0)
+
         return {
             'asset':          asset,
             'gate_state':     state.value,
@@ -2587,10 +3425,20 @@ class AB2PMCCEngine:
             'context':        self._context(row),
             'price':          float(row['close']),
             'ab1_active':     ab1_act,
-            'trim_threshold': self._trim_threshold(gli_z, gegi),
+            'asset_class':    'Momentum' if asset.upper() in self.MOMENTUM_ASSETS else 'MR',
+            'trim_threshold': self._trim_threshold(asset, gli_z, gegi),
             'gli_z':          gli_z,
             'gegi':           gegi,
-            'rationale':      self._rationale(state, loi_val, ct_tier, gli_z, gegi),
+            'rationale':      self._rationale(state, loi_val, ct_tier, asset, gli_z, gegi, pbear_forming),
+            # ROC derivative (mirrors Pine SRIBI indicator wave lines)
+            'lt_roc':         lt_roc,
+            'st_roc':         st_roc,
+            'vst_roc':        vst_roc,
+            'vlt_roc':        vlt_roc,
+            'lt_roc_state':   roc_state_label(lt_roc,  lt_sribi),
+            'st_roc_state':   roc_state_label(st_roc,  st_sribi),
+            'vst_roc_state':  roc_state_label(vst_roc, vst_sribi),
+            'vlt_roc_state':  roc_state_label(vlt_roc, vlt_sribi),
         }
 
     # ── window summary ─────────────────────────────────────────────
@@ -2643,3 +3491,723 @@ class AB2PMCCEngine:
             'status':        'OPEN' if open_ended else 'CLOSED',
         })
         return w
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# P-BEAR SIGNAL LAYER — Phase 1
+# Bearish top detection for distribution → markdown transitions.
+# Asset-class-specific confirmation ladders derived from Track B empirical analysis.
+# ═════════════════════════════════════════════════════════════════════════════
+
+class PBearState(Enum):
+    """
+    Bearish signal ladder states.
+    INACTIVE     : LOI below watch threshold; no bearish monitoring
+    WATCH        : LOI entered elevated zone; divergence monitoring active
+    FORMING      : Primary bearish signal fires (per asset class)
+    FORMING_PLUS : Secondary signal also confirms
+    CONFIRMED    : Dual-timeframe confirmation + LOI rolling; AB2 pause recommended
+    CONFIRMED_PLUS: Tertiary confirmation (strongest; use for hedge entry)
+    INVALIDATED  : Bearish thesis invalidated; monitoring resets
+    """
+    INACTIVE       = 0
+    WATCH          = 1
+    FORMING        = 2
+    FORMING_PLUS   = 3
+    CONFIRMED      = 4
+    CONFIRMED_PLUS = 5
+    INVALIDATED    = 6
+
+
+@dataclass
+class PBearSignal:
+    """P-BEAR state snapshot for a single asset at a single point in time."""
+    asset:           str
+    state:           PBearState
+    asset_class:     str          # MOMENTUM / BTC_CORRELATED / MR / TRENDING
+    loi:             float
+    watch_threshold: float
+
+    # Individual signal flags
+    macd_neg:        bool = False   # MACD histogram < 0
+    rsi4h_div:       bool = False   # RSI 4H bearish divergence
+    rsid_div:        bool = False   # RSI Daily bearish divergence
+    obv_div:         bool = False   # OBV bearish divergence
+    loi_rolling:     bool = False   # LOI rolled over from recent peak
+    st_bear:         bool = False   # Supertrend flipped BEAR
+    st_ob:           bool = False   # Weekly StochRSI overbought (%K > 80 or early turn)
+
+    # Context values
+    price:           float = 0.0
+    rsi_4h:          float = 0.0
+    rsi_daily:       float = 0.0
+    macd_hist:       float = 0.0
+
+    @property
+    def ab2_fast_gate(self) -> bool:
+        """True if call-selling should be paused immediately (FORMING or above)."""
+        return self.state.value >= PBearState.FORMING.value
+
+    @property
+    def emoji(self) -> str:
+        return {
+            PBearState.INACTIVE:       '⚪',
+            PBearState.WATCH:          '👁',
+            PBearState.FORMING:        '🟡',
+            PBearState.FORMING_PLUS:   '🟠',
+            PBearState.CONFIRMED:      '🔴',
+            PBearState.CONFIRMED_PLUS: '🚨',
+            PBearState.INVALIDATED:    '✅',
+        }.get(self.state, '⚪')
+
+    @property
+    def label(self) -> str:
+        return self.state.name.replace('_', ' ')
+
+    def signals_fired(self) -> List[str]:
+        fired = []
+        if self.macd_neg:     fired.append('MACD<0')
+        if self.rsi4h_div:    fired.append('RSI4H_DIV')
+        if self.rsid_div:     fired.append('RSI_D_DIV')
+        if self.obv_div:      fired.append('OBV_DIV')
+        if self.loi_rolling:  fired.append('LOI_ROLL')
+        if self.st_bear:      fired.append('ST_BEAR')
+        if self.st_ob:        fired.append('STOCH_OB')
+        return fired
+
+    def bearish_trade_spec(self) -> Optional[Dict]:
+        """
+        Returns a directional bearish trade specification when P-BEAR >= CONFIRMED.
+        Returns None if conditions not met (INACTIVE/WATCH/FORMING/FORMING_PLUS).
+
+        Entry only at CONFIRMED or above — FORMING is too early (whipsaw risk).
+        Max notional: 5% of portfolio per position.
+        IV gate applied at execution time: >70th pctl = prefer spreads; <30th = prefer long puts.
+
+        Per-asset-class playbook:
+          MOMENTUM (MSTR/TSLA):  Expression 3 for MSTR; put spread 45-60 DTE for TSLA
+          BTC_CORRELATED (IBIT): Long put LEAP 90-120 DTE (AB1-style, bearish direction)
+          MR (SPY/QQQ/IWM):      Debit put spread 45-60 DTE, OTM 5-10%
+          TRENDING (GLD):        Short-duration puts 30-45 DTE (GLD mean-reverts after tops)
+        """
+        if self.state.value < PBearState.CONFIRMED.value:
+            return None
+
+        # MSTR is handled by Expression 3 separately
+        if self.asset == 'MSTR':
+            return {
+                'asset': 'MSTR',
+                'instrument': 'See Expression 3 (debit put spread + long IBIT)',
+                'duration_dte': '90-120',
+                'structure': 'Expression 3 — mNAV contraction trade',
+                'max_notional_pct': 0.05,
+                'notes': 'Only eligible when mNAV > 2.0x. Currently monitoring.',
+            }
+
+        specs = {
+            'MOMENTUM': {   # TSLA
+                'instrument': 'Debit put spread',
+                'duration_dte': '45-60',
+                'structure': 'ATM / OTM-10% put spread; only if Howell ≠ Turbulence (TSLA blocked in Turb)',
+                'max_notional_pct': 0.05,
+                'notes': 'Confirm Howell gate before entry. TSLA is Cyclical — blocked in Turbulence.',
+            },
+            'BTC_CORRELATED': {  # IBIT
+                'instrument': 'Long put LEAP',
+                'duration_dte': '90-120',
+                'structure': 'OTM 10-15% put; BTC-correlated top confirmed by OBV primary',
+                'max_notional_pct': 0.05,
+                'notes': 'AB1-style sizing. IBIT options less liquid — account for wide spread in premium.',
+            },
+            'MR': {   # SPY, QQQ, IWM
+                'instrument': 'Debit put spread',
+                'duration_dte': '45-60',
+                'structure': 'OTM 5-10% put spread; RSI4H + RSI_D + OBV triple confirmation',
+                'max_notional_pct': 0.05,
+                'notes': 'IV gate: >70th pctl → tighter spread (sell premium); <30th → wider long put.',
+            },
+            'TRENDING': {  # GLD
+                'instrument': 'Short-duration puts',
+                'duration_dte': '30-45',
+                'structure': 'OTM 5-8% puts; GLD mean-reverts after ST flip + OBV + RSI4H confirm',
+                'max_notional_pct': 0.03,   # smaller — GLD bounces faster
+                'notes': 'Enter only on Supertrend flip confirmation. Tighter duration due to mean-reversion.',
+            },
+        }
+
+        spec = specs.get(self.asset_class, specs['MR']).copy()
+        spec['asset'] = self.asset
+        spec['pbear_state'] = self.state.name
+        spec['signals_confirmed'] = self.signals_fired()
+        spec['ab2_fast_gate_active'] = self.ab2_fast_gate
+        return spec
+
+
+class PBearEngine:
+    """
+    P-BEAR Signal Layer — Phase 1.
+
+    Computes the bearish top detection state for a trading asset using
+    per-asset-class confirmation ladders derived from Track B empirical analysis.
+
+    Asset classes and primary signals (Track B findings):
+      MOMENTUM (MSTR, TSLA):
+        WATCH       -> LOI > +40
+        FORMING     -> MACD_hist < 0 AND LOI > +20
+        FORMING+    -> RSI4H divergence confirmed
+        CONFIRMED   -> RSI_Daily divergence + LOI rolling over
+        CONF+       -> OBV divergence (tertiary)
+        INVALIDATION -> MACD_hist > 0 AND price at/near 20-bar high
+
+      BTC_CORRELATED (IBIT):
+        WATCH       -> LOI > +20
+        FORMING     -> OBV divergence (OBV < OBV_SMA20 or OBV < peak OBV)
+        FORMING+    -> RSI4H divergence also fires
+        CONFIRMED   -> RSI_Daily also diverging
+        INVALIDATION -> OBV recovers above SMA20
+
+      MR (SPY, QQQ, IWM):
+        WATCH       -> LOI > +20
+        FORMING     -> RSI4H divergence
+        FORMING+    -> OBV < OBV_SMA20 (volume confirmation)
+        CONFIRMED   -> RSI_Daily divergence also fires
+        INVALIDATION -> RSI4H recovers + price at/near new high
+
+      TRENDING (GLD):
+        WATCH       -> LOI > +20
+        FORMING     -> OBV divergence AND RSI4H divergence simultaneously
+        CONFIRMED   -> Supertrend flips BEAR
+        INVALIDATION -> Supertrend flips back BULL
+
+    Column name mapping (TradingView CSV export — empirically validated 2026-03-03):
+      MTF RSI     = RSI 4H (changes 99.7% of bars — updates every 4H candle)
+      MTF RSI.1   = RSI 1D / Daily (changes <1% of consecutive pairs — updates at daily open;
+                    alternating NaN pattern on in-session bars; always ffill before use)
+      Histogram   = MACD histogram
+      OnBalanceVolume = OBV
+      Up Trend    = Supertrend BULL (notna = BULL active)
+      Down Trend  = Supertrend BEAR (notna = BEAR active)
+      LOI         = LEAP Opportunity Index
+      %K / %D     = Weekly StochRSI (secondary only; long warmup)
+    """
+
+    MOMENTUM_ASSETS    = frozenset({'MSTR', 'TSLA'})
+    BTC_CORRELATED     = frozenset({'IBIT'})
+    MR_ASSETS          = frozenset({'SPY', 'QQQ', 'IWM'})
+    TRENDING_ASSETS    = frozenset({'GLD'})
+
+    WATCH_MOMENTUM     = +40.0   # Momentum: DELTA_MGMT threshold = watch start
+    WATCH_DEFAULT      = +20.0   # All other classes
+
+    DIV_LOOKBACK       = 20      # bars (4H x 20 = ~3.5 trading days)
+    PRICE_NEAR_PEAK    = 0.05    # within 5% of local high = "at the top"
+    RSI_DIV_MIN_GAP    = 2.0     # RSI must be at least 2 pts below peak RSI
+    LOI_ROLL_LOOKBACK  = 5       # bars to check LOI rollover
+
+    def __init__(self, asset: str):
+        self.asset       = asset.upper()
+        self.asset_class = self._classify(self.asset)
+        self.watch_threshold = (
+            self.WATCH_MOMENTUM if self.asset_class == 'MOMENTUM'
+            else self.WATCH_DEFAULT
+        )
+
+    def _classify(self, asset: str) -> str:
+        if asset in self.MOMENTUM_ASSETS:   return 'MOMENTUM'
+        if asset in self.BTC_CORRELATED:    return 'BTC_CORRELATED'
+        if asset in self.MR_ASSETS:         return 'MR'
+        if asset in self.TRENDING_ASSETS:   return 'TRENDING'
+        return 'MR'
+
+    # -- helpers ----------------------------------------------------------------
+
+    @staticmethod
+    def _safe(val, default: float = 0.0) -> float:
+        try:
+            v = float(val)
+            return default if (v != v) else v   # NaN check
+        except Exception:
+            return default
+
+    @staticmethod
+    def _col(df: pd.DataFrame, *names) -> Optional[pd.Series]:
+        for n in names:
+            if n in df.columns:
+                return df[n]
+        return None
+
+    # -- signal detectors -------------------------------------------------------
+
+    def _rsi4h_div(self, df: pd.DataFrame) -> bool:
+        """Bearish RSI4H divergence: price at/near prior local high, RSI below prior peak RSI.
+        Uses MTF RSI = RSI 4H (validated: changes 99.7% of bars on 4H chart)."""
+        try:
+            rsi_s = self._col(df, 'MTF RSI')
+            if rsi_s is None or len(df) < self.DIV_LOOKBACK + 2:
+                return False
+            w       = df.tail(self.DIV_LOOKBACK + 1)
+            prices  = w['close'].values.astype(float)
+            rsis    = pd.Series(rsi_s.tail(self.DIV_LOOKBACK + 1).values).ffill().values.astype(float)
+            cur_p, cur_r = prices[-1], rsis[-1]
+            if cur_p <= 0 or cur_r <= 0:
+                return False
+            prior_p, prior_r = prices[:-1], rsis[:-1]
+            pk = int(np.argmax(prior_p))
+            pk_p, pk_r = prior_p[pk], prior_r[pk]
+            return bool(
+                cur_p >= pk_p * (1 - self.PRICE_NEAR_PEAK) and
+                cur_r < pk_r - self.RSI_DIV_MIN_GAP and
+                pk_r > 0
+            )
+        except Exception:
+            return False
+
+    def _rsid_div(self, df: pd.DataFrame) -> bool:
+        """Bearish RSI Daily divergence.
+        Uses MTF RSI.1 = RSI 1D (validated: alternating NaN, updates at daily open only)."""
+        try:
+            rsi_s = self._col(df, 'MTF RSI.1')
+            if rsi_s is None or len(df) < self.DIV_LOOKBACK + 2:
+                return False
+            w       = df.tail(self.DIV_LOOKBACK + 1)
+            prices  = w['close'].values.astype(float)
+            rsisd   = pd.Series(rsi_s.tail(self.DIV_LOOKBACK + 1).values).ffill().values.astype(float)
+            cur_p, cur_rd = prices[-1], rsisd[-1]
+            if cur_p <= 0 or cur_rd <= 0:
+                return False
+            prior_p, prior_rd = prices[:-1], rsisd[:-1]
+            pk  = int(np.argmax(prior_p))
+            pk_p, pk_rd = prior_p[pk], prior_rd[pk]
+            return bool(
+                cur_p >= pk_p * (1 - self.PRICE_NEAR_PEAK) and
+                cur_rd < pk_rd - self.RSI_DIV_MIN_GAP and
+                pk_rd > 0
+            )
+        except Exception:
+            return False
+
+    def _obv_div(self, df: pd.DataFrame) -> bool:
+        """Bearish OBV divergence: price near local high but OBV below that high's OBV."""
+        try:
+            obv_s = self._col(df, 'OnBalanceVolume')
+            if obv_s is None or len(df) < self.DIV_LOOKBACK + 2:
+                return False
+            w      = df.tail(self.DIV_LOOKBACK + 1)
+            prices = w['close'].values.astype(float)
+            obvs   = obv_s.tail(self.DIV_LOOKBACK + 1).values.astype(float)
+            cur_p, cur_obv = prices[-1], obvs[-1]
+            prior_p, prior_obv = prices[:-1], obvs[:-1]
+            pk = int(np.argmax(prior_p))
+            pk_p, pk_obv = prior_p[pk], prior_obv[pk]
+            near_peak = cur_p >= pk_p * (1 - self.PRICE_NEAR_PEAK)
+            obv_lower = cur_obv < pk_obv * 0.999   # even small divergence counts
+            # also check OBV vs SMA20
+            below_sma20 = False
+            if len(df) >= 20:
+                sma20 = obv_s.tail(20).mean()
+                below_sma20 = bool(cur_obv < sma20)
+            return bool(near_peak and (obv_lower or below_sma20))
+        except Exception:
+            return False
+
+    def _macd_neg(self, df: pd.DataFrame) -> bool:
+        try:
+            col = self._col(df, 'Histogram')
+            return bool(col is not None and self._safe(col.iloc[-1]) < 0)
+        except Exception:
+            return False
+
+    def _loi_rolling(self, df: pd.DataFrame) -> bool:
+        """LOI has rolled over: current LOI below recent peak by at least 2 points."""
+        try:
+            col = self._col(df, 'LOI')
+            if col is None or len(df) < self.LOI_ROLL_LOOKBACK + 1:
+                return False
+            recent = col.tail(self.LOI_ROLL_LOOKBACK + 1).values.astype(float)
+            return bool(recent[-1] < np.nanmax(recent[:-1]) - 2.0)
+        except Exception:
+            return False
+
+    def _st_bear(self, df: pd.DataFrame) -> bool:
+        try:
+            col = self._col(df, 'Down Trend')
+            if col is None:
+                return False
+            v = col.iloc[-1]
+            return bool(v is not None and str(v).strip() not in ('', 'nan', 'NaN'))
+        except Exception:
+            return False
+
+    def _st_bull(self, df: pd.DataFrame) -> bool:
+        try:
+            col = self._col(df, 'Up Trend')
+            if col is None:
+                return False
+            v = col.iloc[-1]
+            return bool(v is not None and str(v).strip() not in ('', 'nan', 'NaN'))
+        except Exception:
+            return False
+
+    def _loi_now(self, df: pd.DataFrame) -> float:
+        try:
+            col = self._col(df, 'LOI')
+            return self._safe(col.iloc[-1]) if col is not None and len(df) > 0 else 0.0
+        except Exception:
+            return 0.0
+
+    def _stoch_overbought(self, df: pd.DataFrame) -> bool:
+        """Weekly StochRSI overbought signal. %K > 80 = overbought. %K > 70 and turning = early."""
+        try:
+            k_col = self._col(df, '%K')
+            d_col = self._col(df, '%D')
+            if k_col is None or len(df) < 3:
+                return False
+            # Use last 3 non-NaN values
+            k_vals = k_col.dropna().tail(3).values.astype(float)
+            if len(k_vals) < 2:
+                return False
+            cur_k = k_vals[-1]
+            prev_k = k_vals[-2]
+            # Overbought: above 80
+            if cur_k > 80:
+                return True
+            # Early turn: above 70, K > D, and K is falling
+            if d_col is not None:
+                d_vals = d_col.dropna().tail(2).values.astype(float)
+                if len(d_vals) >= 1:
+                    cur_d = d_vals[-1]
+                    if cur_k > 70 and cur_k > cur_d and cur_k < prev_k:
+                        return True
+            return False
+        except Exception:
+            return False
+
+    # -- main compute -----------------------------------------------------------
+
+    def compute(self, df: pd.DataFrame) -> PBearSignal:
+        """
+        Compute P-BEAR state for this asset using the last DIV_LOOKBACK bars.
+        Returns a PBearSignal with full state + individual signal flags.
+        """
+        if df is None or len(df) < self.DIV_LOOKBACK:
+            return PBearSignal(
+                asset=self.asset, state=PBearState.INACTIVE,
+                asset_class=self.asset_class, loi=0.0,
+                watch_threshold=self.watch_threshold,
+            )
+
+        last      = df.iloc[-1]
+        loi       = self._loi_now(df)
+        price     = self._safe(last.get('close', 0))
+        _rsi4h_col = self._col(df, 'MTF RSI')       # 4H = MTF RSI (changes every bar)
+        rsi_4h    = self._safe(_rsi4h_col.iloc[-1] if _rsi4h_col is not None else 0.0)
+        _rsid_col  = self._col(df, 'MTF RSI.1')    # Daily = MTF RSI.1 (alternating NaN)
+        rsi_daily = self._safe(_rsid_col.iloc[-1] if _rsid_col is not None else 0.0)
+        _macd_col  = self._col(df, 'Histogram')
+        macd_hist = self._safe(_macd_col.iloc[-1] if _macd_col is not None else 0.0)
+
+        # Compute individual signals
+        macd_neg   = self._macd_neg(df)
+        rsi4h_div  = self._rsi4h_div(df)
+        rsid_div   = self._rsid_div(df)
+        obv_div    = self._obv_div(df)
+        loi_roll   = self._loi_rolling(df)
+        st_bear    = self._st_bear(df)
+        st_bull    = self._st_bull(df)
+        st_ob      = self._stoch_overbought(df)
+
+        sig = PBearSignal(
+            asset=self.asset, asset_class=self.asset_class,
+            loi=loi, watch_threshold=self.watch_threshold,
+            macd_neg=macd_neg, rsi4h_div=rsi4h_div, rsid_div=rsid_div,
+            obv_div=obv_div, loi_rolling=loi_roll, st_bear=st_bear, st_ob=st_ob,
+            price=price, rsi_4h=rsi_4h, rsi_daily=rsi_daily, macd_hist=macd_hist,
+            state=PBearState.INACTIVE,
+        )
+
+        # -- MOMENTUM (MSTR, TSLA) -----------------------------------------------
+        if self.asset_class == 'MOMENTUM':
+            if loi < self.watch_threshold:
+                sig.state = PBearState.INACTIVE
+            else:
+                sig.state = PBearState.WATCH
+                if loi > self.WATCH_DEFAULT and macd_neg:
+                    sig.state = PBearState.FORMING
+                    if rsi4h_div:
+                        sig.state = PBearState.FORMING_PLUS
+                        if rsid_div and loi_roll:
+                            sig.state = PBearState.CONFIRMED
+                            if obv_div:
+                                sig.state = PBearState.CONFIRMED_PLUS
+            # Invalidation: MACD back positive + price at/near 20-bar high
+            if (sig.state.value >= PBearState.FORMING.value
+                    and not macd_neg and not rsi4h_div):
+                price_20h = float(df['close'].tail(20).max()) if 'close' in df.columns else price
+                if price >= price_20h * 0.998:
+                    sig.state = PBearState.INVALIDATED
+
+        # -- BTC_CORRELATED (IBIT) -----------------------------------------------
+        elif self.asset_class == 'BTC_CORRELATED':
+            if loi < self.watch_threshold:
+                sig.state = PBearState.INACTIVE
+            else:
+                sig.state = PBearState.WATCH
+                if obv_div:
+                    sig.state = PBearState.FORMING
+                    if rsi4h_div:
+                        sig.state = PBearState.FORMING_PLUS
+                        if rsid_div:
+                            sig.state = PBearState.CONFIRMED
+            # Invalidation: OBV recovers
+            if sig.state.value >= PBearState.FORMING.value and not obv_div:
+                sig.state = PBearState.INVALIDATED
+
+        # -- MR (SPY, QQQ, IWM) -------------------------------------------------
+        elif self.asset_class == 'MR':
+            if loi < self.watch_threshold:
+                sig.state = PBearState.INACTIVE
+            else:
+                sig.state = PBearState.WATCH
+                if rsi4h_div:
+                    sig.state = PBearState.FORMING
+                    if obv_div:
+                        sig.state = PBearState.FORMING_PLUS
+                        if rsid_div:
+                            sig.state = PBearState.CONFIRMED
+                            if self._stoch_overbought(df):
+                                sig.state = PBearState.CONFIRMED_PLUS
+            # Invalidation: RSI4H recovers + price at/near new high
+            if sig.state.value >= PBearState.FORMING.value and not rsi4h_div:
+                price_20h = float(df['close'].tail(20).max()) if 'close' in df.columns else price
+                if price >= price_20h * 0.998:
+                    sig.state = PBearState.INVALIDATED
+
+        # -- TRENDING (GLD) ------------------------------------------------------
+        elif self.asset_class == 'TRENDING':
+            if loi < self.watch_threshold:
+                sig.state = PBearState.INACTIVE
+            else:
+                sig.state = PBearState.WATCH
+                if obv_div and rsi4h_div:
+                    sig.state = PBearState.FORMING
+                    if st_bear:
+                        sig.state = PBearState.CONFIRMED
+            # Invalidation: Supertrend flips back BULL after CONFIRMED
+            if sig.state.value >= PBearState.CONFIRMED.value and st_bull:
+                sig.state = PBearState.INVALIDATED
+
+        return sig
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# P-BEAR PHASE 2 — PORTFOLIO DEFENSIVE POSTURE
+# Cross-asset synthesis: per-asset P-BEAR signals → portfolio-level posture.
+# ═════════════════════════════════════════════════════════════════════════════
+
+class PortfolioPosture(Enum):
+    """
+    Portfolio-level defensive posture derived from cross-asset P-BEAR state synthesis.
+
+    NORMAL:        No asset in FORMING+ state. Standard allocation rules apply.
+    CAUTIOUS:      1+ asset FORMING. AB2 paused on affected asset(s). No new AB3 in same class.
+    DEFENSIVE:     2+ assets FORMING, OR 1+ asset CONFIRMED. AB4 floor rises to 15%.
+                   No new AB3 entries. Existing AB2 positions under review.
+    MAX_DEFENSIVE: 2+ assets CONFIRMED, OR any CONFIRMED_PLUS. AB4 floor → 20% hard.
+                   Expression 3 entry eligible. Begin reducing AB3 in affected assets.
+    """
+    NORMAL        = 0
+    CAUTIOUS      = 1
+    DEFENSIVE     = 2
+    MAX_DEFENSIVE = 3
+
+
+@dataclass
+class DefensivePostureState:
+    """Output of DefensivePostureEngine — portfolio posture + per-rule flags."""
+    posture:              PortfolioPosture
+    forming_assets:       List[str]     # assets at FORMING or above
+    confirmed_assets:     List[str]     # assets at CONFIRMED or above
+    max_confirmed:        List[str]     # assets at CONFIRMED_PLUS
+    ab4_floor_override:   float         # normal=0.10; cautious=0.10; defensive=0.15; max=0.20
+    ab3_new_entries:      bool          # False = halt new AB3 deployments
+    expression3_eligible: bool          # True = check Expression 3 trigger
+    rationale:            str
+
+    @property
+    def emoji(self) -> str:
+        return {
+            PortfolioPosture.NORMAL:        '🟢',
+            PortfolioPosture.CAUTIOUS:      '🟡',
+            PortfolioPosture.DEFENSIVE:     '🟠',
+            PortfolioPosture.MAX_DEFENSIVE: '🔴',
+        }.get(self.posture, '⚪')
+
+
+class DefensivePostureEngine:
+    """
+    Synthesizes per-asset P-BEAR signals into a portfolio-level defensive posture.
+
+    Rules (in order of severity):
+
+    NORMAL → CAUTIOUS:
+      - Any asset reaches FORMING state (primary bearish signal fired)
+      - Actions: AB2 paused on that asset (fast-gate); log in morning brief
+
+    CAUTIOUS → DEFENSIVE:
+      - 2+ assets in FORMING state, OR
+      - 1+ asset in CONFIRMED state
+      - Actions: AB4 floor rises to 15%; no new AB3 entries; existing AB2 under review
+
+    DEFENSIVE → MAX_DEFENSIVE:
+      - 2+ assets in CONFIRMED state, OR
+      - Any asset in CONFIRMED_PLUS state
+      - Actions: AB4 floor rises to 20% (hard); Expression 3 eligible; begin reducing AB3
+    """
+
+    AB4_FLOOR_NORMAL     = 0.10
+    AB4_FLOOR_CAUTIOUS   = 0.10   # no change — AB2 paused is enough
+    AB4_FLOOR_DEFENSIVE  = 0.15
+    AB4_FLOOR_MAX        = 0.20
+
+    def compute(self, pbear_signals: Dict[str, 'PBearSignal']) -> 'DefensivePostureState':
+        forming   = [a for a, s in pbear_signals.items() if s.state.value >= PBearState.FORMING.value]
+        confirmed = [a for a, s in pbear_signals.items() if s.state.value >= PBearState.CONFIRMED.value]
+        max_conf  = [a for a, s in pbear_signals.items() if s.state == PBearState.CONFIRMED_PLUS]
+
+        n_forming   = len(forming)
+        n_confirmed = len(confirmed)
+        n_max       = len(max_conf)
+
+        if n_max > 0 or n_confirmed >= 2:
+            posture   = PortfolioPosture.MAX_DEFENSIVE
+            ab4_floor = self.AB4_FLOOR_MAX
+            ab3_new   = False
+            expr3     = True
+            reason    = f"MAX DEFENSIVE: {n_confirmed} confirmed ({', '.join(confirmed)})"
+        elif n_confirmed >= 1 or n_forming >= 2:
+            posture   = PortfolioPosture.DEFENSIVE
+            ab4_floor = self.AB4_FLOOR_DEFENSIVE
+            ab3_new   = False
+            expr3     = False
+            reason    = (f"DEFENSIVE: {n_confirmed} confirmed, {n_forming} forming "
+                         f"({', '.join(forming)})")
+        elif n_forming >= 1:
+            posture   = PortfolioPosture.CAUTIOUS
+            ab4_floor = self.AB4_FLOOR_CAUTIOUS
+            ab3_new   = True   # cautious but not halted
+            expr3     = False
+            reason    = f"CAUTIOUS: {n_forming} forming ({', '.join(forming)})"
+        else:
+            posture   = PortfolioPosture.NORMAL
+            ab4_floor = self.AB4_FLOOR_NORMAL
+            ab3_new   = True
+            expr3     = False
+            reason    = "NORMAL: no distribution signals"
+
+        return DefensivePostureState(
+            posture=posture,
+            forming_assets=forming,
+            confirmed_assets=confirmed,
+            max_confirmed=max_conf,
+            ab4_floor_override=ab4_floor,
+            ab3_new_entries=ab3_new,
+            expression3_eligible=expr3,
+            rationale=reason,
+        )
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# EXPRESSION 3 — BEARISH mNAV CONTRACTION TRIGGER
+# Monitors 4-condition entry gate for the MSTR put spread / IBIT long structure.
+# ═════════════════════════════════════════════════════════════════════════════
+
+@dataclass
+class Expression3State:
+    """
+    Expression 3: Bearish mNAV Contraction trade trigger state.
+
+    Structure: Long MSTR debit put spread (ATM/OTM 20-25%, 90-120 DTE) + Long IBIT
+    Net position: Long mNAV contraction; profits from MSTR premium unwind regardless of BTC direction
+    Sizing: MSTR put spread notional 1.5-2.0x IBIT dollar equivalent
+
+    Trigger conditions (ALL required):
+      1. mNAV > 2.0x (MSTR trading at premium — spread compression thesis)
+      2. MSTR P-BEAR state >= FORMING (distribution signal active on MSTR)
+      3. Howell phase = Speculation or Turbulence (GLI deteriorating)
+      4. BTC LT SRIBI rolling over (BTC structural trend weakening)
+    """
+    mnav:             float
+    mstr_pbear:       str         # P-BEAR state name
+    howell_phase:     str
+    btc_lt_sribi:     float
+    btc_lt_rolling:   bool
+
+    # Trigger levels
+    mnav_triggered:   bool        # mNAV > 2.0x
+    pbear_triggered:  bool        # MSTR P-BEAR >= FORMING
+    howell_triggered: bool        # Spec or Turbulence
+    btc_triggered:    bool        # BTC LT SRIBI rolling
+
+    @property
+    def conditions_met(self) -> int:
+        return sum([self.mnav_triggered, self.pbear_triggered,
+                    self.howell_triggered, self.btc_triggered])
+
+    @property
+    def level(self) -> str:
+        n = self.conditions_met
+        if n == 4:   return 'ARMED'
+        if n == 3:   return 'SETUP'
+        if n == 2:   return 'WATCH'
+        return 'INACTIVE'
+
+    @property
+    def emoji(self) -> str:
+        return {'ARMED': '🚨', 'SETUP': '🟠', 'WATCH': '👁', 'INACTIVE': '⚪'}.get(self.level, '⚪')
+
+
+class Expression3Engine:
+    """
+    Monitors Expression 3 trigger conditions for the Bearish mNAV Contraction trade.
+    Reads from engine state — does not require separate data loading.
+    """
+
+    MNAV_THRESHOLD        = 2.0    # mNAV must exceed this
+    BEARISH_HOWELL_PHASES = {'Speculation', 'Turbulence'}
+    BTC_ROLL_LOOKBACK     = 5      # bars to detect BTC LT SRIBI rollover
+
+    def compute(self,
+                mnav: float,
+                mstr_pbear: Optional['PBearSignal'],
+                howell_state: Optional[Any],
+                btc_df: Optional[pd.DataFrame]) -> Expression3State:
+
+        mnav_ok   = mnav > self.MNAV_THRESHOLD
+        pbear_ok  = mstr_pbear is not None and mstr_pbear.state.value >= PBearState.FORMING.value
+        howell_ok = (howell_state is not None
+                     and getattr(howell_state, 'phase', None) in self.BEARISH_HOWELL_PHASES)
+
+        # BTC LT SRIBI rolling over
+        btc_lt_sribi   = 0.0
+        btc_lt_rolling = False
+        if btc_df is not None and len(btc_df) >= self.BTC_ROLL_LOOKBACK + 1:
+            lt_col = None
+            if 'LT SRI Bias Histogram' in btc_df.columns:
+                lt_col = btc_df['LT SRI Bias Histogram']
+            if lt_col is not None:
+                recent = lt_col.tail(self.BTC_ROLL_LOOKBACK + 1).values.astype(float)
+                btc_lt_sribi   = float(recent[-1])
+                # Rolling: current LT < max of prior N bars by at least 5 points
+                btc_lt_rolling = bool(recent[-1] < np.nanmax(recent[:-1]) - 5.0)
+
+        return Expression3State(
+            mnav=mnav,
+            mstr_pbear=mstr_pbear.state.name if mstr_pbear else 'INACTIVE',
+            howell_phase=getattr(howell_state, 'phase', 'Unknown') if howell_state else 'Unknown',
+            btc_lt_sribi=btc_lt_sribi,
+            btc_lt_rolling=btc_lt_rolling,
+            mnav_triggered=mnav_ok,
+            pbear_triggered=pbear_ok,
+            howell_triggered=howell_ok,
+            btc_triggered=btc_lt_rolling,
+        )
