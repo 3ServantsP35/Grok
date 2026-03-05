@@ -1,0 +1,179 @@
+//@version=6
+// STRF/LQD — Saylor Credit Quality Ratio
+// Strips interest-rate noise from STRF by normalising against IG credit (LQD).
+// What remains is the MSTR-specific credit premium — a leading indicator for
+// MSTR equity direction (credit recovers before equity).
+//
+// Signals:
+//   Credit Recovery (CR ▲) — ratio crosses above 40th-pctl recovery threshold
+//   Credit Warn     (CW ▼) — ratio crosses below fast trackline (not yet stress)
+//   Credit Stress zone    — ratio in bottom 20th pctl (red background)
+//
+// Architecture role: Layer 1 Regime — Saylor credit precision signal.
+// Complements STRC (synthetic Saylor health) with IG-normalised view.
+// Gavin: export this ratio as CSV for Python regime engine (17th regime input).
+
+indicator("STRF/LQD — Credit Ratio", shorttitle="STRF/LQD", overlay=false, format=format.price, precision=4)
+
+// ─── Inputs ──────────────────────────────────────────────────────────────────
+i_fast_len   = input.int(20,  "Fast Trackline Length (bars)", minval=5,  group="Tracklines")
+i_slow_len   = input.int(50,  "Slow Trackline Length (bars)", minval=10, group="Tracklines")
+i_lookback   = input.int(252, "Percentile Band Lookback (bars)", minval=50, group="Bands")
+i_show_bands = input.bool(true, "Show Percentile Bands",     group="Display")
+i_show_hist  = input.bool(true, "Show Momentum Histogram",   group="Display")
+i_stress_pct = input.float(0.20, "Credit Stress Threshold (pctl)",   minval=0.05, maxval=0.40, step=0.05, group="Thresholds")
+i_recov_pct  = input.float(0.40, "Credit Recovery Threshold (pctl)", minval=0.20, maxval=0.60, step=0.05, group="Thresholds")
+
+// ─── Data ─────────────────────────────────────────────────────────────────────
+[strf_o, strf_h, strf_l, strf_c] = request.security("NASDAQ:STRF", timeframe.period, [open, high, low, close])
+[lqd_o,  lqd_h,  lqd_l,  lqd_c]  = request.security("BATS:LQD",   timeframe.period, [open, high, low, close])
+
+ratio = strf_c / lqd_c
+
+// ─── Tracklines ───────────────────────────────────────────────────────────────
+ftl = ta.ema(ratio, i_fast_len)   // Fast Trackline — short-term momentum
+stl = ta.sma(ratio, i_slow_len)   // Slow Trackline — structural trend
+
+bias_pos = ratio > stl            // true = credit improving (above slow TL)
+
+// ─── Momentum Histogram ───────────────────────────────────────────────────────
+momentum   = ftl - stl
+mom_rising = momentum > momentum[1]
+hist_color = (momentum >= 0
+    ? (mom_rising ? color.new(color.teal,   20) : color.new(color.teal,   60))
+    : (mom_rising ? color.new(color.maroon, 60) : color.new(color.maroon, 20)))
+
+// ─── Percentile Bands (rolling 1yr) ───────────────────────────────────────────
+high_band    = ta.highest(ratio, i_lookback)
+low_band     = ta.lowest(ratio,  i_lookback)
+range_size   = high_band - low_band
+stress_band  = low_band + range_size * i_stress_pct   // default: 20th pctl
+recov_band   = low_band + range_size * i_recov_pct    // default: 40th pctl
+ratio_pctl   = range_size > 0 ? (ratio - low_band) / range_size * 100 : 50.0
+
+// ─── State ────────────────────────────────────────────────────────────────────
+credit_stress    = ratio <= stress_band
+credit_recovery  = ta.crossover(ratio, recov_band)    // rising through 40th pctl
+credit_warn      = ta.crossunder(ratio, ftl) and not credit_stress  // falling below FTL
+
+// ─── Background ───────────────────────────────────────────────────────────────
+bgcolor(credit_stress ? color.new(color.red, 85) : na, title="Credit Stress BG")
+bgcolor(credit_recovery[1] ? color.new(color.teal, 92) : na, title="Credit Recovery Flash")
+
+// ─── Band fills ───────────────────────────────────────────────────────────────
+p_high = plot(i_show_bands ? high_band   : na, "1yr High",              color=color.new(color.gray, 70), linewidth=1)
+p_low  = plot(i_show_bands ? low_band    : na, "1yr Low",               color=color.new(color.gray, 70), linewidth=1)
+plot(i_show_bands ? stress_band          : na, "Stress Zone (20th)",    color=color.new(color.red,    50), linewidth=1, style=plot.style_line)
+plot(i_show_bands ? recov_band           : na, "Recovery Zone (40th)",  color=color.new(color.orange, 50), linewidth=1, style=plot.style_line)
+fill(p_high, p_low, color=color.new(color.gray, 92))
+
+// ─── Main plots ───────────────────────────────────────────────────────────────
+plot(ratio, "STRF/LQD Ratio",
+     color     = bias_pos ? color.new(color.teal, 0) : color.new(color.maroon, 0),
+     linewidth = 2)
+plot(ftl, "Fast TL (EMA" + str.tostring(i_fast_len) + ")",
+     color     = color.new(color.yellow, 20),
+     linewidth = 1)
+plot(stl, "Slow TL (SMA" + str.tostring(i_slow_len) + ")",
+     color     = bias_pos ? color.new(color.teal, 50) : color.new(color.maroon, 50),
+     linewidth = 1)
+
+// ─── Histogram ────────────────────────────────────────────────────────────────
+plot(i_show_hist ? momentum : na, "Momentum (FTL−STL)",
+     color     = hist_color,
+     style     = plot.style_histogram,
+     linewidth = 2)
+
+// ─── Signal markers ───────────────────────────────────────────────────────────
+plotshape(credit_recovery, "Credit Recovery",
+     shape    = shape.triangleup,
+     location = location.belowbar,
+     color    = color.new(color.teal, 0),
+     size     = size.small,
+     text     = "CR")
+
+plotshape(credit_warn, "Credit Warn",
+     shape    = shape.triangledown,
+     location = location.abovebar,
+     color    = color.new(color.orange, 0),
+     size     = size.small,
+     text     = "CW")
+
+plotshape(credit_stress and not credit_stress[1], "Credit Stress Entry",
+     shape    = shape.xcross,
+     location = location.abovebar,
+     color    = color.new(color.red, 0),
+     size     = size.small,
+     text     = "CS")
+
+// ─── Info Table ───────────────────────────────────────────────────────────────
+var table tbl = table.new(position.top_right, 2, 7,
+     bgcolor      = color.new(color.black, 70),
+     border_color = color.new(color.gray, 60),
+     border_width = 1,
+     frame_color  = color.new(color.gray, 40),
+     frame_width  = 1)
+
+if barstate.islast
+    bias_str   = bias_pos ? "POSITIVE ▲" : "NEGATIVE ▼"
+    bias_col   = bias_pos ? color.new(color.teal, 0) : color.new(color.maroon, 0)
+    cred_str   = credit_stress ? "⚠  STRESS" : (ratio_pctl >= 60 ? "✓  HEALTHY" : "NEUTRAL")
+    cred_col   = (credit_stress ? color.new(color.red, 0)
+        : (ratio_pctl >= 60 ? color.new(color.teal, 30) : color.new(color.gray, 20)))
+    pctl_col   = (ratio_pctl <= 20 ? color.new(color.red, 0)
+        : (ratio_pctl >= 60 ? color.new(color.teal, 20) : color.white))
+
+    table.cell(tbl, 0, 0, "STRF/LQD",   text_color=color.white,                  text_size=size.small, bgcolor=color.new(color.gray, 80))
+    table.cell(tbl, 1, 0, str.tostring(ratio, "#.####"), text_color=color.white,  text_size=size.small, bgcolor=color.new(color.gray, 80))
+    table.cell(tbl, 0, 1, "Bias",        text_color=color.gray,                   text_size=size.small)
+    table.cell(tbl, 1, 1, bias_str,      text_color=bias_col,                     text_size=size.small)
+    table.cell(tbl, 0, 2, "Pctl (1yr)",  text_color=color.gray,                   text_size=size.small)
+    table.cell(tbl, 1, 2, str.tostring(ratio_pctl, "#.#") + "%", text_color=pctl_col, text_size=size.small)
+    table.cell(tbl, 0, 3, "Credit",      text_color=color.gray,                   text_size=size.small)
+    table.cell(tbl, 1, 3, cred_str,      text_color=cred_col,                     text_size=size.small)
+    table.cell(tbl, 0, 4, "FTL",         text_color=color.gray,                   text_size=size.small)
+    table.cell(tbl, 1, 4, str.tostring(ftl, "#.####"), text_color=color.new(color.yellow, 20), text_size=size.small)
+    table.cell(tbl, 0, 5, "STL",         text_color=color.gray,                   text_size=size.small)
+    table.cell(tbl, 1, 5, str.tostring(stl, "#.####"),
+         text_color=bias_pos ? color.new(color.teal, 20) : color.new(color.maroon, 20), text_size=size.small)
+    table.cell(tbl, 0, 6, "Mom",         text_color=color.gray,                   text_size=size.small)
+    table.cell(tbl, 1, 6, str.tostring(momentum, "#.#####"),
+         text_color=momentum >= 0 ? color.new(color.teal, 20) : color.new(color.maroon, 20), text_size=size.small)
+
+// ─── Legend ───────────────────────────────────────────────────────────────────
+// RATIO LINE
+//   Teal line  = ratio above Slow TL (credit bias positive)
+//   Maroon line = ratio below Slow TL (credit bias negative)
+//
+// TRACKLINES
+//   Yellow line  = Fast Trackline EMA20 — short-term momentum
+//   Teal/Maroon  = Slow Trackline SMA50 — structural trend (teal=bull, maroon=bear)
+//
+// HISTOGRAM
+//   Teal bars    = FTL above STL (improving credit spread)
+//   Maroon bars  = FTL below STL (deteriorating credit spread)
+//   Bright = accelerating, Faded = decelerating
+//
+// PERCENTILE BANDS (1yr rolling)
+//   Gray shaded area  = full 1yr range
+//   Red line (20th)   = credit stress threshold — STRF cheapening vs IG
+//   Orange line (40th) = credit recovery threshold
+//
+// MARKERS
+//   CR ▲ (teal)   = Credit Recovery — ratio crosses above 40th pctl (leading bull signal)
+//   CW ▼ (orange) = Credit Warn — ratio crosses below fast TL (early deterioration)
+//   CS ✕ (red)    = Credit Stress Entry — ratio enters bottom 20th pctl
+//
+// BACKGROUND
+//   Red tint  = active credit stress zone
+//   Teal flash = credit recovery bar
+//
+// FRAMEWORK ROLE
+//   Layer 1 Regime input — Saylor credit precision (complements STRC)
+//   Leading indicator: credit ratio typically recovers 3-7 bars before MSTR equity
+//   Export as CSV for Python regime engine (17th regime input: STRF_LQD)
+//
+// SIGNALS TO WATCH
+//   BTC stable/rising but STRF/LQD falling → market doubts the rally (red flag)
+//   STRF/LQD CR fires before MSTR equity recovers → high-conviction AB3 entry setup
+//   STRF/LQD in stress zone + HYG bear + LQD bear → systemic credit event (3-alarm)
