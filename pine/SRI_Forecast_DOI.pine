@@ -1,0 +1,536 @@
+//@version=6
+// SRI Forecast DOI — Distribution Opportunity Index v1
+//
+// Mirror of AB3's LOI for the DISTRIBUTION side.
+// Validated for Momentum assets only: MSTR, IBIT, TSLA.
+// Do NOT apply to MR assets (SPY/QQQ/GLD/IWM) — distribution signals
+// do not clear the 60% win rate threshold on mean-reverting assets.
+//
+// Validated signals:
+//   loi_rollover  → 89% win rate on MSTR (3% drawdown / 60 bars)
+//   vlt_above_20  → 100% win rate on MSTR (VLT SRI Bias > +20)
+//
+// Outputs:
+//   LOI line       — same composite as AB3 (VLT 40% + Accel 30% + LT 15% + Conc 15%)
+//   VLT SRI Bias   — secondary line; turns red when above peak threshold
+//   DOI Score      — 0-10 histogram showing distribution pressure
+//   Trim markers   — T1/T2/T3 (trim ladder crossings)
+//   VLT ★          — VLT crosses peak threshold (100% signal)
+//   EXIT ✕         — LOI rollover from peak (89% signal)
+//   CT4 ●          — all TFs positive and VLT > +20
+//   Purple BG      — rollover active; exit signal firing
+//
+// Architecture: P-DOI, Layer 2 Signal Engine.
+// Complements AB3 (accumulation focus), CRS (call-selling gates).
+// STRF/LQD credit divergence is handled in the Python engine (Block 6b).
+//
+// LOI computation is IDENTICAL to AB3 — do not modify weights independently.
+// © RizenShine — CIO
+
+indicator("SRI Forecast DOI v1", shorttitle="SRI DOI", overlay=false, format=format.price, precision=1)
+
+// ═══════════════════════════════════════════════════════════════
+// INPUTS
+// ═══════════════════════════════════════════════════════════════
+
+string grp_mode = "Asset Classification"
+string asset_class = input.string(
+    "Auto-Detect", "Asset Class",
+    options=["Auto-Detect", "BTC-Proxy (MSTR/IBIT)", "Business Momentum (TSLA)", "MR (unsupported — warning only)"],
+    tooltip="DOI validated for Momentum assets only. On MR assets (SPY/QQQ/GLD/IWM) distribution signals reach only 54.8% win rate — below the 60% threshold. Indicator will display a warning.",
+    group=grp_mode)
+
+string grp_thresh = "Distribution Thresholds"
+float custom_trim1  = input.float(0.0, "Custom Trim 1 (0 = default 40)", group=grp_thresh)
+float custom_trim2  = input.float(0.0, "Custom Trim 2 (0 = default 60)", group=grp_thresh)
+float custom_trim3  = input.float(0.0, "Custom Trim 3 (0 = default 80)", group=grp_thresh)
+float custom_roll   = input.float(0.0, "Custom Rollover Pts (0 = default 25)", group=grp_thresh,
+    tooltip="LOI rollover fires when LOI has declined this many points from its 20-bar peak, while still above Trim 1. Default 25 for Momentum assets.")
+float vlt_peak_inp  = input.float(20.0, "VLT Peak Threshold", group=grp_thresh,
+    tooltip="VLT SRI Bias crossing above this level is the validated 100% trim signal on MSTR. Default: +20.")
+
+string grp_loi = "LOI Weights (must match AB3)"
+float w_vlt  = input.float(40.0, "VLT SRIBI Weight",        group=grp_loi, minval=0, maxval=100)
+float w_roc  = input.float(30.0, "VLT Acceleration Weight", group=grp_loi, minval=0, maxval=100)
+float w_lt   = input.float(15.0, "LT SRIBI Weight",         group=grp_loi, minval=0, maxval=100)
+float w_conc = input.float(15.0, "Concordance Weight",      group=grp_loi, minval=0, maxval=100)
+
+string grp_core = "Core Settings"
+int   at_period = input.int(14,  "Trackline ATR Period",       group=grp_core)
+float at_coeff  = input.float(1.0, "Trackline ATR Coefficient", group=grp_core)
+
+string grp_disp = "Display"
+bool show_score   = input.bool(true,  "Show DOI Score Histogram",  group=grp_disp)
+bool show_vlt     = input.bool(true,  "Show VLT SRI Bias Line",    group=grp_disp)
+bool show_signals = input.bool(true,  "Show Signal Markers",       group=grp_disp)
+bool show_zones   = input.bool(true,  "Show Zone Background",      group=grp_disp)
+bool show_table   = input.bool(true,  "Show Info Table",           group=grp_disp)
+bool show_legend  = input.bool(true,  "Show Legend",               group=grp_disp)
+
+// ═══════════════════════════════════════════════════════════════
+// ASSET CLASS
+// ═══════════════════════════════════════════════════════════════
+
+f_is_btc_proxy() =>
+    string t = str.upper(syminfo.ticker)
+    (syminfo.type == "crypto"
+     or str.contains(t, "BTC")  or str.contains(t, "MSTR")
+     or str.contains(t, "IBIT") or str.contains(t, "GBTC")
+     or str.contains(t, "BITO") or str.contains(t, "PURR"))
+
+f_is_tsla() => str.upper(syminfo.ticker) == "TSLA"
+
+string auto_class = (f_is_tsla()     ? "Business Momentum (TSLA)"
+     : f_is_btc_proxy() ? "BTC-Proxy (MSTR/IBIT)"
+     : "MR (unsupported — warning only)")
+
+string resolved_class = asset_class == "Auto-Detect" ? auto_class : asset_class
+
+bool is_btc_proxy = resolved_class == "BTC-Proxy (MSTR/IBIT)"
+bool is_tsla      = resolved_class == "Business Momentum (TSLA)"
+bool is_momentum  = is_btc_proxy or is_tsla
+bool is_mr_warn   = not is_momentum
+
+// ═══════════════════════════════════════════════════════════════
+// THRESHOLDS
+// ═══════════════════════════════════════════════════════════════
+
+float trim1_level = custom_trim1 != 0.0 ? custom_trim1 : 40.0
+float trim2_level = custom_trim2 != 0.0 ? custom_trim2 : 60.0
+float trim3_level = custom_trim3 != 0.0 ? custom_trim3 : 80.0
+float peak_roll   = custom_roll  != 0.0 ? custom_roll  : 25.0
+float trim_reset  = -20.0   // cycle resets below here
+
+// ═══════════════════════════════════════════════════════════════
+// TRACKLINES + SRIBI  (identical to AB3 — do not diverge)
+// ═══════════════════════════════════════════════════════════════
+
+f_trackline(int period, float coeff) =>
+    atr   = ta.rma(ta.tr(true), period)
+    upT   = low  - atr * coeff
+    downT = high + atr * coeff
+    cond  = ta.rsi(close, period) >= 50
+    var float track = 0.0
+    track := cond ? math.max(upT, nz(track[1])) : math.min(downT, nz(track[1]))
+    track
+
+float vst_ftl  = request.security(syminfo.tickerid, "120", f_trackline(at_period, at_coeff))
+float vst_stl  = request.security(syminfo.tickerid, "D",   f_trackline(at_period, at_coeff))
+float vst_sribi = vst_stl != 0 ? (vst_ftl - vst_stl) / vst_stl * 100 : 0
+
+float st_ftl   = request.security(syminfo.tickerid, "240", f_trackline(at_period, at_coeff))
+float st_stl   = request.security(syminfo.tickerid, "D",   f_trackline(at_period, at_coeff))
+float st_sribi = st_stl != 0 ? (st_ftl - st_stl) / st_stl * 100 : 0
+
+float lt_ftl   = request.security(syminfo.tickerid, "240", f_trackline(at_period, at_coeff))
+float lt_stl   = request.security(syminfo.tickerid, "W",   f_trackline(at_period, at_coeff))
+float lt_sribi = lt_stl != 0 ? (lt_ftl - lt_stl) / lt_stl * 100 : 0
+
+float vlt_ftl   = request.security(syminfo.tickerid, "480", f_trackline(at_period, at_coeff))
+float vlt_stl   = request.security(syminfo.tickerid, "2W",  f_trackline(at_period, at_coeff))
+float vlt_sribi = vlt_stl != 0 ? (vlt_ftl - vlt_stl) / vlt_stl * 100 : 0
+
+int bull_count = ((vst_sribi > 0 ? 1 : 0)
+     + (st_sribi  > 0 ? 1 : 0)
+     + (lt_sribi  > 0 ? 1 : 0)
+     + (vlt_sribi > 0 ? 1 : 0))
+
+// ═══════════════════════════════════════════════════════════════
+// LOI COMPOSITE  (identical to AB3)
+// ═══════════════════════════════════════════════════════════════
+
+float vlt_norm  = math.max(-100, math.min(100, vlt_sribi / 80 * 100))
+float lt_norm   = math.max(-100, math.min(100, lt_sribi  / 80 * 100))
+float conc_norm = (bull_count - 2.0) / 2.0 * 100
+float vlt_roc   = vlt_sribi - nz(vlt_sribi[10])
+float roc_norm  = math.max(-100, math.min(100, vlt_roc / 40 * 100))
+float total_w   = w_vlt + w_roc + w_lt + w_conc
+float loi = (total_w > 0
+     ? (vlt_norm*w_vlt + roc_norm*w_roc + lt_norm*w_lt + conc_norm*w_conc) / total_w
+     : 0)
+
+// ═══════════════════════════════════════════════════════════════
+// CT TIER
+// ═══════════════════════════════════════════════════════════════
+
+bool vlt_pos = vlt_sribi > 0
+bool lt_pos  = lt_sribi  > 0
+bool st_pos  = st_sribi  > 0
+bool vst_pos = vst_sribi > 0
+bool all_pos = vlt_pos and lt_pos and st_pos and vst_pos
+
+int ct_tier = (all_pos and vlt_sribi >= vlt_peak_inp ? 4
+     : all_pos                          ? 3
+     : vst_pos and lt_pos               ? 2
+     : vst_pos and st_pos               ? 1
+     : 0)
+
+// ═══════════════════════════════════════════════════════════════
+// DISTRIBUTION SIGNALS
+// ═══════════════════════════════════════════════════════════════
+
+// VLT peak crossing (validated 100% trim signal on MSTR)
+bool vlt_above_peak  = vlt_sribi >= vlt_peak_inp
+bool vlt_peak_cross  = ta.crossover(vlt_sribi, vlt_peak_inp)
+
+// LOI trim zone crossings
+bool doi_t1_cross = ta.crossover(loi, trim1_level)
+bool doi_t2_cross = ta.crossover(loi, trim2_level)
+bool doi_t3_cross = ta.crossover(loi, trim3_level)
+
+// LOI rollover from peak (validated 89% exit signal on MSTR)
+// Fires on first bar where LOI has declined >= peak_roll pts from its 20-bar peak,
+// while that peak was above trim1 (ensures it only fires after genuine distribution).
+float loi_20max  = ta.highest(loi, 20)
+bool loi_rollover = (loi_20max - loi) >= peak_roll and loi_20max > trim1_level
+
+// CT4 distribution (all TFs positive, VLT > peak)
+bool ct4_dist      = ct_tier == 4 and is_momentum
+bool ct4_new_cross = ct4_dist and nz(ct_tier[1]) < 4
+
+// ═══════════════════════════════════════════════════════════════
+// TRIM STATE MACHINE  (mirrors AB3)
+// ═══════════════════════════════════════════════════════════════
+
+var int trim_phase = 0
+
+if loi < trim_reset and nz(loi[1]) >= trim_reset
+    trim_phase := 0
+
+bool t1_fire = trim_phase < 1 and doi_t1_cross
+bool t2_fire = trim_phase < 2 and doi_t2_cross
+bool t3_fire = trim_phase < 3 and doi_t3_cross
+bool exit_fire = trim_phase == 3 and loi_rollover and not loi_rollover[1]
+
+if t1_fire
+    trim_phase := 1
+if t2_fire
+    trim_phase := 2
+if t3_fire
+    trim_phase := 3
+if exit_fire
+    trim_phase := 4
+
+string trim_str = (trim_phase == 0 ? "0% trimmed"
+     : trim_phase == 1 ? "25% trimmed"
+     : trim_phase == 2 ? "50% trimmed"
+     : trim_phase == 3 ? "75% trimmed"
+     : "CLOSED")
+
+string next_trim = (trim_phase == 0 ? "T1 at LOI " + str.tostring(trim1_level, "#")
+     : trim_phase == 1 ? "T2 at LOI " + str.tostring(trim2_level, "#")
+     : trim_phase == 2 ? "T3 at LOI " + str.tostring(trim3_level, "#")
+     : trim_phase == 3 ? "Exit on " + str.tostring(peak_roll, "#") + "pt rollover"
+     : "Cycle complete")
+
+// ═══════════════════════════════════════════════════════════════
+// DOI SCORE (0-10)
+// Rising score = increasing distribution pressure.
+// Reverts sharply when rollover fires (position should be closing).
+// ═══════════════════════════════════════════════════════════════
+
+// Base from LOI position (0-8)
+float doi_base = (loi < trim1_level ? 0.0
+     : loi < trim2_level ? (2.0 + (loi - trim1_level) / (trim2_level - trim1_level) * 2.0)
+     : loi < trim3_level ? (4.0 + (loi - trim2_level) / (trim3_level - trim2_level) * 2.0)
+     : math.min(8.0, 6.0 + (loi - trim3_level) / 20.0 * 2.0))
+
+// VLT bonus: +1 if positive, +2 if above peak threshold
+float doi_vlt_bonus = vlt_above_peak ? 2.0 : (vlt_pos ? 1.0 : 0.0)
+
+float doi_raw = math.min(10.0, doi_base + doi_vlt_bonus)
+
+// Rollover suppression — score collapses when exit is firing
+float doi_score = (loi_rollover and trim_phase >= 3
+     ? math.max(0.0, doi_raw - 4.0)
+     : doi_raw)
+
+// ═══════════════════════════════════════════════════════════════
+// COLORS
+// ═══════════════════════════════════════════════════════════════
+
+color loi_line_color = (loi_rollover and trim_phase >= 3 ? color.new(color.purple, 0)
+     : loi >= trim3_level ? color.new(color.red, 0)
+     : loi >= trim2_level ? color.new(color.orange, 0)
+     : loi >= trim1_level ? color.new(color.orange, 30)
+     : loi >= 0           ? color.new(color.gray, 20)
+     : color.new(color.gray, 50))
+
+color doi_score_color = (doi_score >= 8.0 ? color.new(color.red, 0)
+     : doi_score >= 5.0 ? color.new(color.orange, 20)
+     : doi_score >= 2.0 ? color.new(color.orange, 60)
+     : color.new(color.gray, 60))
+
+color vlt_line_color = vlt_above_peak ? color.new(color.red, 0) : color.new(color.teal, 30)
+
+color zone_bg_color = (loi_rollover and trim_phase >= 3 ? color.new(color.purple, 82)
+     : loi >= trim3_level ? color.new(color.red, 88)
+     : loi >= trim2_level ? color.new(color.orange, 88)
+     : loi >= trim1_level ? color.new(color.orange, 93)
+     : color(na))
+
+// ═══════════════════════════════════════════════════════════════
+// REFERENCE LINES
+// ═══════════════════════════════════════════════════════════════
+
+hline(0,           "Zero",        color=color.new(color.gray, 60),   linestyle=hline.style_dotted)
+hline(trim1_level, "Trim 25%",    color=color.new(color.orange, 55), linestyle=hline.style_solid, linewidth=1)
+hline(trim2_level, "Trim 50%",    color=color.new(color.orange, 30), linestyle=hline.style_solid, linewidth=1)
+hline(trim3_level, "Trim 75%",    color=color.new(color.red, 40),    linestyle=hline.style_solid, linewidth=1)
+hline(vlt_peak_inp, "VLT Peak",   color=color.new(color.red, 70),    linestyle=hline.style_dashed)
+
+// ═══════════════════════════════════════════════════════════════
+// PLOTS
+// ═══════════════════════════════════════════════════════════════
+
+bgcolor(show_zones ? zone_bg_color : na)
+
+// DOI score histogram (plotted first so LOI line renders on top)
+plot(show_score ? doi_score : na,
+     title     = "DOI Score (0-10)",
+     color     = doi_score_color,
+     style     = plot.style_histogram,
+     linewidth = 3)
+
+// LOI line (primary)
+plot(loi, "LOI", color=loi_line_color, linewidth=2)
+
+// VLT SRI Bias (secondary — scaled naturally alongside LOI)
+plot(show_vlt ? vlt_sribi : na,
+     title     = "VLT SRI Bias",
+     color     = vlt_line_color,
+     linewidth = 1)
+
+// ═══════════════════════════════════════════════════════════════
+// SIGNAL MARKERS
+// ═══════════════════════════════════════════════════════════════
+
+// Trim 25% — LOI enters trim zone
+plotshape(show_signals and t1_fire,
+     title    = "T1 Trim 25%",
+     shape    = shape.triangleup,
+     location = location.belowbar,
+     color    = color.new(color.orange, 0),
+     size     = size.small,
+     text     = "T1")
+
+// Trim 50%
+plotshape(show_signals and t2_fire,
+     title    = "T2 Trim 50%",
+     shape    = shape.triangleup,
+     location = location.belowbar,
+     color    = color.new(color.red, 20),
+     size     = size.small,
+     text     = "T2")
+
+// Trim 75%
+plotshape(show_signals and t3_fire,
+     title    = "T3 Trim 75%",
+     shape    = shape.triangleup,
+     location = location.belowbar,
+     color    = color.new(color.red, 0),
+     size     = size.normal,
+     text     = "T3")
+
+// VLT peak crossing — validated 100% signal
+plotshape(show_signals and vlt_peak_cross,
+     title    = "VLT Peak ★",
+     shape    = shape.star,
+     location = location.abovebar,
+     color    = color.new(color.red, 0),
+     size     = size.normal,
+     text     = "VLT★")
+
+// LOI rollover exit — validated 89% signal (fires on first rollover bar)
+plotshape(show_signals and exit_fire,
+     title    = "EXIT — LOI Rollover",
+     shape    = shape.xcross,
+     location = location.abovebar,
+     color    = color.new(color.purple, 0),
+     size     = size.large,
+     text     = "EXIT")
+
+// CT4 distribution entry
+plotshape(show_signals and ct4_new_cross,
+     title    = "CT4 Distribution",
+     shape    = shape.circle,
+     location = location.abovebar,
+     color    = color.new(color.red, 0),
+     size     = size.small,
+     text     = "CT4")
+
+// ═══════════════════════════════════════════════════════════════
+// INFO TABLE
+// ═══════════════════════════════════════════════════════════════
+
+var table tbl = table.new(
+     position.top_right, 2, 11,
+     bgcolor      = color.new(color.black, 70),
+     border_color = color.new(color.gray, 60),
+     border_width = 1,
+     frame_color  = color.new(color.gray, 40),
+     frame_width  = 1)
+
+if barstate.islast and show_table
+    string class_str = (is_btc_proxy ? "BTC-Proxy"
+         : is_tsla    ? "TSLA"
+         : "⚠ MR (unsupported)")
+    string auto_tag = asset_class == "Auto-Detect" ? " ⚡" : ""
+
+    string zone_str = (loi_rollover and trim_phase >= 3 ? "EXIT — LOI ROLLOVER ✕"
+         : loi >= trim3_level ? "DISTRIBUTE (T3)"
+         : loi >= trim2_level ? "TRIM 50% (T2)"
+         : loi >= trim1_level ? "TRIM 25% (T1)"
+         : loi >= 0           ? "HOLD — approaching"
+         : "ACCUMULATION")
+
+    color zone_col = (loi_rollover and trim_phase >= 3 ? color.new(color.purple, 0)
+         : loi >= trim3_level ? color.new(color.red, 0)
+         : loi >= trim2_level ? color.new(color.orange, 0)
+         : loi >= trim1_level ? color.new(color.orange, 30)
+         : color.gray)
+
+    color hdr_bg = (loi_rollover and trim_phase >= 3 ? color.new(color.purple, 40)
+         : loi >= trim3_level ? color.new(color.red, 35)
+         : loi >= trim1_level ? color.new(color.orange, 40)
+         : color.new(color.gray, 50))
+
+    table.cell(tbl, 0, 0, "DOI " + class_str + auto_tag,
+         text_color=color.white, text_size=size.small, bgcolor=hdr_bg)
+    table.cell(tbl, 1, 0, zone_str,
+         text_color=zone_col, text_size=size.small, bgcolor=hdr_bg)
+
+    table.cell(tbl, 0, 1, "LOI",          text_color=color.gray, text_size=size.small)
+    table.cell(tbl, 1, 1, str.tostring(loi, "#.#"),
+         text_color=loi_line_color, text_size=size.small)
+
+    table.cell(tbl, 0, 2, "DOI Score",    text_color=color.gray, text_size=size.small)
+    table.cell(tbl, 1, 2, str.tostring(doi_score, "#.#") + " / 10",
+         text_color=doi_score_color, text_size=size.small)
+
+    table.cell(tbl, 0, 3, "VLT Bias",     text_color=color.gray, text_size=size.small)
+    string vlt_str = (str.tostring(vlt_sribi, "#.#")
+         + (vlt_above_peak ? "  ★ PEAK" : ""))
+    table.cell(tbl, 1, 3, vlt_str,
+         text_color=vlt_line_color, text_size=size.small)
+
+    table.cell(tbl, 0, 4, "LT Bias",      text_color=color.gray, text_size=size.small)
+    table.cell(tbl, 1, 4, str.tostring(lt_sribi, "#.#"),
+         text_color=lt_pos ? color.new(color.teal, 20) : color.new(color.maroon, 20),
+         text_size=size.small)
+
+    table.cell(tbl, 0, 5, "CT Tier",      text_color=color.gray, text_size=size.small)
+    color ct_col = (ct_tier >= 4 ? color.new(color.red, 0)
+         : ct_tier >= 3 ? color.new(color.orange, 0) : color.gray)
+    table.cell(tbl, 1, 5,
+         "CT" + str.tostring(ct_tier) + "  (" + str.tostring(bull_count) + "/4 TFs+)",
+         text_color=ct_col, text_size=size.small)
+
+    table.cell(tbl, 0, 6, "Trim Phase",   text_color=color.gray, text_size=size.small)
+    color trim_col = (trim_phase == 0 ? color.gray
+         : trim_phase >= 3 ? color.new(color.red, 0) : color.new(color.orange, 0))
+    table.cell(tbl, 1, 6, trim_str, text_color=trim_col, text_size=size.small)
+
+    table.cell(tbl, 0, 7, "Next",         text_color=color.gray, text_size=size.small)
+    table.cell(tbl, 1, 7, next_trim,
+         text_color=color.white, text_size=size.small)
+
+    table.cell(tbl, 0, 8, "Rollover",     text_color=color.gray, text_size=size.small)
+    table.cell(tbl, 1, 8, (loi_rollover ? "⚠  ACTIVE" : "—"),
+         text_color=(loi_rollover ? color.new(color.purple, 0) : color.gray),
+         text_size=size.small)
+
+    table.cell(tbl, 0, 9, "Thresholds",   text_color=color.gray, text_size=size.tiny)
+    table.cell(tbl, 1, 9,
+         "T1: " + str.tostring(trim1_level, "#")
+         + "  T2: " + str.tostring(trim2_level, "#")
+         + "  T3: " + str.tostring(trim3_level, "#"),
+         text_color=color.gray, text_size=size.tiny)
+
+    if is_mr_warn
+        table.cell(tbl, 0, 10, "⚠ UNSUPPORTED", text_color=color.new(color.red, 0), text_size=size.tiny)
+        table.cell(tbl, 1, 10,
+             "MR asset — distribution signals <60% win rate. Apply to MSTR/IBIT/TSLA only.",
+             text_color=color.new(color.red, 20), text_size=size.tiny)
+
+// ═══════════════════════════════════════════════════════════════
+// LEGEND
+// ═══════════════════════════════════════════════════════════════
+
+var table leg = table.new(
+     position.bottom_left, 2, 13,
+     bgcolor      = color.new(color.black, 25),
+     border_width = 1,
+     border_color = color.new(color.gray, 70))
+
+if barstate.islast and show_legend
+    table.cell(leg, 0, 0,  "SRI DOI v1",     text_color=color.white,  text_size=size.tiny, bgcolor=color.new(color.gray, 50))
+    table.cell(leg, 1, 0,  "Momentum only: MSTR / IBIT / TSLA", text_color=color.white, text_size=size.tiny, bgcolor=color.new(color.gray, 50))
+
+    table.cell(leg, 0, 1,  "LOI line",        text_color=color.orange, text_size=size.tiny)
+    table.cell(leg, 1, 1,  "Gray=hold, Orange=trim zone, Red=distribute, Purple=rollover", text_color=color.gray, text_size=size.tiny)
+
+    table.cell(leg, 0, 2,  "VLT line",        text_color=color.teal,   text_size=size.tiny)
+    table.cell(leg, 1, 2,  "Teal=below peak, Red=above VLT peak threshold (+20)", text_color=color.gray, text_size=size.tiny)
+
+    table.cell(leg, 0, 3,  "Histogram",       text_color=color.gray,   text_size=size.tiny)
+    table.cell(leg, 1, 3,  "DOI Score 0-10: gray=neutral, orange=trim, red=distribute", text_color=color.gray, text_size=size.tiny)
+
+    table.cell(leg, 0, 4,  "T1 ▲ orange",    text_color=color.orange,  text_size=size.tiny)
+    table.cell(leg, 1, 4,  "LOI crosses Trim 25% (LOI > 40) — begin trim watch", text_color=color.gray, text_size=size.tiny)
+
+    table.cell(leg, 0, 5,  "T2 ▲ red",       text_color=color.new(color.red, 20), text_size=size.tiny)
+    table.cell(leg, 1, 5,  "LOI crosses Trim 50% (LOI > 60) — advance trim", text_color=color.gray, text_size=size.tiny)
+
+    table.cell(leg, 0, 6,  "T3 ▲ red (lg)",  text_color=color.red,    text_size=size.tiny)
+    table.cell(leg, 1, 6,  "LOI crosses Trim 75% (LOI > 80) — prepare exit", text_color=color.white, text_size=size.tiny)
+
+    table.cell(leg, 0, 7,  "VLT ★ red",      text_color=color.red,    text_size=size.tiny)
+    table.cell(leg, 1, 7,  "VLT SRI Bias > +20 — validated 100% trim signal", text_color=color.white, text_size=size.tiny)
+
+    table.cell(leg, 0, 8,  "EXIT ✕ purple",  text_color=color.new(color.purple, 0), text_size=size.tiny)
+    table.cell(leg, 1, 8,  "LOI rollover from peak — validated 89% exit signal", text_color=color.white, text_size=size.tiny)
+
+    table.cell(leg, 0, 9,  "CT4 ● red",      text_color=color.red,    text_size=size.tiny)
+    table.cell(leg, 1, 9,  "All TFs positive and VLT > +20 — distribution confirmed", text_color=color.gray, text_size=size.tiny)
+
+    table.cell(leg, 0, 10, "Purple BG",       text_color=color.new(color.purple, 0), text_size=size.tiny)
+    table.cell(leg, 1, 10, "Active rollover — exit signal firing; DOI score suppressed", text_color=color.gray, text_size=size.tiny)
+
+    table.cell(leg, 0, 11, "Dashed line",     text_color=color.gray,   text_size=size.tiny)
+    table.cell(leg, 1, 11, "VLT peak threshold (default +20) — 100% signal level", text_color=color.gray, text_size=size.tiny)
+
+    table.cell(leg, 0, 12, "Data source",     text_color=color.gray,   text_size=size.tiny)
+    table.cell(leg, 1, 12, "LOI weights match AB3. Credit divergence in engine Block 6b (STRF/LQD).", text_color=color.gray, text_size=size.tiny)
+
+// ═══════════════════════════════════════════════════════════════
+// ALERTS
+// ═══════════════════════════════════════════════════════════════
+
+alertcondition(t1_fire,
+     title   = "DOI — Trim 25% (T1)",
+     message = "DOI: LOI entered Trim 25% zone (>40). Begin monitoring. Reduce AB2 new exposure.")
+
+alertcondition(t2_fire,
+     title   = "DOI — Trim 50% (T2)",
+     message = "DOI: LOI in Trim 50% zone (>60). Advance trim phase.")
+
+alertcondition(t3_fire,
+     title   = "DOI — Trim 75% (T3)",
+     message = "DOI: LOI in Trim 75% zone (>80). Prepare final exit.")
+
+alertcondition(vlt_peak_cross,
+     title   = "DOI — VLT Peak Crossed ★ (100% signal)",
+     message = "DOI: VLT SRI Bias crossed above +20. Validated 100% trim/exit signal on MSTR. Size out aggressively.")
+
+alertcondition(exit_fire,
+     title   = "DOI — EXIT: LOI Rollover (89% signal)",
+     message = "DOI: LOI rolling over from peak. Validated 89% exit signal on MSTR. Close remaining position.")
+
+alertcondition(ct4_new_cross,
+     title   = "DOI — CT4 Distribution Entry",
+     message = "DOI: CT4 confirmed. All 4 TFs positive, VLT > +20. High-confidence distribution setup active.")
+
+alertcondition(loi < trim_reset and nz(loi[1]) >= trim_reset,
+     title   = "DOI — Cycle Reset",
+     message = "DOI: LOI below -20. Distribution cycle reset. New accumulation cycle may begin.")
