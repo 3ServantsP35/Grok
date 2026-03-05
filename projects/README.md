@@ -34,7 +34,7 @@
 | P-BACKTEST | Stage Designation + Vol-Adaptive Research | ✅ Complete — R1/R2/R3 implemented | CIO |
 | P-PINE-V6 | Pine v6 Migration | ✅ All 12 scripts on v6 | CIO |
 | P-DOI | Distribution Signal Layer (Momentum assets) | 🔴 HIGH — Pine v1 live; CRS integration queued | CIO |
-| P-MR-ENTRY | Cross-Asset LEAP Opportunity Framework (all in-scope assets) | 🟡 MED — Research in progress | CIO |
+| P-MR-ENTRY | Cross-Asset LEAP Opportunity Framework (all in-scope assets) | 🟡 MED — Phase 1 research complete; calibrations live | CIO |
 
 ---
 
@@ -243,15 +243,20 @@ SPY/QQQ archetype: April/May 2025 tariff dislocation = transient macro shock on 
 
 | Milestone | Status |
 |---|---|
-| Cross-asset backtest: win rates by condition for all 7 assets | 🔄 Running — `cross-asset-leap-research-v1.md` |
-| Identify best condition combination per asset (≥70% / N≥10) | 🔄 Running |
-| Cross-asset opportunity windows (when do multiple assets align?) | 🔄 Running |
-| VIX proxy for Howell Phase in backtest | 🔄 Running |
-| Episode taxonomy formalization (Transient / Structural / Extended) | ⬜ After research |
-| Asset-specific signal specs (one per asset, validated) | ⬜ After research |
+| Cross-asset backtest: win rates by condition for all 7 assets | ✅ `briefs/cross-asset-leap-research-v1.md` (`a1ad4139`) |
+| Identify best condition combination per asset (≥70% / N≥10) | ✅ See signal stack table in brief |
+| Cross-asset opportunity windows (when do multiple assets align?) | ✅ 3+ assets LOI<-20 = max deploy (~8% of days) |
+| VIX proxy for Howell Phase in backtest | ✅ Complete (period-biased — extend VIX history) |
+| Indicator calibration from findings | ✅ AB3 Pine + morning brief updated (`c3fa2585`, `c0698ceb`) |
+| system-learnings.md — 4 cross-agent insights | ✅ Complete (docs sub-agent) |
+| INDICATOR-GUIDE per-asset calibration warnings | ✅ Complete (docs sub-agent) |
+| Episode taxonomy formalization (Transient / Structural / Extended) | ⬜ After Episode Classifier |
+| Asset-specific signal specs (one per asset, validated) | ⬜ After Stage 4→1 rerun at 4H |
+| Stage 4→1 rerun at 4H resolution (methodology gap fix) | ⬜ Priority research |
+| Extend VIX history to 2019 (de-bias VIX-crossed signals) | ⬜ Data acquisition |
 | Episode Type Classifier build | ⬜ Post-launch #3 |
-| Wire into morning brief: multi-asset high-confidence window alerts | ⬜ After classifier |
-| Pine indicator: asset-specific entry signals | ⬜ After research |
+| Wire into morning brief: multi-asset high-confidence window alerts | ✅ Cross-asset accumulation count live |
+| Pine indicator: asset-specific entry signals | ⬜ After Stage 4→1 research |
 
 **Dependencies:**
 
