@@ -33,7 +33,7 @@
 | P-PINE-GUIDE | Pine Indicator Tutorial Guide | ✅ Complete | CIO |
 | P-BACKTEST | Stage Designation + Vol-Adaptive Research | ✅ Complete — R1/R2/R3 implemented | CIO |
 | P-PINE-V6 | Pine v6 Migration | ✅ All 12 scripts on v6 | CIO |
-| P-DOI | Distribution Signal Layer (Momentum assets) | 🟡 Scoped — queued | CIO |
+| P-DOI | Distribution Signal Layer (Momentum assets) | 🔴 HIGH — Ready to build | CIO |
 
 ---
 
@@ -188,7 +188,7 @@ Per-user report generated on-demand in each user's dedicated channel only. Trans
 ---
 
 ### P-DOI: Distribution Signal Layer *(Momentum assets only)*
-**Status:** 🟡 Scoped — queued
+**Status:** 🔴 HIGH — Scoped, ready to build
 **Lead:** CIO | **Approver:** Gavin
 
 **Origin:** P14 (Bearish Bias Indicator Suite) retired. The original "symmetric DOI with same rigor as SRI across all assets" scope was invalidated by the SPY/QQQ AB1 signal research, which found `loi_rollover` reaches only 54.8% win rate on MR assets — below the 60% threshold. P2 (Bear Indicators) was fully delivered by P-BEAR. P-DOI is the remaining gap: **a purpose-built Pine distribution indicator for Momentum assets**, where the signals are empirically validated.
@@ -450,7 +450,7 @@ IWM breadth gate key finding: IWM strong while SPY/QQQ corrects → continuation
 | 11 | Post-Mortem Process | Score closed trade hypotheses; extract structured lessons | 🟡 MED | #9 first |
 | 12 | PURR MSR Stub | Create observation-mode stub MSR for PURR | 🟡 MED | None |
 | 13 | MR vs Momentum Threshold Differentiation | Backtest confirmation ladder thresholds by asset class | 🟡 MED | None |
-| 13b | P-DOI: Distribution Signal Layer | Pine DOI oscillator for MSTR/IBIT/TSLA; `loi_rollover` + `vlt_above_20` formalized; STRF/LQD divergence layer already live | 🟡 MED | None |
+| 13b | P-DOI: Distribution Signal Layer | Pine DOI oscillator for MSTR/IBIT/TSLA; `loi_rollover` + `vlt_above_20` formalized; STRF/LQD divergence layer already live | 🔴 HIGH | None |
 | 14 | Re-run Vol-Adaptive + Stage Backtest | Increase confidence at 24+ months data | 🔵 LOW | Time |
 | 15 | Classifier Dataset Re-labeling | Fix false negatives using "new high within 120 bars" metric | 🔵 LOW | None |
 | 16 | Regime-Conditioned Classifier | Separate CPS models for GLI Z>0 vs Z<0 | 🔵 LOW | #15 first |
