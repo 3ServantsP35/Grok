@@ -308,7 +308,7 @@ plot(show_vlt ? vlt_sribi : na,
 // Trim 25% — LOI enters trim zone
 plotshape(show_signals and t1_fire,
      title    = "T1 Trim 25%",
-     shape    = shape.triangleup,
+     style    = shape.triangleup,
      location = location.belowbar,
      color    = color.new(color.orange, 0),
      size     = size.small,
@@ -317,7 +317,7 @@ plotshape(show_signals and t1_fire,
 // Trim 50%
 plotshape(show_signals and t2_fire,
      title    = "T2 Trim 50%",
-     shape    = shape.triangleup,
+     style    = shape.triangleup,
      location = location.belowbar,
      color    = color.new(color.red, 20),
      size     = size.small,
@@ -326,7 +326,7 @@ plotshape(show_signals and t2_fire,
 // Trim 75%
 plotshape(show_signals and t3_fire,
      title    = "T3 Trim 75%",
-     shape    = shape.triangleup,
+     style    = shape.triangleup,
      location = location.belowbar,
      color    = color.new(color.red, 0),
      size     = size.normal,
@@ -334,8 +334,8 @@ plotshape(show_signals and t3_fire,
 
 // VLT peak crossing — validated 100% signal
 plotshape(show_signals and vlt_peak_cross,
-     title    = "VLT Peak ★",
-     shape    = shape.star,
+     title    = "VLT Peak",
+     style    = shape.diamond,
      location = location.abovebar,
      color    = color.new(color.red, 0),
      size     = size.normal,
@@ -344,7 +344,7 @@ plotshape(show_signals and vlt_peak_cross,
 // LOI rollover exit — validated 89% signal (fires on first rollover bar)
 plotshape(show_signals and exit_fire,
      title    = "EXIT — LOI Rollover",
-     shape    = shape.xcross,
+     style    = shape.xcross,
      location = location.abovebar,
      color    = color.new(color.purple, 0),
      size     = size.large,
@@ -353,7 +353,7 @@ plotshape(show_signals and exit_fire,
 // CT4 distribution entry
 plotshape(show_signals and ct4_new_cross,
      title    = "CT4 Distribution",
-     shape    = shape.circle,
+     style    = shape.circle,
      location = location.abovebar,
      color    = color.new(color.red, 0),
      size     = size.small,
@@ -485,7 +485,7 @@ if barstate.islast and show_legend
     table.cell(leg, 0, 6,  "T3 ▲ red (lg)",  text_color=color.red,    text_size=size.tiny)
     table.cell(leg, 1, 6,  "LOI crosses Trim 75% (LOI > 80) — prepare exit", text_color=color.white, text_size=size.tiny)
 
-    table.cell(leg, 0, 7,  "VLT ★ red",      text_color=color.red,    text_size=size.tiny)
+    table.cell(leg, 0, 7,  "VLT ◆ red",      text_color=color.red,    text_size=size.tiny)
     table.cell(leg, 1, 7,  "VLT SRI Bias > +20 — validated 100% trim signal", text_color=color.white, text_size=size.tiny)
 
     table.cell(leg, 0, 8,  "EXIT ✕ purple",  text_color=color.new(color.purple, 0), text_size=size.tiny)
