@@ -1522,7 +1522,7 @@ class RegimeEngine:
         "DXY":        "TVC_DXY",
         "HYG":        "BATS_HYG",
         "LQD":        "BATS_LQD",              # IG bonds — credit composite with HYG
-        "STRF":       "NASDAQ_STRF",           # Saylor perpetual preferred — credit precision
+        "STRF_LQD":   "BATS_STRF_BATS_LQD",   # STRF/LQD ratio — IG-normalised Saylor credit precision
         "VIX":        "TVC_VIX",
     }
     
@@ -1684,36 +1684,25 @@ class RegimeEngine:
             )
         
         # 6b. STRF/LQD — Saylor credit precision (IG-normalised preferred signal)
-        # Strips interest-rate noise from STRF by dividing against LQD.
-        # Isolates MSTR-specific credit premium — leads MSTR equity by 3-7 bars.
-        # Scored independently; amplifies STRC signal when both agree.
-        strf_df = self._load("STRF")
-        if strf_df is not None and lqd_df is not None:
-            strf_price = float(strf_df.iloc[-1]['close'])
-            lqd_price  = float(lqd_df.iloc[-1]['close'])
-            ratio_now  = strf_price / lqd_price
-            # Percentile vs rolling 252-bar (1yr) window
-            window = min(252, len(strf_df))
-            strf_series = strf_df['close'].iloc[-window:].values
-            lqd_aligned = lqd_df['close'].iloc[-window:].values
-            if len(lqd_aligned) == len(strf_series):
-                ratio_series = strf_series / lqd_aligned
-                r_min, r_max = ratio_series.min(), ratio_series.max()
-                r_range      = r_max - r_min if r_max > r_min else 1e-9
-                pctl         = (ratio_now - r_min) / r_range * 100
+        # Pre-computed ratio CSV from TradingView — full SRI stack already applied.
+        # Strips interest-rate noise from STRF; isolates MSTR-specific credit premium.
+        # Leads MSTR equity by 3-7 bars on both bottoms and tops.
+        # Amplifies STRC signal when both agree (double credit confirmation).
+        strf_lqd_df = self._load("STRF_LQD")
+        if strf_lqd_df is not None:
+            sribi = self._get_sribi(strf_lqd_df)
+            ratio_val = float(strf_lqd_df.iloc[-1]['close'])
+            loi_val   = float(strf_lqd_df.iloc[-1].get('LOI', 0))
+            if sribi.st > 0:
+                s = +1; interp = f"STRF/LQD HEALTHY ({ratio_val:.4f}) — MSTR credit premium firm vs IG"
+            elif sribi.st < 0 and loi_val < -20:
+                s = -1; interp = f"STRF/LQD STRESS ({ratio_val:.4f}, LOI {loi_val:.0f}) — credit cheap vs IG; watch for equity bottom"
             else:
-                pctl = 50.0
-            if pctl <= 20:
-                s = -1; interp = f"STRF/LQD STRESS ({pctl:.0f}th pctl) — MSTR credit cheap vs IG; leading bear/bottom signal"
-            elif pctl >= 60:
-                s = +1; interp = f"STRF/LQD HEALTHY ({pctl:.0f}th pctl) — MSTR credit premium firm vs IG"
-            else:
-                s =  0; interp = f"STRF/LQD NEUTRAL ({pctl:.0f}th pctl) — no directional credit edge"
+                s =  0; interp = f"STRF/LQD NEUTRAL ({ratio_val:.4f}) — credit in transition"
             score += s
-            sribi_strf = self._get_sribi(strf_df)
             state.inputs["STRF_LQD"] = RegimeInput(
-                "STRF_LQD", round(ratio_now, 4), sribi_strf,
-                sribi_strf.context, s, interp, strf_df.iloc[-1]['date']
+                "STRF_LQD", ratio_val, sribi,
+                sribi.context, s, interp, strf_lqd_df.iloc[-1]['date']
             )
 
         # 7. VIX (vol regime — informs strategy, not direction)
