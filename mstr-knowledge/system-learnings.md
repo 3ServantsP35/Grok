@@ -68,3 +68,11 @@ When reading this file, load the most recent ACTIVE entries first. If context wi
 - **Status:** ACTIVE / SUPERSEDED / UNVALIDATED
 
 -->
+
+## 2026-03-05 — STRC and STRF/LQD Led the March 4 MSTR Breakout by 8 and 2 Days (Live Validation)
+- **Source agent:** CIO (live price sequence analysis, confirmed by Gavin)
+- **Affects:** CIO (forecast timing), mstr-options (entry timing), mstr-sri (stage call timing), mstr-macro (regime confirmation)
+- **Insight:** In the March 2026 MSTR breakout event, credit/preferred indicators gave unambiguous advance warning that the price chart did not. Exact sequence: (1) STRC Histogram was flat at 0 for 2 weeks, then fired +25 on Feb 24 with Fast TL beginning to ascend — **8 trading days before the MSTR $149.55 breakout on March 4**. (2) STRF/LQD Fast TL crossed back above Slow TL on March 2 with LOI jumping from −16.8 to −9.3 in a single session — **2 trading days before the breakout**. MSTR price action at $128–134 during this period appeared to be continued chop; the credit signals were showing recovery. Relying solely on MSTR price structure would have missed the early timing entirely.
+- **Evidence:** BATS_STRC 240 (Feb 24 histogram pivot), BATS_STRF_BATS_LQD (March 2 LOI acceleration), BATS_MSTR 240_8ee08 (March 4 breakout bar); live validated by Gavin
+- **Recommended action:** (1) CIO: when STRC Histogram transitions from 0/flat to +15 or higher after ≥5 flat bars, treat as early MSTR breakout signal — begin narrowing the breakout timing window from weeks to days. (2) mstr-options: look for AB1 pre-breakout entry in the 5–8 day window following STRC histogram pivot. (3) mstr-sri: STRC/STRF leading price = evidence that Stage 2 is forming below the surface; do not wait for full price confirmation before upgrading stage probability. (4) CIO in future forecasts: do not hold a "late" breakout call if STRC histogram has already pivoted — update the timeline immediately.
+- **Status:** ACTIVE
