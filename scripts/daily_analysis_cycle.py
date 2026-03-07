@@ -34,7 +34,7 @@ for p in ["/mnt/mstr-scripts", "/home/openclaw/mstr-engine/scripts"]:
 MODELS = {
     "mstr-macro":     "claude-haiku-4-5-20251001",
     "mstr-technical": "claude-haiku-4-5-20251001",
-    "mstr-options":   "claude-sonnet-4-6-20250929",
+    "mstr-options":   "claude-sonnet-4-6",
     "mstr-sri":       "claude-haiku-4-5-20251001",
     "mstr-cio":       "claude-opus-4-6",
 }
@@ -45,14 +45,14 @@ THINKING_CONFIG = {
     "mstr-technical": None,                                       # disabled
     "mstr-options":   None,                                       # disabled
     "mstr-sri":       None,                                       # disabled
-    "mstr-cio":       {"type": "enabled", "budget_tokens": 5000}, # medium thinking
+    "mstr-cio":       {"type": "adaptive", "budget_tokens": 5000}, # medium thinking
 }
 
 MAX_TOKENS = {
-    "mstr-macro":     2048,
-    "mstr-technical": 2048,
-    "mstr-options":   2048,
-    "mstr-sri":       2048,
+    "mstr-macro":     4096,
+    "mstr-technical": 4096,
+    "mstr-options":   4096,
+    "mstr-sri":       4096,
     "mstr-cio":       8192,
 }
 
@@ -68,12 +68,24 @@ def get_client():
     return get_anthropic_client()
 
 
+JSON_ONLY_INSTRUCTION = """
+
+---
+## OUTPUT FORMAT — CRITICAL
+Respond ONLY with a single valid JSON object.
+- No markdown code fences (no ```json)
+- No preamble, commentary, or explanation before or after the JSON
+- No trailing text after the closing }
+- The very first character of your response must be {
+- The very last character of your response must be }
+"""
+
 def load_agent_prompt(agent_id: str) -> str:
-    """Load AGENTS.md for a sub-agent."""
+    """Load AGENTS.md for a sub-agent and append JSON-only instruction."""
     path = Path(WORKSPACE_ROOT) / f"workspace-{agent_id}" / "AGENTS.md"
     if not path.exists():
         raise FileNotFoundError(f"AGENTS.md not found: {path}")
-    return path.read_text()
+    return path.read_text() + JSON_ONLY_INSTRUCTION
 
 
 def db_connect() -> sqlite3.Connection:
