@@ -150,16 +150,18 @@ PATH=/usr/local/bin:/usr/bin:/bin
 # ── P12 PHASE 3: DAILY ENGINE RUN (added Mar 2026) ────────────
 # ══════════════════════════════════════════════════════════════
 
-# Morning engine run: 10:30 AM ET (14:30 UTC) — after Gavin's daily CSV push
 # Pulls 16 CSVs from GitHub, runs 4-layer engine, regenerates dashboard, posts to Discord
-30 14 * * 1-5 GITHUB_TOKEN=$(grep GITHUB_TOKEN /mnt/mstr-config/.env | cut -d= -f2) FRED_API_KEY=$(grep FRED_API_KEY /mnt/mstr-config/.env | cut -d= -f2) /usr/bin/python3 /home/openclaw/mstr-engine/scripts/daily_engine_run.py >> /home/openclaw/mstr-engine/logs/daily_engine.log 2>&1
 
-# ── DELEGATION CYCLE (new pipeline — replaces solo morning brief) ──────────
-# Step 1: Data refresh (already exists above at 14:30 UTC)
-# Step 2: 4 sub-agents + CIO synthesis: 10:10 AM ET = 14:10 UTC (adjust if daily_engine takes >10min)
+# ── DAILY ANALYSIS PIPELINE (Mon-Fri, all times UTC) ──────────────────────
+# Step 1: Data refresh:        10:00 AM ET = 14:00 UTC
+0 14 * * 1-5 GITHUB_TOKEN=$(grep GITHUB_TOKEN /mnt/mstr-config/.env | cut -d= -f2) FRED_API_KEY=$(grep FRED_API_KEY /mnt/mstr-config/.env | cut -d= -f2) /usr/bin/python3 /home/openclaw/mstr-engine/scripts/daily_engine_run.py >> /home/openclaw/mstr-engine/logs/daily_engine.log 2>&1
+# Step 2: 4 sub-agents + CIO:  10:10 AM ET = 14:10 UTC
 10 14 * * 1-5 ANTHROPIC_API_KEY=$(grep ANTHROPIC_API_KEY /mnt/mstr-config/.env | cut -d= -f2) /usr/bin/python3 /mnt/mstr-scripts/daily_analysis_cycle.py >> /mnt/mstr-logs/daily_analysis.log 2>&1
-# Step 3: Format + Discord delivery: 10:25 AM ET = 14:25 UTC
+# Step 3: Morning brief:       10:25 AM ET = 14:25 UTC  → #mstr-cio + #mstr-cio-alerts
 25 14 * * 1-5 /usr/bin/python3 /home/openclaw/mstr-engine/scripts/cron_runner.py morning_brief.py >> /home/openclaw/mstr-engine/logs/cron.log 2>&1
+# Step 4: PPR delivery:        10:30 AM ET = 14:30 UTC  → #mstr-greg, #mstr-gavin, #mstr-gary
+30 14 * * 1-5 /usr/bin/python3 /mnt/mstr-scripts/ppr_generator.py >> /mnt/mstr-logs/ppr.log 2>&1
+
 
 # CSV freshness check + Gavin reminder: Friday 2:00 PM ET = 19:00 UTC
 0 19 * * 5 GITHUB_TOKEN=$(grep GITHUB_TOKEN /mnt/mstr-config/.env | cut -d= -f2) /usr/bin/python3 /mnt/mstr-scripts/csv_freshness_check.py --suite-reminder >> /mnt/mstr-logs/cron.log 2>&1
