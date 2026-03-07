@@ -1,0 +1,170 @@
+# === MSTR Engine Data Pipeline ===
+# System timezone: UTC. All times converted from ET (EST = UTC-5)
+# NOTE: Adjust +1 hour during EDT (Mar-Nov) or add DST-aware wrapper
+# Updated: 2026-02-22 — 31 scripts, 43 cron entries
+SHELL=/bin/bash
+PATH=/usr/local/bin:/usr/bin:/bin
+
+# ══════════════════════════════════════════════════════════════
+# ── MACRO & SENTIMENT (pre-market) ───────────────────────────
+# ══════════════════════════════════════════════════════════════
+
+# FRED macro data + VIX: 6:00 AM ET = 11:00 UTC
+0 11 * * 1-5 /usr/bin/python3 /home/openclaw/mstr-engine/scripts/cron_runner.py collect_fred.py >> /home/openclaw/mstr-engine/logs/cron.log 2>&1
+
+# GLI proxy: 6:15 AM ET = 11:15 UTC
+15 11 * * 1-5 /usr/bin/python3 /home/openclaw/mstr-engine/scripts/cron_runner.py calc_gli_proxy.py >> /home/openclaw/mstr-engine/logs/cron.log 2>&1
+
+# Strategy BTC holdings (CoinGecko treasury): 6:30 AM ET = 11:30 UTC
+30 11 * * 1-5 /usr/bin/python3 /home/openclaw/mstr-engine/scripts/cron_runner.py collect_strategy_holdings.py >> /home/openclaw/mstr-engine/logs/cron.log 2>&1
+
+# Fear & Greed Index: 7:05 AM ET = 12:05 UTC (updates once daily)
+5 12 * * * /usr/bin/python3 /home/openclaw/mstr-engine/scripts/cron_runner.py collect_fear_greed.py >> /home/openclaw/mstr-engine/logs/cron.log 2>&1
+
+# ══════════════════════════════════════════════════════════════
+# ── BTC DATA (24/7) ──────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════
+
+# BTC price: every hour (CoinGecko free tier)
+0 * * * * /usr/bin/python3 /home/openclaw/mstr-engine/scripts/cron_runner.py collect_btc_price.py >> /home/openclaw/mstr-engine/logs/cron.log 2>&1
+
+# BTC derivatives v1 (funding/basis/OI): every 4 hours
+0 */4 * * * /usr/bin/python3 /home/openclaw/mstr-engine/scripts/cron_runner.py collect_funding.py >> /home/openclaw/mstr-engine/logs/cron.log 2>&1
+
+# BTC derivatives v2 (OKX + Deribit enhanced): every 4 hours, offset by 30 min
+30 1,5,9,13,17,21 * * * /usr/bin/python3 /home/openclaw/mstr-engine/scripts/cron_runner.py collect_btc_derivatives_v2.py >> /home/openclaw/mstr-engine/logs/cron.log 2>&1
+
+# ══════════════════════════════════════════════════════════════
+# ── EDGAR & SAYLOR (market hours) ────────────────────────────
+# ══════════════════════════════════════════════════════════════
+
+# EDGAR filings: 8 AM-6 PM ET = 13:00-23:00 UTC, every 30 min
+*/30 13-22 * * 1-5 /usr/bin/python3 /home/openclaw/mstr-engine/scripts/cron_runner.py collect_edgar.py >> /home/openclaw/mstr-engine/logs/cron.log 2>&1
+
+# Saylor monitor: every 30 min during market hours
+*/30 13-22 * * 1-5 /usr/bin/python3 /home/openclaw/mstr-engine/scripts/cron_runner.py monitor_saylor.py >> /home/openclaw/mstr-engine/logs/cron.log 2>&1
+
+# ══════════════════════════════════════════════════════════════
+# ── MARKET DATA — 5-MIN FREQUENCY (market hours) ─────────────
+# ══════════════════════════════════════════════════════════════
+
+# ORATS (MSTR price + options): every 5 min, 9:30 AM-4 PM ET
+30-59/5 14 * * 1-5 /usr/bin/python3 /home/openclaw/mstr-engine/scripts/cron_runner.py collect_orats.py >> /home/openclaw/mstr-engine/logs/cron.log 2>&1
+*/5 15-20 * * 1-5 /usr/bin/python3 /home/openclaw/mstr-engine/scripts/cron_runner.py collect_orats.py >> /home/openclaw/mstr-engine/logs/cron.log 2>&1
+0 21 * * 1-5 /usr/bin/python3 /home/openclaw/mstr-engine/scripts/cron_runner.py collect_orats.py >> /home/openclaw/mstr-engine/logs/cron.log 2>&1
+
+# BTC intraday (OKX 5m candles): every 5 min, 9:30 AM-4 PM ET
+30-59/5 14 * * 1-5 /usr/bin/python3 /home/openclaw/mstr-engine/scripts/cron_runner.py collect_btc_intraday.py >> /home/openclaw/mstr-engine/logs/cron.log 2>&1
+*/5 15-20 * * 1-5 /usr/bin/python3 /home/openclaw/mstr-engine/scripts/cron_runner.py collect_btc_intraday.py >> /home/openclaw/mstr-engine/logs/cron.log 2>&1
+0 21 * * 1-5 /usr/bin/python3 /home/openclaw/mstr-engine/scripts/cron_runner.py collect_btc_intraday.py >> /home/openclaw/mstr-engine/logs/cron.log 2>&1
+
+# mNAV real-time monitor: every 5 min, 9:30 AM-4 PM ET (offset +1 min after data)
+31-59/5 14 * * 1-5 /usr/bin/python3 /home/openclaw/mstr-engine/scripts/cron_runner.py calc_mnav_realtime.py >> /home/openclaw/mstr-engine/logs/cron.log 2>&1
+1-59/5 15-20 * * 1-5 /usr/bin/python3 /home/openclaw/mstr-engine/scripts/cron_runner.py calc_mnav_realtime.py >> /home/openclaw/mstr-engine/logs/cron.log 2>&1
+1 21 * * 1-5 /usr/bin/python3 /home/openclaw/mstr-engine/scripts/cron_runner.py calc_mnav_realtime.py >> /home/openclaw/mstr-engine/logs/cron.log 2>&1
+
+# IBIT/FBTC intraday (Yahoo 5m): every 5 min, 9:30 AM-4 PM ET
+30-59/5 14 * * 1-5 /usr/bin/python3 /home/openclaw/mstr-engine/scripts/cron_runner.py collect_ibit_intraday.py >> /home/openclaw/mstr-engine/logs/cron.log 2>&1
+*/5 15-20 * * 1-5 /usr/bin/python3 /home/openclaw/mstr-engine/scripts/cron_runner.py collect_ibit_intraday.py >> /home/openclaw/mstr-engine/logs/cron.log 2>&1
+0 21 * * 1-5 /usr/bin/python3 /home/openclaw/mstr-engine/scripts/cron_runner.py collect_ibit_intraday.py >> /home/openclaw/mstr-engine/logs/cron.log 2>&1
+
+# Flow (Unusual Whales): every 15 min, 9:30 AM-4 PM ET
+30,45 14 * * 1-5 /usr/bin/python3 /home/openclaw/mstr-engine/scripts/cron_runner.py collect_flow.py >> /home/openclaw/mstr-engine/logs/cron.log 2>&1
+*/15 15-20 * * 1-5 /usr/bin/python3 /home/openclaw/mstr-engine/scripts/cron_runner.py collect_flow.py >> /home/openclaw/mstr-engine/logs/cron.log 2>&1
+0 21 * * 1-5 /usr/bin/python3 /home/openclaw/mstr-engine/scripts/cron_runner.py collect_flow.py >> /home/openclaw/mstr-engine/logs/cron.log 2>&1
+
+# MSTR intraday OHLCV (Yahoo 15m): every 15 min
+*/15 14-20 * * 1-5 /usr/bin/python3 /home/openclaw/mstr-engine/scripts/cron_runner.py collect_intraday.py >> /home/openclaw/mstr-engine/logs/cron.log 2>&1
+
+# ══════════════════════════════════════════════════════════════
+# ── INTRADAY PATTERN ALERTS ──────────────────────────────────
+# ══════════════════════════════════════════════════════════════
+
+# Opening Range: 10:00 AM ET = 15:00 UTC
+0 15 * * 1-5 /usr/bin/python3 /home/openclaw/mstr-engine/scripts/cron_runner.py calc_intraday_patterns.py opening >> /home/openclaw/mstr-engine/logs/cron.log 2>&1
+
+# Midday Assessment: 12:30 PM ET = 17:30 UTC
+30 17 * * 1-5 /usr/bin/python3 /home/openclaw/mstr-engine/scripts/cron_runner.py calc_intraday_patterns.py midday >> /home/openclaw/mstr-engine/logs/cron.log 2>&1
+
+# Power Hour: 3:15 PM ET = 20:15 UTC
+15 20 * * 1-5 /usr/bin/python3 /home/openclaw/mstr-engine/scripts/cron_runner.py calc_intraday_patterns.py power_hour >> /home/openclaw/mstr-engine/logs/cron.log 2>&1
+
+# Intraday alerts: every 5 min during market hours
+30-59/5 14 * * 1-5 /usr/bin/python3 /home/openclaw/mstr-engine/scripts/cron_runner.py intraday_alerts.py >> /home/openclaw/mstr-engine/logs/cron.log 2>&1
+*/5 15-20 * * 1-5 /usr/bin/python3 /home/openclaw/mstr-engine/scripts/cron_runner.py intraday_alerts.py >> /home/openclaw/mstr-engine/logs/cron.log 2>&1
+0 21 * * 1-5 /usr/bin/python3 /home/openclaw/mstr-engine/scripts/cron_runner.py intraday_alerts.py >> /home/openclaw/mstr-engine/logs/cron.log 2>&1
+
+# ══════════════════════════════════════════════════════════════
+# ── POST-MARKET FULL DATA PULL (4:10-4:15 PM ET) ─────────────
+# ══════════════════════════════════════════════════════════════
+
+# ORATS full (cores + IV rank + HV + vol surface): 4:10 PM ET = 21:10 UTC
+10 21 * * 1-5 /usr/bin/python3 /home/openclaw/mstr-engine/scripts/cron_runner.py collect_orats_full.py >> /home/openclaw/mstr-engine/logs/cron.log 2>&1
+
+# UW full (GEX + max pain + flow alerts + market tide): 4:15 PM ET = 21:15 UTC
+15 21 * * 1-5 /usr/bin/python3 /home/openclaw/mstr-engine/scripts/cron_runner.py collect_uw_full.py >> /home/openclaw/mstr-engine/logs/cron.log 2>&1
+
+# ══════════════════════════════════════════════════════════════
+# ── POST-MARKET CALCS (4:20-4:45 PM ET) ──────────────────────
+# ══════════════════════════════════════════════════════════════
+
+# Options skew: 4:20 PM ET = 21:20 UTC
+20 21 * * 1-5 /usr/bin/python3 /home/openclaw/mstr-engine/scripts/cron_runner.py calc_skew.py >> /home/openclaw/mstr-engine/logs/cron.log 2>&1
+
+# mNAV (EV-based, Strategy methodology): 4:25 PM ET = 21:25 UTC
+25 21 * * 1-5 /usr/bin/python3 /home/openclaw/mstr-engine/scripts/cron_runner.py calc_mnav.py >> /home/openclaw/mstr-engine/logs/cron.log 2>&1
+
+# SRI stage calc: 4:30 PM ET = 21:30 UTC
+30 21 * * 1-5 /usr/bin/python3 /home/openclaw/mstr-engine/scripts/cron_runner.py calc_sri.py >> /home/openclaw/mstr-engine/logs/cron.log 2>&1
+
+# SRI signal layer: 4:35 PM ET = 21:35 UTC
+35 21 * * 1-5 /usr/bin/python3 /home/openclaw/mstr-engine/scripts/cron_runner.py calc_sri_signal.py >> /home/openclaw/mstr-engine/logs/cron.log 2>&1
+
+# ══════════════════════════════════════════════════════════════
+# ── REPORTS ───────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════
+
+# EOD Recap: 4:45 PM ET = 21:45 UTC
+45 21 * * 1-5 /usr/bin/python3 /home/openclaw/mstr-engine/scripts/cron_runner.py eod_recap.py >> /home/openclaw/mstr-engine/logs/cron.log 2>&1
+
+# ETF flows: 5:30 PM ET = 22:30 UTC (after market close + NAV calc)
+30 22 * * 1-5 /usr/bin/python3 /home/openclaw/mstr-engine/scripts/cron_runner.py collect_etf_flows.py >> /home/openclaw/mstr-engine/logs/cron.log 2>&1
+
+# Morning Brief: 7:00 AM ET = 12:00 UTC
+# OLD (replaced by delegation pipeline below): 0 12 * * 1-5 /usr/bin/python3 /home/openclaw/mstr-engine/scripts/cron_runner.py morning_brief.py >> /home/openclaw/mstr-engine/logs/cron.log 2>&1
+
+# ══════════════════════════════════════════════════════════════
+# ── WEEKLY ────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════
+
+# Short interest: Wed 8 AM ET = 13:00 UTC (FINRA publishes bimonthly)
+0 13 * * 3 /usr/bin/python3 /home/openclaw/mstr-engine/scripts/cron_runner.py collect_short_interest.py >> /home/openclaw/mstr-engine/logs/cron.log 2>&1
+
+# CFTC COT (institutional BTC futures positioning): Mon + Sat 7 AM ET = 12:00 UTC
+0 12 * * 1,6 /usr/bin/python3 /home/openclaw/mstr-engine/scripts/cron_runner.py collect_cot.py >> /home/openclaw/mstr-engine/logs/cron.log 2>&1
+
+# Strategy fundamentals (EDGAR XBRL — debt, pref, cash, shares): Mon 8 AM ET = 13:00 UTC
+0 13 * * 1 /usr/bin/python3 /home/openclaw/mstr-engine/scripts/cron_runner.py collect_strategy_fundamentals.py >> /home/openclaw/mstr-engine/logs/cron.log 2>&1
+
+# ══════════════════════════════════════════════════════════════
+# ── P12 PHASE 3: DAILY ENGINE RUN (added Mar 2026) ────────────
+# ══════════════════════════════════════════════════════════════
+
+# Morning engine run: 10:30 AM ET (14:30 UTC) — after Gavin's daily CSV push
+# Pulls 16 CSVs from GitHub, runs 4-layer engine, regenerates dashboard, posts to Discord
+30 14 * * 1-5 GITHUB_TOKEN=$(grep GITHUB_TOKEN /mnt/mstr-config/.env | cut -d= -f2) FRED_API_KEY=$(grep FRED_API_KEY /mnt/mstr-config/.env | cut -d= -f2) /usr/bin/python3 /home/openclaw/mstr-engine/scripts/daily_engine_run.py >> /home/openclaw/mstr-engine/logs/daily_engine.log 2>&1
+
+# ── DELEGATION CYCLE (new pipeline — replaces solo morning brief) ──────────
+# Step 1: Data refresh (already exists above at 14:30 UTC)
+# Step 2: 4 sub-agents + CIO synthesis: 10:10 AM ET = 14:10 UTC (adjust if daily_engine takes >10min)
+10 14 * * 1-5 ANTHROPIC_API_KEY=$(grep ANTHROPIC_API_KEY /mnt/mstr-config/.env | cut -d= -f2) /usr/bin/python3 /mnt/mstr-scripts/daily_analysis_cycle.py >> /mnt/mstr-logs/daily_analysis.log 2>&1
+# Step 3: Format + Discord delivery: 10:25 AM ET = 14:25 UTC
+25 14 * * 1-5 /usr/bin/python3 /home/openclaw/mstr-engine/scripts/cron_runner.py morning_brief.py >> /home/openclaw/mstr-engine/logs/cron.log 2>&1
+
+# CSV freshness check + Gavin reminder: Friday 2:00 PM ET = 19:00 UTC
+0 19 * * 5 GITHUB_TOKEN=$(grep GITHUB_TOKEN /mnt/mstr-config/.env | cut -d= -f2) /usr/bin/python3 /mnt/mstr-scripts/csv_freshness_check.py --suite-reminder >> /mnt/mstr-logs/cron.log 2>&1
+
+# EOD engine run: 5:00 PM ET (21:00 UTC) — captures intraday CSV updates
+0 21 * * 1-5 GITHUB_TOKEN=$(grep GITHUB_TOKEN /mnt/mstr-config/.env | cut -d= -f2) FRED_API_KEY=$(grep FRED_API_KEY /mnt/mstr-config/.env | cut -d= -f2) /usr/bin/python3 /home/openclaw/mstr-engine/scripts/daily_engine_run.py >> /home/openclaw/mstr-engine/logs/daily_engine.log 2>&1
+
+# === End MSTR Engine — 33 scripts, 45 cron entries ===
