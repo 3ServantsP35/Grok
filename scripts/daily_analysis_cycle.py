@@ -51,7 +51,7 @@ THINKING_CONFIG = {
 MAX_TOKENS = {
     "mstr-macro":     4096,
     "mstr-technical": 4096,
-    "mstr-options":   4096,
+    "mstr-options":   6144,
     "mstr-sri":       4096,
     "mstr-cio":       8192,
 }
