@@ -45,7 +45,7 @@ THINKING_CONFIG = {
     "mstr-technical": None,                                       # disabled
     "mstr-options":   None,                                       # disabled
     "mstr-sri":       None,                                       # disabled
-    "mstr-cio":       {"type": "adaptive", "budget_tokens": 5000}, # medium thinking
+    "mstr-cio":       {"type": "enabled", "budget_tokens": 5000}, # medium thinking
 }
 
 MAX_TOKENS = {
