@@ -166,6 +166,11 @@ PATH=/usr/local/bin:/usr/bin:/bin
 # CSV freshness check + Gavin reminder: Friday 2:00 PM ET = 19:00 UTC
 0 19 * * 5 GITHUB_TOKEN=$(grep GITHUB_TOKEN /mnt/mstr-config/.env | cut -d= -f2) /usr/bin/python3 /mnt/mstr-scripts/csv_freshness_check.py --suite-reminder >> /mnt/mstr-logs/cron.log 2>&1
 
+# Suite upload detector: twice daily (9 AM + 3 PM ET = 14:00 + 20:00 UTC)
+# Alerts #mstr-gavin, #mstr-greg, #mstr-gary when Gavin pushes new Suite CSVs
+0 14 * * * GITHUB_TOKEN=$(grep GITHUB_TOKEN /mnt/mstr-data/.env_tokens | cut -d= -f2) /usr/bin/python3 /mnt/mstr-scripts/suite_upload_alert.py >> /mnt/mstr-logs/suite_alert.log 2>&1
+0 20 * * * GITHUB_TOKEN=$(grep GITHUB_TOKEN /mnt/mstr-data/.env_tokens | cut -d= -f2) /usr/bin/python3 /mnt/mstr-scripts/suite_upload_alert.py >> /mnt/mstr-logs/suite_alert.log 2>&1
+
 # EOD engine run: 5:00 PM ET (21:00 UTC) — captures intraday CSV updates
 0 21 * * 1-5 GITHUB_TOKEN=$(grep GITHUB_TOKEN /mnt/mstr-config/.env | cut -d= -f2) FRED_API_KEY=$(grep FRED_API_KEY /mnt/mstr-config/.env | cut -d= -f2) /usr/bin/python3 /home/openclaw/mstr-engine/scripts/daily_engine_run.py >> /home/openclaw/mstr-engine/logs/daily_engine.log 2>&1
 
