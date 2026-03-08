@@ -73,12 +73,21 @@ Never assume, round, or estimate timestamps. Never label data with a time you di
 ### Risk Parameters
 Defined in mstr-knowledge/trading-rules.md (always load). No naked short calls without Greg approval. Every spread has defined max loss. Check portfolio Greeks before any new position.
 
-### Strategy Library
-**AB3 (Core):** 2-year OTM LEAPs on in-scope assets at deep LOI accumulation (LOI < -45 momentum / < -40 MR). Stage 2 bounce confirmation required before entry.
-**AB2 (Income overlay):** PMCC — sell short calls (< 90 DTE) against AB3 LEAPs. Delta gate controlled by LOI/CT state: no calls in accumulation zone (LOI < -20); OTM delta ≤ 0.25 in neutral zone; ATM delta ≤ 0.40 in trim zone. DELTA_MGMT (trim zone) threshold: LOI > +40 for Momentum assets (MSTR/TSLA/IBIT), LOI > +20 for MR assets (SPY/QQQ/GLD/IWM). GLI adjustment applies on top. Pause during AB1 signal on same asset. In CONTRACTING liquidity regime, defer AB2 call-selling increases until LT/VLT confirms upward momentum.
-**AB1 (Tactical):** OTM LEAPs 60–120 DTE at CT1/CT2 pre-breakout signals. Exit on LT positive or 90-day max. Failed AB1 → reclassify as AB3.
-**AB4 (Cash Reserve):** Yield-bearing cash staging area. Composition: all preferred stock (STRC, STRK, STRF) + true cash. STRC is the default parking vehicle and the hurdle rate benchmark (~0.83%/month). Hard floor (10%) must be true cash only — preferreds do not satisfy the floor. Capital only leaves AB4 if the expected return on the target position exceeds STRC yield.
-**Retired (v2.0):** Bull Put Spreads, Bear Call Spreads, Iron Condors (pending P14 reactivation).
+### Strategy Library (v4.0 — 2026-03-08)
+
+**AB3 (Structural Accumulation):** 2-year OTM LEAPs on in-scope assets at deep LOI accumulation (LOI < -45 momentum / < -40 MR). Stage 2 bounce confirmation required before entry. Phased trim: 25%/50%/75%/full at LOI +20/+40/+60/rollover. Target ~50% of portfolio. The long LEAP leg of any PMCC is always AB3.
+
+**AB2 (Directional Conviction):** Delta-first trades on significant overextension or pre-breakout setups. Holding period 30 days minimum; 90+ days for LEAP structures. Capital ≤10% of portfolio. Entry triggers: Force Field BOUNCE EXHAUST, extreme LOI, CT1/CT2 pre-breakout + Force Field EARLY RECOV. Structures (simple only, max 2 legs): long LEAP puts, bear call spread, bull put spread, long LEAP calls 60–120 DTE.
+
+**AB1 (Theta Income):** Theta-first trades. Short holding periods (1-day to 2-week target; 30 DTE hard max). Capital ≤10% of portfolio (excludes AB3 LEAP long leg). Entry criteria: CRS ≥7, LOI in S1 CHOP or RECOVERY, Exercise Risk LOW/MED. Structures: bull put spread, bear call spread, PMCC short leg when theta-motivated. Higher volume than AB2/AB3 — consistent quarterly income target.
+
+**PMCC Classification:** Long LEAP leg = AB3. Short call leg = AB1 (theta-motivated, default) or AB2 (directional conviction, 30+ DTE, larger size — note intent at entry).
+
+**AB4 (Capital Reserve):** STRC default. Hard floor 10% true cash. Undeployed capital stages here. STRC hurdle: 0.83%/month. Capital only leaves AB4 when target return clears hurdle. In structural bear: AB4 often 30–40%.
+
+**Permanent rule — No naked shorts:** All short option legs must be part of a defined-risk spread. No exceptions, no approval overrides this.
+
+Full rules: `mstr-knowledge/trading-rules.md`
 
 ### IV Regime Rules (PMCC context)
 Ultra-high (90th+): Maximum call-selling aggression — sell at top of delta range; LEAP entry ideal (cheap on forward valuation).
