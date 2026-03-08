@@ -201,18 +201,18 @@ var table tbl = table.new(position.top_right, 2, 9,
      frame_color=color.new(color.gray, 40),  frame_width=1)
 
 if barstate.islast
-    zone_str  = zone_sb  ? "STRONG BULL [PROV]" :
-                zone_b   ? "MOD BULL [PROV]"    :
-                zone_n   ? "NEUTRAL"             :
-                zone_br  ? "MOD BEAR [HIGH]"     : "STRONG BEAR [HIGH]"
+    zone_str  = (zone_sb  ? "STRONG BULL [PROV]" :
+                 zone_b   ? "MOD BULL [PROV]"    :
+                 zone_n   ? "NEUTRAL"             :
+                 zone_br  ? "MOD BEAR [HIGH]"     : "STRONG BEAR [HIGH]")
     f_trend   = f_net > f_net[1] ? "RISING" : f_net < f_net[1] ? "FALLING" : "FLAT"
-    mibit_str = f_mibit_lt > 0.1  ? "BULL"   :
-                f_mibit_lt < -0.1 ? "BEAR"   :
-                mibit_gap  > 0.0  ? "DECEL+" : "TRANSIT"
-    strf_str  = strf_lt_dir > 0.0 and strf_lt_decel == 1.0 ? "MOM_BULL"  :
-                strf_lt_dir > 0.0                           ? "DECEL_BULL":
-                strf_lt_dir < 0.0 and strf_lt_decel == 1.0 ? "MOM_BEAR"  :
-                strf_lt_dir < 0.0                           ? "DECEL_BEAR": "TRANSIT"
+    mibit_str = (f_mibit_lt > 0.1  ? "BULL"   :
+                 f_mibit_lt < -0.1 ? "BEAR"   :
+                 mibit_gap  > 0.0  ? "DECEL+" : "TRANSIT")
+    strf_str  = (strf_lt_dir > 0.0 and strf_lt_decel == 1.0 ? "MOM_BULL"  :
+                 strf_lt_dir > 0.0                           ? "DECEL_BULL":
+                 strf_lt_dir < 0.0 and strf_lt_decel == 1.0 ? "MOM_BEAR"  :
+                 strf_lt_dir < 0.0                           ? "DECEL_BEAR": "TRANSIT")
 
     // FIX: build label strings as variables before table.cell() calls
     mult_label    = str.tostring(multiplier, "#.###") + "x (" + mibit_str + ")"
