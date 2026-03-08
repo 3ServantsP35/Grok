@@ -167,11 +167,11 @@ c_sbr = color.new(#b71c1c, 0)
 
 f_color = zone_sb ? c_sb : zone_b ? c_b : zone_n ? c_n : zone_br ? c_br : c_sbr
 
-bg_col = zone_sb  ? color.new(#00e5ff, 93) :
-         zone_b   ? color.new(#26a69a, 93) :
-         zone_n   ? na :
-         zone_br  ? color.new(#ef5350, 90) :
-                    color.new(#b71c1c, 85)
+bg_col = (zone_sb  ? color.new(#00e5ff, 93) :
+          zone_b   ? color.new(#26a69a, 93)  :
+          zone_n   ? color(na)               :
+          zone_br  ? color.new(#ef5350, 90)  :
+                     color.new(#b71c1c, 85))
 
 // ── Plots ─────────────────────────────────────────────────────────────────
 bgcolor(i_show_bg ? bg_col : na, title="Zone Background")
