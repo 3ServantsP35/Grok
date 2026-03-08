@@ -85,9 +85,25 @@ f_stable    = f_norm(stable_fast, stable_slow, true) * 0.4
 // COMPONENT 3 — MSTR self-reference
 // ST Fast = 2H, ST Slow = 1D  |  ATR/RSI formula  |  weight x0.3
 // ════════════════════════════════════════════════════════════════════════════
-mstr_fast = request.security("BATS:MSTR", "120", f_trackline(i_atr_coeff, i_atr_period))
-mstr_slow = request.security("BATS:MSTR", "D",   f_trackline(i_atr_coeff, i_atr_period))
-f_self    = f_norm(mstr_fast, mstr_slow, false) * 0.3
+mstr_fast    = request.security("BATS:MSTR", "120", f_trackline(i_atr_coeff, i_atr_period))
+mstr_slow    = request.security("BATS:MSTR", "D",   f_trackline(i_atr_coeff, i_atr_period))
+mstr_lt_slow = request.security("BATS:MSTR", "W",   f_trackline(i_atr_coeff, i_atr_period))
+f_self       = f_norm(mstr_fast, mstr_slow, false) * 0.3
+
+// ── Structural Gap Gate ──────────────────────────────────────────────────────
+// Backtest finding (N=575, Jan 2025-Mar 2026):
+//   STRONG_BULL + price >10% below LT Slow TL:  7% bull WR at +20d  (93% BEARISH)
+//   MOD_BULL    + price >10% below LT Slow TL: 56% bull WR at +20d  (mildly bullish)
+// When STRONG_BULL fires far below structural resistance, it signals
+// bounce exhaustion, not a trend reversal.
+mstr_vs_lt_slow = not na(mstr_lt_slow) and mstr_lt_slow != 0.0 ?
+     (close - mstr_lt_slow) / mstr_lt_slow : 0.0
+i_struct_gap_pct = input.float(-0.10, "Structural gap threshold", step=0.01,
+     tooltip="Bull zone suppressed when price is this far below LT Slow TL. Default -10% (10% below TL).",
+     group="Zone Thresholds (update after 2026-09-08 checkpoint)")
+sg_active   = mstr_vs_lt_slow < i_struct_gap_pct  // price far below LT Slow TL
+sb_exhaust  = zone_sb and sg_active                // STRONG BULL + struct gap = bounce exhaustion
+mb_early    = zone_b  and sg_active                // MOD BULL + struct gap = early recovery
 
 // ════════════════════════════════════════════════════════════════════════════
 // COMPONENT 4 — STRF/LQD ratio (primary force)
@@ -153,25 +169,35 @@ zone_br  = f_net >  i_t_sbr and f_net <= i_t_br
 zone_sbr = f_net <= i_t_sbr
 
 zone_id  = zone_sb ? 2 : zone_b ? 1 : zone_n ? 0 : zone_br ? -1 : -2
-zone_chg = zone_id != zone_id[1]
+zone_chg   = zone_id != zone_id[1]
 into_bear  = zone_chg and (zone_br or zone_sbr)
 into_bull  = zone_chg and (zone_sb or zone_b)
 into_sbear = zone_chg and zone_sbr
+into_exhaust = sb_exhaust and not sb_exhaust[1]  // STRONG BULL flips to exhaustion
 
 // ── Colors ────────────────────────────────────────────────────────────────
-c_sb  = color.new(#00e5ff, 0)
-c_b   = color.new(#26a69a, 0)
-c_n   = color.new(#90a4ae, 0)
-c_br  = color.new(#ef5350, 0)
-c_sbr = color.new(#b71c1c, 0)
+c_sb      = color.new(#00e5ff, 0)   // strong bull (confirmed)
+c_b       = color.new(#26a69a, 0)   // mod bull
+c_exhaust = color.new(#ff9800, 0)   // bounce exhaustion (SB + struct gap)
+c_early   = color.new(#ffe082, 0)   // early recovery (MB + struct gap)
+c_n       = color.new(#90a4ae, 0)   // neutral
+c_br      = color.new(#ef5350, 0)   // mod bear
+c_sbr     = color.new(#b71c1c, 0)   // strong bear
 
-f_color = zone_sb ? c_sb : zone_b ? c_b : zone_n ? c_n : zone_br ? c_br : c_sbr
+f_color = (sb_exhaust ? c_exhaust :
+           mb_early   ? c_early   :
+           zone_sb    ? c_sb      :
+           zone_b     ? c_b       :
+           zone_n     ? c_n       :
+           zone_br    ? c_br      : c_sbr)
 
-bg_col = (zone_sb  ? color.new(#00e5ff, 93) :
-          zone_b   ? color.new(#26a69a, 93)  :
-          zone_n   ? color(na)               :
-          zone_br  ? color.new(#ef5350, 90)  :
-                     color.new(#b71c1c, 85))
+bg_col = (sb_exhaust  ? color.new(#ff9800, 90) :
+          mb_early    ? color.new(#ffe082, 93)  :
+          zone_sb     ? color.new(#00e5ff, 93)  :
+          zone_b      ? color.new(#26a69a, 93)  :
+          zone_n      ? color(na)               :
+          zone_br     ? color.new(#ef5350, 90)  :
+                        color.new(#b71c1c, 85))
 
 // ── Plots ─────────────────────────────────────────────────────────────────
 bgcolor(i_show_bg ? bg_col : na, title="Zone Background")
@@ -190,21 +216,24 @@ plot(i_show_comps ? f_stable  : na, "Friction (STABLE x0.4)",color=color.new(col
 plot(i_show_comps ? f_self    : na, "Self (MSTR x0.3)",      color=color.new(color.purple, 25), linewidth=1)
 
 // FIX: plotshape uses "style=" not "shape=" in Pine v6
-plotshape(into_bear,  title="Into Bear",        style=shape.triangledown, location=location.abovebar, color=c_br,  size=size.small)
-plotshape(into_bull,  title="Into Bull",        style=shape.triangleup,   location=location.belowbar, color=c_b,   size=size.small)
-plotshape(into_sbear, title="Into Strong Bear", style=shape.xcross,       location=location.abovebar, color=c_sbr, size=size.small)
+plotshape(into_bear,    title="Into Bear",          style=shape.triangledown, location=location.abovebar, color=c_br,      size=size.small)
+plotshape(into_bull,    title="Into Bull",          style=shape.triangleup,   location=location.belowbar, color=c_b,       size=size.small)
+plotshape(into_sbear,   title="Into Strong Bear",   style=shape.xcross,       location=location.abovebar, color=c_sbr,     size=size.small)
+plotshape(into_exhaust, title="Bounce Exhaustion",  style=shape.diamond,      location=location.abovebar, color=c_exhaust, size=size.small)
 
 // ── Info Table ──────────────────────────────────────────────────────────────
-var table tbl = table.new(position.top_right, 2, 9,
+var table tbl = table.new(position.top_right, 2, 10,
      bgcolor=color.new(color.black, 72),
      border_color=color.new(color.gray, 60), border_width=1,
      frame_color=color.new(color.gray, 40),  frame_width=1)
 
 if barstate.islast
-    zone_str  = (zone_sb  ? "STRONG BULL [PROV]" :
-                 zone_b   ? "MOD BULL [PROV]"    :
-                 zone_n   ? "NEUTRAL"             :
-                 zone_br  ? "MOD BEAR [HIGH]"     : "STRONG BEAR [HIGH]")
+    zone_str  = (sb_exhaust ? "BOUNCE EXHAUST [SB+GAP]" :
+                 mb_early   ? "EARLY RECOV [MB+GAP]"   :
+                 zone_sb    ? "STRONG BULL [PROV]"      :
+                 zone_b     ? "MOD BULL [PROV]"         :
+                 zone_n     ? "NEUTRAL"                 :
+                 zone_br    ? "MOD BEAR [HIGH]"         : "STRONG BEAR [HIGH]")
     f_trend   = f_net > f_net[1] ? "RISING" : f_net < f_net[1] ? "FALLING" : "FLAT"
     mibit_str = (f_mibit_lt > 0.1  ? "BULL"   :
                  f_mibit_lt < -0.1 ? "BEAR"   :
@@ -235,10 +264,16 @@ if barstate.islast
     table.cell(tbl, 1, 6, str.tostring(f_stable, "#.####"), text_color=color.new(color.orange, 10), text_size=size.small)
     table.cell(tbl, 0, 7, "MSTR Self",    text_color=color.gray,  text_size=size.small)
     table.cell(tbl, 1, 7, str.tostring(f_self,   "#.####"), text_color=color.new(color.purple, 10), text_size=size.small)
-    table.cell(tbl, 0, 8, "Checkpoint",   text_color=color.new(color.gray, 40), text_size=size.tiny)
-    table.cell(tbl, 1, 8, chkpt_label,    text_color=color.new(color.gray, 40), text_size=size.tiny)
+    sg_str   = sg_active ? str.tostring(mstr_vs_lt_slow * 100, "#.1") + "% vs LT TL [STRUCT GAP]" :
+                            str.tostring(mstr_vs_lt_slow * 100, "#.1") + "% vs LT TL [OK]"
+    sg_col   = sg_active ? color.new(#ff9800, 0) : color.new(color.gray, 30)
+    table.cell(tbl, 0, 8, "Struct Gate",  text_color=color.gray,  text_size=size.small)
+    table.cell(tbl, 1, 8, sg_str,         text_color=sg_col,      text_size=size.small)
+    table.cell(tbl, 0, 9, "Checkpoint",   text_color=color.new(color.gray, 40), text_size=size.tiny)
+    table.cell(tbl, 1, 9, chkpt_label,    text_color=color.new(color.gray, 40), text_size=size.tiny)
 
 // ── Alerts ──────────────────────────────────────────────────────────────────
+alertcondition(into_exhaust,"Force -> Bounce Exhaustion","MSTR Force Field: STRONG BULL + structural gap = bounce exhaustion, 93% bearish +20d")
 alertcondition(into_bear,   "Force -> Bear Zone",        "MSTR Force Field entered BEAR zone")
 alertcondition(into_bull,   "Force -> Bull Zone (PROV)", "MSTR Force Field entered BULL zone — confirm gate before entry")
 alertcondition(into_sbear,  "Force -> STRONG BEAR",      "MSTR Force Field STRONG BEAR — 76%+ WR historically")
