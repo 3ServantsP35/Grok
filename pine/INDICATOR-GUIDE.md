@@ -22,6 +22,8 @@
 | SRI Forecast AB2 | [SRI_Forecast_AB2.pine](https://github.com/3ServantsP35/Grok/blob/main/pine/SRI_Forecast_AB2.pine) | Price overlay | PMCC conditions | AB2 spread setup |
 | SRI Forecast AB3 | [SRI_Forecast_AB3.pine](https://github.com/3ServantsP35/Grok/blob/main/pine/SRI_Forecast_AB3.pine) | Oscillator | LEAP accumulation | AB3 core signal |
 | AB2 CRS v2 | [AB2_CRS.pine](https://github.com/3ServantsP35/Grok/blob/main/pine/AB2_CRS.pine) | Oscillator | Call-selling ripeness | AB2 income sizing |
+| STRF/LQD Ratio | [STRF_LQD_Ratio.pine](https://github.com/3ServantsP35/Grok/blob/main/pine/STRF_LQD_Ratio.pine) | Oscillator | Saylor credit quality ratio | Layer 1 Regime input |
+| Force Field | [MSTR_Suite_Force_Field.pine](https://github.com/3ServantsP35/Grok/blob/main/pine/MSTR_Suite_Force_Field.pine) | Oscillator | 5-factor composite force | Layer 0.75 entry gate |
 
 All files: https://github.com/3ServantsP35/Grok/tree/main/pine
 
@@ -45,6 +47,7 @@ There are four families of indicators in this suite:
 2. **SRIBI Oscillators** (SRIBI VST/ST/LT/VLT) — Bias Histograms in a separate pane. Measure momentum numerically and feed the LOI composite.
 3. **SRI Forecast Strategy Indicators** (AB1/AB2/AB3) — Strategy-specific decision tools, each covering one of the three trade buckets.
 4. **AB2 CRS** — Standalone call-selling scoring tool for the AB2 income overlay.
+5. **Regime & Force Indicators** (STRF/LQD Ratio, Force Field) — External force model for structural regime context. Layer 0.75 — above GLI, below Regime Engine. These do not drive individual trade entries directly; they set the backdrop that governs sizing confidence and gate state.
 
 ---
 
@@ -947,6 +950,7 @@ For a complete view, use four panels:
 
 | Question | Answer comes from |
 |---|---|
+| What is the current structural force regime? | Force Field F_net zone + Gate state |
 | Am I in a structural bull? | SRI LT + SRIBI LT |
 | Is the trend extended or depressed? | LOI in AB3 (green = depressed, red = extended) |
 | Should I open an AB3 LEAP? | LOI < adaptive threshold + ST 4→1 bounce |
@@ -972,4 +976,225 @@ Never skip steps. When you enter on step 6 without step 3, you're front-running 
 
 ---
 
-*Guide generated 2026-03-04. All scripts: Pine v6. Repo: [3ServantsP35/Grok](https://github.com/3ServantsP35/Grok/tree/main/pine).*
+
+---
+
+## Family 5 — Regime & Force Indicators
+
+---
+
+### STRF/LQD Ratio
+
+**File:** `pine/STRF_LQD_Ratio.pine`
+**Type:** Oscillator (separate pane)
+**Data sources:** NASDAQ:STRF (MicroStrategy preferred) / BATS:LQD (IG corporate bond ETF)
+**Framework role:** Layer 1 Regime — Saylor credit precision signal. Strips interest-rate noise from STRF by normalising against IG credit. What remains is the MSTR-specific credit premium — a leading indicator for MSTR equity direction (credit typically recovers 3–7 bars before equity).
+
+#### What It Shows
+
+The STRF/LQD ratio line (teal = above Slow TL, maroon = below), a Fast EMA(20) trackline (yellow), a Slow SMA(50) trackline, a momentum histogram (FTL − STL), and a 1-year rolling percentile band. Signal markers for Credit Recovery (CR ▲), Credit Warn (CW ▼), and Credit Stress Entry (CS ✕).
+
+**Key states:**
+| State | Condition | MSTR Signal |
+|---|---|---|
+| Credit Stress | Ratio ≤ 20th percentile | Bearish divergence if BTC stable/rising |
+| Credit Warn | Ratio crosses below Fast TL | Deterioration beginning — monitor |
+| Neutral | 20th–40th percentile | No actionable signal |
+| Credit Recovery | Ratio crosses above 40th percentile | Leading bull signal (3–7 bar lead) |
+| Credit Healthy | Ratio ≥ 60th percentile | Structural tailwind confirmed |
+
+#### Inputs / Settings
+
+| Setting | Default | What it does |
+|---|---|---|
+| Fast Trackline Length | 20 bars | EMA period for the fast trackline |
+| Slow Trackline Length | 50 bars | SMA period for the slow trackline |
+| Percentile Band Lookback | 252 bars | Rolling 1-year window for high/low percentile bands |
+| Credit Stress Threshold | 0.20 | Ratio below the 20th percentile = stress |
+| Credit Recovery Threshold | 0.40 | Ratio above the 40th percentile = recovery signal |
+| Show Percentile Bands | true | Toggle the 1-year high/low fill and threshold lines |
+| Show Momentum Histogram | true | Toggle the FTL−STL histogram bars |
+
+#### How to Use It
+
+1. **Watch for Credit Recovery (CR ▲)** when the ratio crosses the 40th percentile — this is the primary leading signal. It tends to precede MSTR equity recovery by 3–7 bars (12–28 hours on a 4H chart).
+2. **Red background (Credit Stress)** with a stable/rising BTC = a bearish divergence — the market doubts the rally. Treat as a headwind.
+3. **Momentum histogram** (FTL − STL): teal bars = improving credit spread, maroon bars = deteriorating. Bright = accelerating, faded = decelerating.
+4. **BTC stable/rising but STRF/LQD falling**: Red flag. Market is discounting Saylor credit quality despite the BTC price.
+5. **CR fires before MSTR equity recovers**: High-conviction AB3 entry setup. This is the signal Gavin identified as having a 3–7 day lead.
+6. **Export as CSV** for the Python regime engine (17th regime input: STRF_LQD).
+
+#### Key Signals
+
+- **CR ▲ marker**: Credit Recovery — ratio crossed above 40th percentile. 3–7 bar lead time on MSTR. Primary leading bull signal.
+- **CW ▼ marker**: Credit Warn — ratio dropped below Fast TL. Early deterioration; not yet stress.
+- **CS ✕ marker**: Credit Stress Entry — entered the bottom 20th percentile. Structural headwind.
+- **Red background activated**: Active credit stress zone. Reduce sizing on new entries.
+- **Teal flash background**: Credit Recovery bar — the bar where CR fired.
+
+#### Framework Connection
+
+STRF/LQD is a Layer 1 Regime input that feeds the Python engine (`mstr_suite_engine.py`) via CSV export. Inside the Force Field indicator, STRF/LQD ratio fast/slow gap is the **primary force component** — it determines both the direction and the magnitude of the composite F_net signal. When STRF/LQD LT direction is MOMENTUM_BULL, the Force Field flips bullish.
+
+#### Common Mistakes
+
+- **Acting on a single CR signal without checking F_net.** A standalone CR marker is suggestive but not sufficient — the Force Field composite provides the full picture.
+- **Using this indicator on a crypto-only view.** STRF/LQD only exists during MSTR trading hours. On 24/7 crypto charts, the ratio will show gaps. Use on MSTR 4H chart.
+- **Ignoring the histogram direction.** The ratio level matters less than whether momentum is improving. A ratio at the 25th percentile with a bright teal histogram is more bullish than a ratio at the 30th percentile with maroon bars.
+
+---
+
+### Force Field Oscillator (MSTR Suite)
+
+**File:** `pine/MSTR_Suite_Force_Field.pine`
+**Type:** Oscillator (separate pane)
+**Framework role:** Layer 0.75 — sits above the GLI macro layer and below the Regime Engine. Synthesizes five external force signals (STRF/LQD, MSTR/IBIT, STRC, STABLE.D, MSTR self) into a single composite F_net reading. Used as a structural gate on trade sizing confidence and entry timing.
+
+> **Architecture note:** This indicator replicates the Python `mstr_suite_engine.py` force model in real-time. The Python engine (run from CSVs nightly) is the authoritative source. The Pine indicator provides live intraday tracking. They should agree closely at bar close; intraday divergence is normal.
+
+#### What It Shows
+
+F_net plotted as a colored line through five zones with background shading, horizontal threshold lines, and zone transition markers (triangles/X at zone crossings). An info table (top-right) shows zone, F_net value, trend direction, multiplier state, and all four component values.
+
+**The Five Zones:**
+
+| Zone | F_net Range | Confidence | Trading Implication |
+|---|---|---|---|
+| STRONG BULL | F > −0.19 | ⚠ PROVISIONAL | Do not enter bullish trades until gate confirmed (see Gate) |
+| MOD BULL | −0.60 to −0.19 | ⚠ PROVISIONAL | Same — await 2026-09-08 checkpoint |
+| NEUTRAL | −1.15 to −0.60 | — | No directional force; monitor |
+| MOD BEAR | −1.66 to −1.15 | ✓ HIGH (75% WR +10d, N=36) | Bearish structural headwind active |
+| STRONG BEAR | F < −1.66 | ✓ HIGH (76% WR +10d, N=29) | Maximum bearish force — defer all new longs |
+
+> **Confidence asymmetry:** The BEAR zones are validated at HIGH confidence (75–91% WR at +10–30d, N≥29). The BULL zones are PROVISIONAL — the 2025–2026 backtesting period was predominantly bearish and did not generate sufficient bullish zone data. The 6-month checkpoint (2026-09-08) will evaluate whether STRONG_BULL graduates to HIGH confidence. Until then, bull zones require the Gate check below.
+
+**The MSTR/IBIT LT Gate:**
+Before entering any bullish trade when F_net is in a bull zone, check the info table for "Multiplier" state:
+- `BULL` or `DECEL+` = gate met, proceed
+- `TRANSIT` = gate not met, wait for MSTR/IBIT LT to confirm MOMENTUM_BULL
+- `BEAR` = gate not met, do not enter bullish trades regardless of F_net
+
+#### The Force Model Explained
+
+F_net is a composite of five force vectors:
+
+```
+F_net = multiplier × f_primary + f_credit + f_stable + f_self
+```
+
+**f_primary — STRF/LQD (the primary force)**
+The most predictive single component. Uses the LT direction (EMA20 vs SMA50 on the STRF/LQD ratio) as the directional gate, and ST magnitude (EMA5 vs SMA50) as the force amplitude. `STRF/LQD LT DECEL_BULL` had 100% WR at +10–30d in the backtest (N=6). This is the engine's strongest signal.
+
+**multiplier — MSTR/IBIT LT (the amplifier)**
+MSTR/IBIT ratio LT direction (EMA20 vs SMA50) acts as a multiplier, not an additive component. When MSTR/IBIT LT confirms the same direction as f_primary, the multiplier ranges 1.0–1.5×. When it conflicts, the multiplier compresses to 0.4–1.0×. Think of it as: "Does the premium expansion story support the credit signal?"
+
+**f_credit — STRC ST × 0.5**
+STRC (MicroStrategy preferred STRC) ST fast/slow gap using the exact ATR/RSI trackline formula from the SRI scripts (2H fast, 1D slow). When STRC credit is healthy and improving, this adds positive force. When STRC is stressed, it adds negative force. Weight: 0.5×.
+
+**f_stable — STABLE.D LT × 0.4 (inverted)**
+Stablecoin dominance (CRYPTOCAP:STABLE.C.D). Rising stablecoin dominance = capital flowing out of risk assets = bearish for MSTR. The component is inverted: rising STABLE.D *reduces* F_net. LT timeframe (4H fast, 1W slow). Weight: 0.4×. Note: STABLE.D has a ~10-day lag before it manifests in MSTR price — this component is most useful for 30-day+ trade structures.
+
+**f_self — MSTR ST × 0.3 (self-reference)**
+MSTR's own ST trackline gap (exact ATR/RSI formula, 2H fast / 1D slow) provides a self-referential component. Prevents the indicator from generating bullish force while MSTR itself is in active ST decline. Weight: 0.3×.
+
+#### Trackline Method
+
+| Instrument | Trackline Method | Timeframes |
+|---|---|---|
+| STRC | ATR/RSI supertrend (exact SRI formula) | ST: 2H fast / 1D slow |
+| STABLE.D | ATR/RSI supertrend (exact SRI formula) | LT: 4H fast / 1W slow |
+| MSTR self | ATR/RSI supertrend (exact SRI formula) | ST: 2H fast / 1D slow |
+| STRF/LQD ratio | EMA fast / SMA slow on ratio close | LT: EMA20 / SMA50; ST: EMA5 / SMA50 |
+| MSTR/IBIT ratio | EMA fast / SMA slow on ratio close | LT: EMA20 / SMA50 |
+
+The ATR/RSI trackline (for single instruments) is the exact formula used by SRI_LT.pine and SRI_ST.pine: `ATR = ta.rma(ta.tr(true), 14)`, trails the low when RSI ≥ 50, trails the high when RSI < 50. Ratio instruments use EMA/SMA because synthetic ratios lack OHLC data for TR computation.
+
+#### Inputs / Settings
+
+| Setting | Default | What it does |
+|---|---|---|
+| ATR Period | 14 | ATR period for single-instrument tracklines (STRC, STABLE.D, MSTR) |
+| ATR Coefficient | 1.0 | ATR multiplier. Increase to widen the trailing stops. |
+| Fast EMA Length | 20 bars | EMA period for ratio tracklines (STRF/LQD, MSTR/IBIT) |
+| Slow SMA Length | 50 bars | SMA period for ratio slow trackline |
+| ST Fast EMA | 5 bars | Short-term EMA for STRF/LQD magnitude component |
+| STRONG BULL threshold | −0.19 | F_net above this = STRONG BULL zone. Update after 2026-09-08 if graduated. |
+| MOD BULL threshold | −0.60 | F_net above this = MOD BULL zone |
+| MOD BEAR threshold | −1.15 | F_net below this = MOD BEAR zone |
+| STRONG BEAR threshold | −1.66 | F_net below this = STRONG BEAR zone |
+| Show Component Lines | false | Toggle individual f_primary, f_credit, f_stable, f_self lines |
+| Show Zone Background | true | Toggle zone background shading |
+
+**Ticker verification:** If any component shows `na` in the info table, the exchange prefix may need adjustment. Default tickers:
+- STRC: `NASDAQ:STRC` — if na, try `BATS:STRC`
+- STRF: `NASDAQ:STRF` — if na, try `BATS:STRF`
+- STABLE.D: `CRYPTOCAP:STABLE.C.D`
+- LQD: `BATS:LQD`
+- IBIT: `BATS:IBIT`
+- MSTR: `BATS:MSTR`
+
+#### How to Use It
+
+1. **Add to MSTR 4H chart** as a separate pane. The indicator pulls all six instruments internally — no other indicators needed.
+2. **Read the zone first.** The background color and the zone label in the top-right table tell you the current structural regime.
+3. **Check the Multiplier state.** If F_net is in a bull zone but Multiplier shows `TRANSIT` or `BEAR`, the gate is not met — do not enter bullish trades.
+4. **In BEAR zones, reduce sizing confidence.** MOD BEAR means a 75% historical probability that MSTR will decline over the next 10 days. STRONG BEAR is 76%. These are not certainties — use them to size down, not to panic-sell.
+5. **Toggle "Show Component Lines"** to see which force is dominating. If f_primary is strongly negative but f_credit is positive, credit is resilient — credit recovery may precede STRF/LQD turning.
+6. **Set alerts** for zone transitions using the four built-in alert conditions.
+7. **Trend direction** (↗/↘/→ in the table) tells you if F_net is improving or deteriorating within the current zone. RISING within a bear zone = force is recovering, not yet confirmed.
+
+#### Key Signals
+
+- **F_net enters BEAR zone (triangle ▼ marker)**: Structural headwind confirmed. Reduce position sizing confidence.
+- **F_net enters STRONG BEAR (X marker)**: Maximum headwind. 76%+ WR historically. Do not open new longs.
+- **F_net enters BULL zone (triangle ▲ marker) + Gate = BULL**: Provisional bullish signal. Requires MSTR/IBIT LT gate confirmation.
+- **Trend = RISING while in BEAR zone**: Recovery beginning. Watch for zone transition. Not yet actionable.
+- **f_primary turns positive while f_stable still negative**: STRF/LQD credit recovered before liquidity — early bull signal, still waiting for macro confirmation.
+
+#### Setting Alerts
+
+Four alert conditions are built in (configure via TradingView Alerts panel):
+
+| Alert | Trigger | Action |
+|---|---|---|
+| `Force -> Bear Zone` | Any entry into MOD BEAR or STRONG BEAR | Review open positions; tighten stops |
+| `Force -> STRONG BEAR` | Entry into STRONG BEAR specifically | Notify CIO; consider defensive action |
+| `Force -> Bull Zone (PROV)` | Entry into MOD BULL or STRONG BULL | Check gate; do not act until MSTR/IBIT LT confirmed |
+| `Force Zone Change` | Any zone transition | General notification |
+
+#### 2026-09-08 Checkpoint
+
+On or after September 8, 2026, Gavin will run the calibration command to evaluate whether STRONG_BULL should be graduated from PROVISIONAL to HIGH confidence:
+
+```bash
+docker exec openclaw-sbx-agent-mstr-cio-7db631bb python3 /mnt/mstr-scripts/mstr_suite_engine.py --calibrate 10 --zone STRONG_BULL
+```
+
+If the win rate is ≥ 70% with N ≥ 10, update the `engine_config` table and adjust the threshold inputs in this indicator accordingly.
+
+#### Framework Connection
+
+The Force Field sits at **Layer 0.75** in the four-layer architecture:
+
+```
+Layer 0:    GLI Engine (macro liquidity — global)
+Layer 0.5:  Howell Phase Engine (asset allocation phase)
+Layer 0.75: Force Field (MSTR-specific credit/liquidity force)
+Layer 1:    Regime Engine (SRI stage, HYG, VIX, SRI)
+Layer 2:    Signal Engine (AB1/AB2/AB3 entry signals)
+Layer 3:    Allocation Engine (sizing, trim schedule)
+```
+
+The Force Field does not replace the SRI stage signal — it provides the structural backdrop that governs how much sizing confidence to apply. A Stage 2 bounce signal in STRONG BEAR context should be traded at reduced size (50% of normal). The same signal in MOD BULL context warrants full sizing.
+
+The Python engine (`mstr_suite_engine.py`) stores signals to the `mstr_suite_signals` table in `mstr.db` on each daily analysis cycle. The morning brief (Section 4) includes the current zone and gate state. The Pine indicator provides live tracking between brief cycles.
+
+#### Common Mistakes
+
+- **Treating PROVISIONAL bull zones as HIGH confidence signals.** The bull zones have not been statistically validated yet. Until the 2026-09-08 checkpoint, treat STRONG BULL as a gate check only — require additional confirmation from SRI stage and STRF/LQD CR signal.
+- **Acting on F_net without checking the Gate.** F_net = STRONG BULL + Multiplier = TRANSIT = do nothing. The MSTR/IBIT LT gate is the final gating condition for bull trades.
+- **Ignoring the Trend direction.** F_net can be in NEUTRAL with a FALLING trend — it's headed toward MOD BEAR. That's a different posture than NEUTRAL with a RISING trend.
+- **Assuming daily Python engine and live indicator will always match.** The Python engine reads from CSVs exported at market close. Intraday, the Pine indicator may show a different value as conditions evolve. Both agree at close. If they diverge significantly at close, investigate the CSV data freshness (check `csv_freshness_check.py` output).
+- **Using this on non-MSTR charts.** The indicator can technically be applied to any chart, but all force components reference MSTR-ecosystem instruments. On any other asset, the readings are meaningless.
+
+*Guide updated 2026-03-08. All scripts: Pine v6. Repo: [3ServantsP35/Grok](https://github.com/3ServantsP35/Grok/tree/main/pine).*
