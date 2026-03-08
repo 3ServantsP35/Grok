@@ -1,0 +1,272 @@
+//@version=6
+// ════════════════════════════════════════════════════════════════════════════
+// MSTR Suite — Force Field Oscillator
+// © RizenShine / CIO  |  Layer 0.75 — above GLI, below Regime
+//
+// Replicates mstr_suite_engine.py F_net model in real-time using native TV data.
+// Place on MSTR 4H chart as a separate pane.
+//
+// F_net = multiplier × f_primary + f_credit + f_stable + f_self
+//
+//   f_primary  = STRF/LQD — LT direction × ST magnitude  (primary force)
+//   multiplier = MSTR/IBIT LT — amplifies aligned forces, dampens opposed
+//   f_credit   = STRC ST × 0.5                           (credit floor)
+//   f_stable   = STABLE.D LT × 0.4, inverted             (liquidity friction)
+//   f_self     = MSTR ST × 0.3                            (self-reference)
+//
+// Signal zones (Pass 2 backtesting, N=342 bars, 2025-06 → 2026-03):
+//   STRONG BULL  F > -0.19   ⚠ PROVISIONAL  (checkpoint 2026-09-08)
+//   MOD BULL     F > -0.60   ⚠ PROVISIONAL
+//   NEUTRAL      -1.15 to -0.60
+//   MOD BEAR     F < -1.15   ✓ HIGH  75% WR +10d, N=36
+//   STRONG BEAR  F < -1.66   ✓ HIGH  76% WR +10d, N=29
+//
+// Trackline method:
+//   Single instruments (STRC, STABLE.D, MSTR): exact ATR/RSI formula from SRI scripts
+//   Ratio instruments (STRF/LQD, MSTR/IBIT):  EMA fast / SMA slow on computed ratio
+// ════════════════════════════════════════════════════════════════════════════
+
+indicator("MSTR Suite — Force Field", shorttitle="Force Field", overlay=false,
+     format=format.price, precision=4, max_lines_count=10)
+
+// ── Inputs ────────────────────────────────────────────────────────────────────
+grp_s = "Single-Instrument Tracklines (ATR/RSI)"
+i_atr_period = input.int(14,   "ATR Period",        minval=5,  maxval=50, group=grp_s)
+i_atr_coeff  = input.float(1.0,"ATR Coefficient",   minval=0.5,maxval=3.0,group=grp_s, step=0.1)
+
+grp_r = "Ratio Tracklines (STRF/LQD and MSTR/IBIT)"
+i_fast_len  = input.int(20, "Fast EMA Length (bars)", minval=5,  maxval=100, group=grp_r)
+i_slow_len  = input.int(50, "Slow SMA Length (bars)", minval=10, maxval=200, group=grp_r)
+i_fast_st   = input.int(5,  "ST Fast EMA Length (bars — primary magnitude)", minval=2, maxval=20, group=grp_r)
+
+grp_t = "Zone Thresholds (update after 2026-09-08 checkpoint)"
+i_t_sb  = input.float(-0.19, "STRONG BULL  (F >)", step=0.05, group=grp_t)
+i_t_b   = input.float(-0.60, "MOD BULL     (F >)", step=0.05, group=grp_t)
+i_t_br  = input.float(-1.15, "MOD BEAR     (F <)", step=0.05, group=grp_t)
+i_t_sbr = input.float(-1.66, "STRONG BEAR  (F <)", step=0.05, group=grp_t)
+
+grp_d = "Display"
+i_show_comps = input.bool(false, "Show Component Lines", group=grp_d)
+i_show_bg    = input.bool(true,  "Show Zone Background", group=grp_d)
+
+// ── ATR Trackline (exact formula from SRI_LT.pine / SRI_ST.pine) ─────────────
+// Supertrend-style ATR trailing stop with RSI direction gate.
+// Trails low when RSI ≥ 50 (bullish), trails high when RSI < 50 (bearish).
+f_trackline(float coeff, int period) =>
+    atr_val = ta.rma(ta.tr(true), period)
+    upT     = low  - atr_val * coeff
+    downT   = high + atr_val * coeff
+    bull    = ta.rsi(close, period) >= 50
+    var float tl = 0.0
+    tl := bull ? math.max(upT, nz(tl[1])) : math.min(downT, nz(tl[1]))
+    tl
+
+// ── Normalized Force ─────────────────────────────────────────────────────────
+// gap       = (fast - slow) / |slow|
+// gap_vel   = change in gap from prior bar
+// magnitude = min(|gap| × 40, 1.0)   — gap of 0.025 → saturation at 1.0
+// direction = sign(gap)
+// decel     = 0.6 when force is retreating (gap & velocity in opposite directions)
+f_norm(float fast_tl, float slow_tl, bool invert) =>
+    if na(fast_tl) or na(slow_tl) or slow_tl == 0.0
+        0.0
+    else
+        raw_gap   = (fast_tl - slow_tl) / math.abs(slow_tl)
+        gap       = invert ? -raw_gap : raw_gap
+        gap_vel   = gap - nz(gap[1])
+        mag       = math.min(math.abs(gap) * 40.0, 1.0)
+        direction = math.abs(gap) > 0.001 ? math.sign(gap) : 0.0
+        decel     = direction * gap_vel < 0.0 ? 0.6 : 1.0
+        direction * mag * decel
+
+// ════════════════════════════════════════════════════════════════════════════
+// COMPONENT 1 — STRC (credit floor)
+// Timeframes: ST Fast = 2H, ST Slow = 1D  |  ATR/RSI formula
+// Weight: × 0.5
+// ════════════════════════════════════════════════════════════════════════════
+strc_fast = request.security("NASDAQ:STRC", "120", f_trackline(i_atr_coeff, i_atr_period))
+strc_slow = request.security("NASDAQ:STRC", "D",   f_trackline(i_atr_coeff, i_atr_period))
+f_credit  = f_norm(strc_fast, strc_slow, false) * 0.5
+
+// ════════════════════════════════════════════════════════════════════════════
+// COMPONENT 2 — STABLE.D (liquidity friction, inverted)
+// Timeframes: LT Fast = 4H, LT Slow = 1W  |  ATR/RSI formula
+// Rising stablecoin dominance = bearish → inverted
+// Weight: × 0.4
+// ════════════════════════════════════════════════════════════════════════════
+stable_fast = request.security("CRYPTOCAP:STABLE.C.D", "240", f_trackline(i_atr_coeff, i_atr_period))
+stable_slow = request.security("CRYPTOCAP:STABLE.C.D", "W",   f_trackline(i_atr_coeff, i_atr_period))
+f_stable    = f_norm(stable_fast, stable_slow, true) * 0.4
+
+// ════════════════════════════════════════════════════════════════════════════
+// COMPONENT 3 — MSTR self-reference
+// Timeframes: ST Fast = 2H, ST Slow = 1D  |  ATR/RSI formula
+// Weight: × 0.3
+// ════════════════════════════════════════════════════════════════════════════
+mstr_fast = request.security("BATS:MSTR", "120", f_trackline(i_atr_coeff, i_atr_period))
+mstr_slow = request.security("BATS:MSTR", "D",   f_trackline(i_atr_coeff, i_atr_period))
+f_self    = f_norm(mstr_fast, mstr_slow, false) * 0.3
+
+// ════════════════════════════════════════════════════════════════════════════
+// COMPONENT 4 — STRF/LQD ratio (primary force direction + magnitude)
+// Ratio: STRF close / LQD close at current chart timeframe
+// Fast TL: EMA(i_fast_len) — structural direction
+// ST Fast TL: EMA(i_fast_st) — real-time magnitude
+// Slow TL: SMA(i_slow_len) — structural trend
+// Based on STRF_LQD_Ratio.pine conventions
+// ════════════════════════════════════════════════════════════════════════════
+strf_c = request.security("NASDAQ:STRF", timeframe.period, close)
+lqd_c  = request.security("BATS:LQD",   timeframe.period, close)
+
+strf_ratio     = na(strf_c) or na(lqd_c) or lqd_c == 0.0 ? na : strf_c / lqd_c
+strf_ratio_ltf = ta.ema(strf_ratio, i_fast_len)   // LT fast (structural direction)
+strf_ratio_stf = ta.ema(strf_ratio, i_fast_st)    // ST fast (real-time magnitude)
+strf_ratio_stl = ta.sma(strf_ratio, i_slow_len)   // slow TL (structural trend)
+
+strf_lt_gap   = na(strf_ratio_ltf) or na(strf_ratio_stl) or strf_ratio_stl == 0.0 ?
+     0.0 : (strf_ratio_ltf - strf_ratio_stl) / math.abs(strf_ratio_stl)
+strf_st_gap   = na(strf_ratio_stf) or strf_ratio_stl == 0.0 ?
+     0.0 : (strf_ratio_stf - strf_ratio_stl) / math.abs(strf_ratio_stl)
+
+// LT direction
+strf_lt_dir   = math.abs(strf_lt_gap) > 0.001 ? math.sign(strf_lt_gap) : 0.0
+strf_lt_vel   = strf_lt_gap - nz(strf_lt_gap[1])
+strf_lt_decel = strf_lt_dir * strf_lt_vel < 0.0 ? 0.6 : 1.0
+
+// Primary force: LT direction × ST magnitude
+strf_st_mag   = math.min(math.abs(strf_st_gap) * 40.0, 1.0)
+strf_lt_used_dir = strf_lt_dir * strf_lt_decel != 0.0 ? strf_lt_dir * strf_lt_decel : (strf_st_gap > 0 ? 1.0 : -1.0)
+f_primary = na(strf_ratio) ? 0.0 :
+     strf_lt_dir != 0.0 ? strf_lt_used_dir * strf_st_mag : strf_st_gap * 40.0
+
+// ════════════════════════════════════════════════════════════════════════════
+// COMPONENT 5 — MSTR/IBIT ratio (multiplier)
+// Ratio: MSTR close / IBIT close at current chart timeframe
+// Fast TL: EMA(i_fast_len)  Slow TL: SMA(i_slow_len)
+// When LT MOMENTUM_BULL → multiplier > 1 (amplifies)
+// When LT MOMENTUM_BEAR → multiplier < 1 (dampens)
+// ════════════════════════════════════════════════════════════════════════════
+mstr_now = request.security("BATS:MSTR", timeframe.period, close)
+ibit_c   = request.security("BATS:IBIT", timeframe.period, close)
+
+mibit_ratio = na(mstr_now) or na(ibit_c) or ibit_c == 0.0 ? na : mstr_now / ibit_c
+mibit_ftl   = ta.ema(mibit_ratio, i_fast_len)
+mibit_stl   = ta.sma(mibit_ratio, i_slow_len)
+
+mibit_gap   = na(mibit_ftl) or na(mibit_stl) or mibit_stl == 0.0 ?
+     0.0 : (mibit_ftl - mibit_stl) / math.abs(mibit_stl)
+mibit_vel   = mibit_gap - nz(mibit_gap[1])
+mibit_dir   = math.abs(mibit_gap) > 0.001 ? math.sign(mibit_gap) : 0.0
+mibit_mag   = math.min(math.abs(mibit_gap) * 40.0, 1.0)
+mibit_decel = mibit_dir * mibit_vel < 0.0 ? 0.6 : 1.0
+f_mibit_lt  = mibit_dir * mibit_mag * mibit_decel
+
+// Multiplier logic
+multiplier = f_mibit_lt * f_primary > 0.0 ? 1.0 + 0.5 * math.abs(f_mibit_lt) :
+             f_mibit_lt == 0.0             ? 1.0 :
+             math.max(0.4, 1.0 - 0.4 * math.abs(f_mibit_lt))
+
+// ════════════════════════════════════════════════════════════════════════════
+// NET FORCE
+// ════════════════════════════════════════════════════════════════════════════
+f_net = multiplier * f_primary + f_credit + f_stable + f_self
+
+// ── Zone classification ────────────────────────────────────────────────────
+zone_sb  = f_net >  i_t_sb
+zone_b   = f_net >  i_t_b   and f_net <= i_t_sb
+zone_n   = f_net >  i_t_br  and f_net <= i_t_b
+zone_br  = f_net >  i_t_sbr and f_net <= i_t_br
+zone_sbr = f_net <= i_t_sbr
+
+// ── Zone change detection (for alerts) ────────────────────────────────────
+zone_id  = zone_sb ? 2 : zone_b ? 1 : zone_n ? 0 : zone_br ? -1 : -2
+zone_chg = zone_id != zone_id[1]
+into_bear  = zone_chg and (zone_br or zone_sbr)
+into_bull  = zone_chg and (zone_sb or zone_b)
+into_sbear = zone_chg and zone_sbr
+
+// ── Colors ────────────────────────────────────────────────────────────────
+c_sb  = color.new(#00e5ff, 0)   // strong bull — cyan
+c_b   = color.new(#26a69a, 0)   // mod bull — teal
+c_n   = color.new(#90a4ae, 0)   // neutral — slate gray
+c_br  = color.new(#ef5350, 0)   // mod bear — red
+c_sbr = color.new(#b71c1c, 0)   // strong bear — dark red
+
+f_color  = zone_sb ? c_sb : zone_b ? c_b : zone_n ? c_n : zone_br ? c_br : c_sbr
+
+bg_col   = zone_sb  ? color.new(#00e5ff, 93) :
+           zone_b   ? color.new(#26a69a, 93) :
+           zone_n   ? na :
+           zone_br  ? color.new(#ef5350, 90) :
+                      color.new(#b71c1c, 85)
+
+// ── Plots ─────────────────────────────────────────────────────────────────
+bgcolor(i_show_bg ? bg_col : na, title="Zone Background")
+
+hline(i_t_sb,  "Strong Bull ⚠",  color=color.new(#00e5ff, 55), linestyle=hline.style_dashed, linewidth=1)
+hline(i_t_b,   "Mod Bull ⚠",     color=color.new(#26a69a, 55), linestyle=hline.style_dashed, linewidth=1)
+hline(0,        "Zero",           color=color.new(color.gray, 50), linestyle=hline.style_solid, linewidth=1)
+hline(i_t_br,  "Mod Bear ✓",     color=color.new(#ef5350, 55), linestyle=hline.style_dashed, linewidth=1)
+hline(i_t_sbr, "Strong Bear ✓",  color=color.new(#b71c1c, 55), linestyle=hline.style_dashed, linewidth=1)
+
+plot(f_net, "F_net", color=f_color, linewidth=2, style=plot.style_line)
+
+// Component lines (toggle on to debug / understand composition)
+plot(i_show_comps ? f_primary : na, "Primary (STRF/LQD)",    color=color.new(color.yellow, 25), linewidth=1)
+plot(i_show_comps ? f_credit  : na, "Credit (STRC ×0.5)",    color=color.new(color.blue,   25), linewidth=1)
+plot(i_show_comps ? f_stable  : na, "Friction (STABLE ×0.4)",color=color.new(color.orange, 25), linewidth=1)
+plot(i_show_comps ? f_self    : na, "Self (MSTR ×0.3)",      color=color.new(color.purple, 25), linewidth=1)
+
+// Zone transition markers
+plotshape(into_bear,  "→ Bear",       shape=shape.triangledown, location=location.abovebar, color=c_br,  size=size.small)
+plotshape(into_bull,  "→ Bull",       shape=shape.triangleup,   location=location.belowbar, color=c_b,   size=size.small)
+plotshape(into_sbear, "→ STRONG BEAR",shape=shape.xcross,        location=location.abovebar, color=c_sbr, size=size.small)
+
+// ── Info Table ──────────────────────────────────────────────────────────────
+var table tbl = table.new(position.top_right, 2, 9,
+     bgcolor=color.new(color.black, 72),
+     border_color=color.new(color.gray, 60), border_width=1,
+     frame_color=color.new(color.gray, 40),  frame_width=1)
+
+if barstate.islast
+    zone_str = zone_sb  ? "STRONG BULL ⚠PROV" :
+               zone_b   ? "MOD BULL ⚠PROV"    :
+               zone_n   ? "NEUTRAL"            :
+               zone_br  ? "MOD BEAR ✓HIGH"     : "STRONG BEAR ✓HIGH"
+
+    f_trend   = f_net > f_net[1] ? "↗ RISING" : f_net < f_net[1] ? "↘ FALLING" : "→ FLAT"
+    mult_str  = str.tostring(multiplier, "#.###")
+    mibit_str = f_mibit_lt > 0.1  ? "MOMENTUM_BULL" :
+                f_mibit_lt < -0.1 ? "MOMENTUM_BEAR" :
+                mibit_gap > 0     ? "DECEL_BULL"    :
+                mibit_gap < 0     ? "DECEL_BEAR"    : "TRANSITION"
+    strf_str  = strf_lt_dir > 0 and strf_lt_decel == 1.0 ? "MOMENTUM_BULL" :
+                strf_lt_dir > 0                           ? "DECEL_BULL"    :
+                strf_lt_dir < 0 and strf_lt_decel == 1.0 ? "MOMENTUM_BEAR" :
+                strf_lt_dir < 0                           ? "DECEL_BEAR"    : "TRANSITION"
+
+    table.cell(tbl, 0, 0, "Force Field",  text_color=color.white, text_size=size.small, bgcolor=color.new(color.gray, 65))
+    table.cell(tbl, 1, 0, zone_str,       text_color=f_color,     text_size=size.small, bgcolor=color.new(color.gray, 65))
+    table.cell(tbl, 0, 1, "F_net",        text_color=color.gray,  text_size=size.small)
+    table.cell(tbl, 1, 1, str.tostring(f_net,      "#.####"), text_color=f_color,                         text_size=size.small)
+    table.cell(tbl, 0, 2, "Trend",        text_color=color.gray,  text_size=size.small)
+    table.cell(tbl, 1, 2, f_trend,        text_color=color.white, text_size=size.small)
+    table.cell(tbl, 0, 3, "Multiplier",   text_color=color.gray,  text_size=size.small)
+    table.cell(tbl, 1, 3, mult_str + "× (" + mibit_str + ")", text_color=color.white, text_size=size.small)
+    table.cell(tbl, 0, 4, "Primary",      text_color=color.gray,  text_size=size.small)
+    table.cell(tbl, 1, 4, str.tostring(f_primary, "#.####") + " (" + strf_str + ")",
+         text_color=color.new(color.yellow, 10), text_size=size.small)
+    table.cell(tbl, 0, 5, "Credit/STRC",  text_color=color.gray,  text_size=size.small)
+    table.cell(tbl, 1, 5, str.tostring(f_credit,  "#.####"), text_color=color.new(color.blue,   10), text_size=size.small)
+    table.cell(tbl, 0, 6, "Liquidity",    text_color=color.gray,  text_size=size.small)
+    table.cell(tbl, 1, 6, str.tostring(f_stable,  "#.####"), text_color=color.new(color.orange, 10), text_size=size.small)
+    table.cell(tbl, 0, 7, "MSTR Self",    text_color=color.gray,  text_size=size.small)
+    table.cell(tbl, 1, 7, str.tostring(f_self,    "#.####"), text_color=color.new(color.purple, 10), text_size=size.small)
+    table.cell(tbl, 0, 8, "Checkpoint",   text_color=color.new(color.gray, 40), text_size=size.tiny)
+    table.cell(tbl, 1, 8, "Bull zones PROVISIONAL → 2026-09-08", text_color=color.new(color.gray, 40), text_size=size.tiny)
+
+// ── Alerts ──────────────────────────────────────────────────────────────────
+alertcondition(into_bear,   "Force → Bear Zone",        "MSTR Force Field entered BEAR zone — directional bias negative")
+alertcondition(into_bull,   "Force → Bull Zone (PROV)", "MSTR Force Field entered BULL zone — PROVISIONAL, confirm gate")
+alertcondition(into_sbear,  "Force → STRONG BEAR",      "MSTR Force Field STRONG BEAR — high conviction bearish, 76%+ WR")
+alertcondition(zone_chg,    "Force Zone Change",        "MSTR Force Field zone changed")
