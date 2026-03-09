@@ -266,6 +266,13 @@ ALERT_PBEAR_FORMING     = "PBEAR_FORMING"      # Primary bearish signal fires �
 ALERT_PBEAR_CONFIRMED   = "PBEAR_CONFIRMED"    # Dual-TF confirmed → hedge entry zone
 ALERT_PBEAR_INVALIDATED = "PBEAR_INVALIDATED"  # Thesis invalidated → resume normal
 
+# DOI (Distribution Opportunity Index) alert codes — Momentum assets only
+ALERT_DOI_T1_TRIM      = "DOI_T1_TRIM"       # LOI crosses +40 (25% trim — first signal)
+ALERT_DOI_T2_TRIM      = "DOI_T2_TRIM"       # LOI crosses +60 (50% trim)
+ALERT_DOI_T3_TRIM      = "DOI_T3_TRIM"       # LOI crosses +80 (75% trim)
+ALERT_DOI_VLT_PEAK     = "DOI_VLT_PEAK"      # VLT SRI Bias crosses +20 — 100% exit WR
+ALERT_DOI_LOI_ROLLOVER = "DOI_LOI_ROLLOVER"  # LOI rollover from peak — 89% exit WR
+
 # Portfolio posture + Expression 3 alert codes
 ALERT_PORTFOLIO_POSTURE_CHANGE = "PORTFOLIO_POSTURE_CHANGE"
 ALERT_EXPRESSION3_SETUP        = "EXPRESSION3_SETUP"
@@ -962,6 +969,106 @@ def detect_pbear_alerts(pbear_sigs: Dict, prev_pbear: Dict[str, str]) -> List[Di
     return alerts
 
 
+def detect_doi_alerts(prev_doi: Dict, curr_doi: Dict) -> list:
+    """
+    Detect DOI signal transitions for Momentum assets.
+    Each alert fires once when a new signal appears (prev=False, curr=True).
+
+    Args:
+        prev_doi: {asset: DOISignal.to_dict()} from previous run (DB-backed)
+        curr_doi: {asset: DOISignal} from current DOIEngine.compute_all()
+    Returns:
+        list of alert dicts
+    """
+    alerts = []
+    emoji_map = {
+        ALERT_DOI_T1_TRIM:      "⚠️",
+        ALERT_DOI_T2_TRIM:      "🟠",
+        ALERT_DOI_T3_TRIM:      "🔴",
+        ALERT_DOI_VLT_PEAK:     "🌟",
+        ALERT_DOI_LOI_ROLLOVER: "🚨",
+    }
+    color_map = {
+        ALERT_DOI_T1_TRIM:      "orange",
+        ALERT_DOI_T2_TRIM:      "orange",
+        ALERT_DOI_T3_TRIM:      "red",
+        ALERT_DOI_VLT_PEAK:     "red",
+        ALERT_DOI_LOI_ROLLOVER: "red",
+    }
+
+    for asset, sig in curr_doi.items():
+        prev = prev_doi.get(asset, {})
+        loi  = sig.loi or 0
+        vlt  = sig.vlt_bias or 0
+
+        body_t1 = (f"**LOI T1 Trim \u2014 {asset}** | Sell 25% of LEAP position\n"
+                   f"LOI `{loi:+.1f}` crossed above `+40`. Start first trim tranche.\n"
+                   f"Sell 25% of AB3 LEAP. Tighten call strikes to OTM delta \u22640.25.")
+        body_t2 = (f"**LOI T2 Trim \u2014 {asset}** | Sell 50% of remaining LEAP\n"
+                   f"LOI `{loi:+.1f}` crossed above `+60`. Second trim tranche.\n"
+                   f"Sell another 25% of AB3 LEAP (50% total now sold).")
+        body_t3 = (f"**LOI T3 Trim \u2014 {asset}** | Sell 75% of original LEAP\n"
+                   f"LOI `{loi:+.1f}` crossed above `+80`. Third trim tranche.\n"
+                   f"Sell another 25% of AB3 LEAP (75% total now sold). Hold final 25% for exit.")
+        body_vp = (f"\U0001f31f **VLT SRI Bias Peak \u2014 {asset}** | 100% Win Rate Exit Signal\n"
+                   f"VLT SRI Bias `{vlt:+.1f}` crossed above `+20`.\n"
+                   f"**Historical WR: 100% on MSTR.** Sell remaining AB3 LEAP. "
+                   f"Close all open calls. Full exit.")
+        body_lr = (f"\U0001f6a8 **LOI Rollover \u2014 {asset}** | 89% Win Rate Exit Signal\n"
+                   f"LOI dropped 25+ pts from 20-bar peak (LOI now `{loi:+.1f}`).\n"
+                   f"**Historical WR: 89% on MSTR.** Exit remaining LEAP position. "
+                   f"Stop all call-writing. Cycle ending.")
+
+        checks = [
+            (ALERT_DOI_T1_TRIM,      sig.t1_active,      prev.get("t1_active", False),      body_t1),
+            (ALERT_DOI_T2_TRIM,      sig.t2_active,      prev.get("t2_active", False),      body_t2),
+            (ALERT_DOI_T3_TRIM,      sig.t3_active,      prev.get("t3_active", False),      body_t3),
+            (ALERT_DOI_VLT_PEAK,     sig.vlt_peak,       prev.get("vlt_peak", False),       body_vp),
+            (ALERT_DOI_LOI_ROLLOVER, sig.exit_rollover,  prev.get("exit_rollover", False),  body_lr),
+        ]
+
+        for alert_type, curr_val, prev_val, body in checks:
+            if curr_val and not prev_val:
+                # New signal — fire alert
+                alerts.append({
+                    "asset":      asset,
+                    "alert_type": alert_type,
+                    "emoji":      emoji_map[alert_type],
+                    "color":      color_map[alert_type],
+                    "title":      f"{emoji_map[alert_type]} DOI Signal — {asset}",
+                    "body":       body,
+                    "prev_state": "inactive",
+                    "new_state":  alert_type.split("_", 1)[1] if "_" in alert_type else alert_type,
+                    "current":    {"loi": loi, "price": 0},
+                })
+
+    return alerts
+
+
+def load_prev_doi_states(conn: sqlite3.Connection) -> Dict:
+    """Load previous DOI signal states from pmcc_alert_log (last fired alerts)."""
+    prev = {}
+    try:
+        rows = conn.execute(
+            """SELECT asset, alert_type FROM pmcc_alert_log
+               WHERE alert_type LIKE 'DOI_%'
+               AND id IN (SELECT MAX(id) FROM pmcc_alert_log
+                          WHERE alert_type LIKE 'DOI_%' GROUP BY asset, alert_type)
+               AND timestamp > datetime('now', '-2 days')"""
+        ).fetchall()
+        for asset, atype in rows:
+            if asset not in prev:
+                prev[asset] = {}
+            if atype == ALERT_DOI_T1_TRIM:       prev[asset]["t1_active"] = True
+            elif atype == ALERT_DOI_T2_TRIM:     prev[asset]["t2_active"] = True
+            elif atype == ALERT_DOI_T3_TRIM:     prev[asset]["t3_active"] = True
+            elif atype == ALERT_DOI_VLT_PEAK:    prev[asset]["vlt_peak"] = True
+            elif atype == ALERT_DOI_LOI_ROLLOVER: prev[asset]["exit_rollover"] = True
+    except Exception as e:
+        pass  # Non-fatal — will just re-fire any active signals
+    return prev
+
+
 def run(engine_result: Dict, webhook_url: str, db_path: str = DB_PATH) -> int:
     """
     Main entry point called from daily_engine_run.py after engine runs.
@@ -1069,6 +1176,17 @@ def run(engine_result: Dict, webhook_url: str, db_path: str = DB_PATH) -> int:
     all_alerts += detect_ab3_alerts(ab3_signals)                  # Stage 2 buy + trim
     all_alerts += detect_ab1_alerts(ab1_signals)
     all_alerts += pbear_alerts                                      # P-BEAR top detection
+
+    # DOI distribution alerts (Momentum assets: MSTR/IBIT/TSLA)
+    try:
+        from doi_engine import DOIEngine
+        _doi_engine  = DOIEngine()
+        _doi_curr    = _doi_engine.compute_all()
+        _doi_prev    = load_prev_doi_states(conn)
+        _doi_alerts  = detect_doi_alerts(_doi_prev, _doi_curr)
+        all_alerts  += _doi_alerts
+    except Exception as _doi_err:
+        print(f"  [pmcc_alerts] DOI alerts skipped: {_doi_err}")
     all_alerts += posture_alerts                                    # Portfolio posture + Expr3
     if howell_alert:
         all_alerts.insert(0, howell_alert)  # Phase transitions lead the alert queue
