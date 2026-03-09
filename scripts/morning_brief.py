@@ -493,6 +493,20 @@ def build_brief():
         sections.append(f"**🧲 Force Field**\n*Unavailable: {type(_ff_err).__name__}: {str(_ff_err)[:120]}*")
 
     # ============================================
+    # 4.8 DOI — DISTRIBUTION OPPORTUNITY INDEX
+    # ============================================
+    try:
+        from doi_engine import DOIEngine
+        _doi = DOIEngine()
+        _doi_sigs = _doi.compute_all()
+        if _doi_sigs:
+            sections.append(_doi.format_brief_block(_doi_sigs))
+        else:
+            sections.append("**📊 DOI**\n*No DOI data — CSV may be stale or Momentum assets not in accumulation*")
+    except Exception as _doi_err:
+        sections.append(f"**📊 DOI**\n*Unavailable: {type(_doi_err).__name__}: {str(_doi_err)[:120]}*")
+
+    # ============================================
     # 5. IV REGIME
     # ============================================
     orats = conn.execute(
