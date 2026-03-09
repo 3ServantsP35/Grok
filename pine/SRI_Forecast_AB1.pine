@@ -1,16 +1,21 @@
-// SRI Forecast AB1 — Pre-Breakout LEAP Conditions (v7)
-// Research-validated signals per asset class (see briefs/spy-qqq-ab1-signal-research-v1.md)
+// SRI Forecast AB1 — Pre-Breakout Signal Detector (v7.1)
+// Detects pre-breakout entry conditions. Signal routing in v4.0 framework:
+//   Pre-breakout LEAP entry → AB2 (Directional Conviction, 60-120 DTE)
+//   Theta income trades     → AB1 (CRS-gated, 30 DTE max)
+//   This indicator generates the entry SIGNAL — bucket classification is at trade entry.
 //
-//   BTC-proxy (MSTR, IBIT, PURR): CT1 = sweet spot (79%+ win) — MIXED context
-//   Business Momentum (TSLA):     CT3 required (LT must confirm thesis)
-//   Trending (GLD):               CT1+ viable, all tiers work
-//   MR-QQQ:                       LT flip + ST+ = primary (70% win) | CT3 = secondary
-//   MR-Small (IWM):               CT1 entry; CT3 = distribution, not entry
+// Research-validated signals per asset class:
+//   BTC-proxy (MSTR, IBIT, PURR): CT1 = sweet spot (79%+ win) — MIXED context → AB2
+//   Business Momentum (TSLA):     CT3 required (LT must confirm thesis) → AB2
+//   Trending (GLD):               CT1+ viable, all tiers work → AB2
+//   MR-QQQ:                       LT flip + ST+ = primary (70% win) → AB2 directional
+//   MR-Small (IWM):               CT1 entry; CT3 = distribution not entry → AB2
 //   SPY:                          DESCOPED — no signal clears 60% win rate threshold
 //
 // Visual: Background shows entry state. Green = favorable for this asset type.
 //         QQQ: ▲ green triangle = primary entry | ▽ orange = LOI caution
 // Alerts: Entry signals + caution flags per asset class.
+// v4.0 routing update: 2026-03-09 — pre-breakout routes to AB2, not AB1 income bucket.
 // © RizenShine — Forecast engine by CIO
 
 //@version=6
