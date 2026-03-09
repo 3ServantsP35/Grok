@@ -1,45 +1,62 @@
-# Active Tasks — Updated 2026-03-08
+# Active Tasks
+**Last Updated:** 2026-03-09 03:15 UTC
 
-## Completed This Session (2026-03-08)
+---
 
-| Item | Status | Ref |
+## Sprint Complete ✅ (2026-03-09 session)
+
+| Task | Status | SHA/Notes |
 |---|---|---|
-| AB Bucket Framework v4.0 | ✅ Done | `mstr-knowledge/trading-rules.md` |
-| Force Field Pine indicator (Layer 0.75) | ✅ Done | `pine/MSTR_Suite_Force_Field.pine` SHA `60b7b013` |
-| Force Field structural gap gate (BOUNCE EXHAUST) | ✅ Done | SHA `60b7b013` — 93% bearish +20d when SB + struct gap |
-| INDICATOR-GUIDE.md updated | ✅ Done | Force Field + STRF/LQD sections added SHA `9813597c` |
-| AGENTS.md Strategy Library updated to v4.0 | ✅ Done | |
-| suite_upload_alert.py built + committed | ✅ Done | SHA `1d1b7963` |
+| AB Bucket v4.0 framework | ✅ | `7441461f` (trading-rules.md), `a49079d1` (AGENTS.md) |
+| Training/ folder created on GitHub | ✅ | SRI-Layman-Guide `a723c39c`, Tutorial `db41500f` |
+| 52 stale CSVs deleted from GitHub root | ✅ | — |
+| Force Field → morning_brief.py Section 4.75 | ✅ | `7b3bfa41` |
+| Force Field store → daily_analysis_cycle.py Phase 4 | ✅ | `12978ad1` |
+| doi_engine.py built | ✅ | `1af93ec0` |
+| DOI → morning_brief.py Section 4.8 | ✅ | `d536bd96` |
+| DOI 5 alert types → pmcc_alerts.py | ✅ | `a7877ba8` |
+| P10 trend_line_engine.py committed | ✅ | `a3319787` |
+| SRI_Forecast_AB1.pine → v7.1 (v4.0 routing notes) | ✅ | `823a65ff` |
+| P-BEAR Phase 1 confirmed live | ✅ | PBearEngine in sri_engine.py |
+| Greg channel bindings + gateway restart | ✅ | Verified in openclaw.json |
+| suite_upload_alert.py crontab install | ✅ | Gavin installed 2026-03-09 |
+| DISCORD webhooks (GREG/GAVIN/GARY) | ✅ | All verified set |
 
-## Blocked — Gavin Required
+---
 
-- **Install updated crontab**: `cd ~/Grok && git pull && cp scripts/suite_upload_alert.py ~/mstr-engine/scripts/ && cp scripts/crontab_updated.txt ~/mstr-engine/scripts/ && crontab -u openclaw ~/mstr-engine/scripts/crontab_updated.txt`
-- **Verify STRC/STRF ticker prefixes** in Force Field indicator (NASDAQ: vs BATS: — check if na in TV)
-- **6-month checkpoint (2026-09-08)**: Run `mstr_suite_engine.py --calibrate 10 --zone STRONG_BULL`; graduate if WR ≥70%
+## Pending — Gavin
 
-## Blocked — Greg Required
+- [ ] **STRC/STRF ticker prefixes** — Open Force Field Pine indicator in TradingView;
+      confirm STRC and STRF info table rows show non-na values. If na, swap NASDAQ: → BATS: in inputs.
+- [ ] **Tutorial v2.5 review** — Training/SRI-Engine-Tutorial-v2.md and Training/SRI-Layman-Guide.md on GitHub
 
-- Add 3 channel bindings to `openclaw.json` + gateway restart
-- Create #mstr-gary webhook → add `DISCORD_WEBHOOK_GARY` to `.env`
-- Install updated crontab: `crontab -u openclaw ~/mstr-engine/scripts/crontab_updated.txt`
-- Verify `DISCORD_WEBHOOK_GREG` and `DISCORD_WEBHOOK_GAVIN` still valid
-- Create #all-alerts channel → provide `DISCORD_WEBHOOK_ALL_ALERTS`
+---
 
-## In Progress / Next Up
+## Pending — Greg
 
-- **Wire `mstr_suite_engine.py` into `morning_brief.py`** — Section 4 force signal block
-- **Wire `--store` into `daily_analysis_cycle.py`** — auto-persist signals each cycle
-- **P-DOI integration** — add DOI block to `morning_brief.py` + 5 alert events
-- **SRI AB1 Pine rebuild for QQQ** — `lt_flip_with_st_pos` as primary entry
-- **Commit P10 files to GitHub** — `trend_line_engine.py` + updated `morning_brief.py`
-- **Tutorial v2.5 review** — Gavin to review `SRI-Engine-Tutorial-v2.md`
+- [ ] **#all-alerts channel** — create in Discord + provide webhook URL;
+      add DISCORD_WEBHOOK_ALL_ALERTS to .env
 
-## Key Decisions Locked
+---
 
-- **No naked shorts** — permanent rule, no exceptions, no approval overrides
-- **AB4 hard floor 10% true cash** — unchanged
-- **PMCC classification by intent**: long leg = AB3; short leg = AB1 (theta) or AB2 (directional)
-- **AB1 + AB2 combined ≤ 20%** of total portfolio
-- **Force Field BOUNCE EXHAUST** = STRONG_BULL + price >10% below LT Slow TL = 93% bearish +20d
-- **Bull zones PROVISIONAL** until 2026-09-08 checkpoint
+## 6-Month Checkpoint — Gavin (2026-09-08)
 
+Run on or after 2026-09-08:
+  docker exec openclaw-sbx-agent-mstr-cio-7db631bb \
+    python3 /mnt/mstr-scripts/mstr_suite_engine.py --calibrate 10 --zone STRONG_BULL
+
+If WR >= 70%:
+  sqlite3 /root/mstr-engine/data/mstr.db \
+    "INSERT OR REPLACE INTO engine_config VALUES ('suite_bull_graduated','1');"
+
+This graduates STRONG_BULL from PROVISIONAL to HIGH confidence and enables full sizing.
+
+---
+
+## Standing Rules
+- sri_engine.py frozen — new engines in separate files
+- All Claude calls via api_utils.call_claude()
+- Opus only in daily_analysis_cycle.py Python calls
+- GitHub: no personal data, P&L, or position sizes ever
+- NO NAKED SHORTS — permanent rule, no exceptions
+- Pine v6: multi-line ternaries in parens; color(na) not bare na in color chains
