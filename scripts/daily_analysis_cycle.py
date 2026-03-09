@@ -620,6 +620,23 @@ def main():
         traceback.print_exc()
         write_to_analysis(conn, "mstr-cio", "daily_synthesis", {"_error": str(e)})
 
+    # ── Phase 4: Force Field signal store ────────────────────────────────────
+    log("\n── Force Field Store ──")
+    try:
+        sys.path.insert(0, "/mnt/mstr-scripts")
+        from mstr_suite_engine import MstrSuiteEngine
+        _ff_engine = MstrSuiteEngine()
+        _ff_signal = _ff_engine.compute_signal()
+        if _ff_signal:
+            _ff_engine.store_signal(_ff_signal)
+            zone = _ff_signal.get("zone", "?")
+            fnet = _ff_signal.get("f_net", 0)
+            log(f"  ✅ Force Field stored: zone={zone}, F_net={fnet:+.4f}")
+        else:
+            log("  ⚠️ Force Field: no signal computed (CSV may be stale)")
+    except Exception as _ff_e:
+        log(f"  ⚠️ Force Field store skipped: {_ff_e}")
+
     # ── Summary ───────────────────────────────────────────────────────────────
     elapsed_total = int((time.time() - start_total))
     log(f"\n{'='*60}")
