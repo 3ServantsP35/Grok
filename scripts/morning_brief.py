@@ -266,6 +266,24 @@ def build_brief():
         sections.append(section)
 
     # ============================================
+    # 3.5 TREND LINE STRUCTURE (P10)
+    # ============================================
+    try:
+        import sys as _sys
+        _sys.path.insert(0, '/mnt/mstr-scripts')
+        from trend_line_engine import get_trend_lines_for_brief as _get_tl
+        import glob as _glob
+
+        _tl_paths = sorted(_glob.glob("/mnt/mstr-data/BATS_MSTR_1D_*.csv"))
+        if not _tl_paths:
+            _tl_paths = sorted(_glob.glob("/mnt/mstr-data/BATS_MSTR, 240_*.csv"))
+        if _tl_paths:
+            _tl_section = _get_tl("MSTR", _tl_paths[-1], start_date="2024-01-01")
+            sections.append(_tl_section)
+    except Exception as _tl_err:
+        sections.append(f"📐 Trend lines unavailable: {str(_tl_err)[:80]}")
+
+    # ============================================
     # 4. GLI & MACRO
     # ============================================
     gli = conn.execute(
@@ -458,6 +476,21 @@ def build_brief():
         # Non-fatal — append a minimal note to the prior section
         if sections:
             sections[-1] = sections[-1] + f"\n\n*Liquidity regime weights unavailable: {type(_liq_err).__name__}: {str(_liq_err)[:80]}*"
+
+
+    # ============================================
+    # 4.75 FORCE FIELD (Layer 0.75)
+    # ============================================
+    try:
+        from mstr_suite_engine import MstrSuiteEngine
+        _ff_engine = MstrSuiteEngine()
+        _ff_signal = _ff_engine.compute_signal()
+        if _ff_signal:
+            sections.append(_ff_engine.format_brief_block(_ff_signal))
+        else:
+            sections.append("**🧲 Force Field**\n*No signal computed — CSV data may be stale*")
+    except Exception as _ff_err:
+        sections.append(f"**🧲 Force Field**\n*Unavailable: {type(_ff_err).__name__}: {str(_ff_err)[:120]}*")
 
     # ============================================
     # 5. IV REGIME
