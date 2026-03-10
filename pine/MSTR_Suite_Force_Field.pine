@@ -85,9 +85,9 @@ f_stable    = f_norm(stable_fast, stable_slow, true) * 0.4
 // COMPONENT 3 — MSTR self-reference
 // ST Fast = 2H, ST Slow = 1D  |  ATR/RSI formula  |  weight x0.3
 // ════════════════════════════════════════════════════════════════════════════
-mstr_fast    = request.security("BATS:MSTR", "120", f_trackline(i_atr_coeff, i_atr_period))
-mstr_slow    = request.security("BATS:MSTR", "D",   f_trackline(i_atr_coeff, i_atr_period))
-mstr_lt_slow = request.security("BATS:MSTR", "W",   f_trackline(i_atr_coeff, i_atr_period))
+mstr_fast = request.security(syminfo.tickerid, "120", f_trackline(i_atr_coeff, i_atr_period))
+mstr_slow = request.security(syminfo.tickerid, "D", f_trackline(i_atr_coeff, i_atr_period))
+mstr_lt_slow = request.security(syminfo.tickerid, "W", f_trackline(i_atr_coeff, i_atr_period))
 f_self       = f_norm(mstr_fast, mstr_slow, false) * 0.3
 
 // ── Structural Gap Gate ──────────────────────────────────────────────────────
@@ -264,8 +264,7 @@ if barstate.islast
     table.cell(tbl, 1, 6, str.tostring(f_stable, "#.####"), text_color=color.new(color.orange, 10), text_size=size.small)
     table.cell(tbl, 0, 7, "MSTR Self",    text_color=color.gray,  text_size=size.small)
     table.cell(tbl, 1, 7, str.tostring(f_self,   "#.####"), text_color=color.new(color.purple, 10), text_size=size.small)
-    sg_str   = sg_active ? str.tostring(mstr_vs_lt_slow * 100, "#.1") + "% vs LT TL [STRUCT GAP]" :
-                            str.tostring(mstr_vs_lt_slow * 100, "#.1") + "% vs LT TL [OK]"
+    sg_str = sg_active ? str.tostring(mstr_vs_lt_slow * 100, "#.1") + "% vs LT TL [STRUCT GAP]" : str.tostring(mstr_vs_lt_slow * 100, "#.1") + "% vs LT TL [OK]"
     sg_col   = sg_active ? color.new(#ff9800, 0) : color.new(color.gray, 30)
     table.cell(tbl, 0, 8, "Struct Gate",  text_color=color.gray,  text_size=size.small)
     table.cell(tbl, 1, 8, sg_str,         text_color=sg_col,      text_size=size.small)
