@@ -211,9 +211,16 @@ hline(i_t_sbr, "Strong Bear",  color=color.new(#b71c1c, 55), linestyle=hline.sty
 plot(f_net, "F_net", color=f_color, linewidth=2)
 
 plot(f_primary,    "Primary (STRF/LQD)",    color=i_show_comps ? color.new(color.yellow, 25) : color.new(color.yellow, 100), linewidth=1)
-plot(i_show_comps ? f_credit  : na, "Credit (STRC x0.5)",    color=color.new(color.blue,   25), linewidth=1)
-plot(i_show_comps ? f_stable  : na, "Friction (STABLE x0.4)",color=color.new(color.orange, 25), linewidth=1)
-plot(i_show_comps ? f_self    : na, "Self (MSTR x0.3)",      color=color.new(color.purple, 25), linewidth=1)
+plot(f_credit,     "Credit (STRC x0.5)",    color=(i_show_comps ? color.new(color.blue,   25) : color.new(color.blue,   100)), linewidth=1)
+plot(f_stable,     "Friction (STABLE x0.4)",color=(i_show_comps ? color.new(color.orange, 25) : color.new(color.orange, 100)), linewidth=1)
+plot(f_self,       "Self (MSTR x0.3)",      color=(i_show_comps ? color.new(color.purple, 25) : color.new(color.purple, 100)), linewidth=1)
+
+// dF_net rate-of-change and 5-bar momentum (exported to CSV always)
+dF_net      = f_net - nz(f_net[1])
+dF_net_5bar = math.sum(dF_net, 5)
+plot(multiplier,   "Multiplier",             color=(i_show_comps ? color.new(color.white, 40) : color.new(color.white, 100)), linewidth=1)
+plot(dF_net,       "dF_net (ROC)",           color=(i_show_comps ? color.new(color.teal,  30) : color.new(color.teal,  100)), linewidth=1)
+plot(dF_net_5bar,  "dF_net_5bar (momentum)", color=(i_show_comps ? color.new(color.teal,  55) : color.new(color.teal,  100)), linewidth=1)
 
 // FIX: plotshape uses "style=" not "shape=" in Pine v6
 plotshape(into_bear,    title="Into Bear",          style=shape.triangledown, location=location.abovebar, color=c_br,      size=size.small)
