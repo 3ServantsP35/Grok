@@ -210,7 +210,7 @@ hline(i_t_sbr, "Strong Bear",  color=color.new(#b71c1c, 55), linestyle=hline.sty
 
 plot(f_net, "F_net", color=f_color, linewidth=2)
 
-plot(i_show_comps ? f_primary : na, "Primary (STRF/LQD)",    color=color.new(color.yellow, 25), linewidth=1)
+plot(f_primary,    "Primary (STRF/LQD)",    color=i_show_comps ? color.new(color.yellow, 25) : color.new(color.yellow, 100), linewidth=1)
 plot(i_show_comps ? f_credit  : na, "Credit (STRC x0.5)",    color=color.new(color.blue,   25), linewidth=1)
 plot(i_show_comps ? f_stable  : na, "Friction (STABLE x0.4)",color=color.new(color.orange, 25), linewidth=1)
 plot(i_show_comps ? f_self    : na, "Self (MSTR x0.3)",      color=color.new(color.purple, 25), linewidth=1)
