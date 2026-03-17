@@ -84,8 +84,7 @@ f_self = f_norm(mstr_fast, mstr_slow, false) * 0.3
 // ── Structural Gap Gate ────────────────────────────────────────────────────
 // STRONG_BULL + price >10% below LT Slow TL historically behaves like
 // bounce exhaustion rather than a true trend reversal.
-mstr_vs_lt_slow = not na(mstr_lt_slow) and mstr_lt_slow != 0.0 ?
-    (close - mstr_lt_slow) / mstr_lt_slow : 0.0
+mstr_vs_lt_slow = not na(mstr_lt_slow) and mstr_lt_slow != 0.0 ? (close - mstr_lt_slow) / mstr_lt_slow : 0.0
 
 // ════════════════════════════════════════════════════════════════════════════
 // COMPONENT 4 — STRF/LQD ratio (primary force)
@@ -99,10 +98,8 @@ strf_ltf = ta.ema(strf_ratio, i_fast_len)
 strf_stf = ta.ema(strf_ratio, i_fast_st)
 strf_stl = ta.sma(strf_ratio, i_slow_len)
 
-strf_lt_gap = not na(strf_ltf) and not na(strf_stl) and strf_stl != 0.0 ?
-    (strf_ltf - strf_stl) / math.abs(strf_stl) : 0.0
-strf_st_gap = not na(strf_stf) and strf_stl != 0.0 ?
-    (strf_stf - strf_stl) / math.abs(strf_stl) : 0.0
+strf_lt_gap = not na(strf_ltf) and not na(strf_stl) and strf_stl != 0.0 ? (strf_ltf - strf_stl) / math.abs(strf_stl) : 0.0
+strf_st_gap = not na(strf_stf) and strf_stl != 0.0 ? (strf_stf - strf_stl) / math.abs(strf_stl) : 0.0
 
 strf_lt_vel = strf_lt_gap - nz(strf_lt_gap[1])
 strf_lt_dir = math.abs(strf_lt_gap) > 0.001 ? math.sign(strf_lt_gap) : 0.0
@@ -123,8 +120,7 @@ mibit_ratio = not na(mstr_now) and not na(ibit_c) and ibit_c != 0.0 ? mstr_now /
 mibit_ftl = ta.ema(mibit_ratio, i_fast_len)
 mibit_stl = ta.sma(mibit_ratio, i_slow_len)
 
-mibit_gap = not na(mibit_ftl) and not na(mibit_stl) and mibit_stl != 0.0 ?
-    (mibit_ftl - mibit_stl) / math.abs(mibit_stl) : 0.0
+mibit_gap = not na(mibit_ftl) and not na(mibit_stl) and mibit_stl != 0.0 ? (mibit_ftl - mibit_stl) / math.abs(mibit_stl) : 0.0
 mibit_vel = mibit_gap - nz(mibit_gap[1])
 mibit_dir = math.abs(mibit_gap) > 0.001 ? math.sign(mibit_gap) : 0.0
 mibit_mag = math.min(math.abs(mibit_gap) * 40.0, 1.0)
