@@ -207,25 +207,14 @@ var table tbl = table.new(position.top_right, 2, 10,
      frame_color=color.new(color.gray, 40), frame_width=1)
 
 if barstate.islast
-    zone_str = sb_exhaust ? "BOUNCE EXHAUST [SB+GAP]" :
-        mb_early ? "EARLY RECOV [MB+GAP]" :
-        zone_sb ? "STRONG BULL [PROV]" :
-        zone_b ? "MOD BULL [PROV]" :
-        zone_n ? "NEUTRAL" :
-        zone_br ? "MOD BEAR [HIGH]" : "STRONG BEAR [HIGH]"
+    zone_str = sb_exhaust ? "BOUNCE EXHAUST [SB+GAP]" : mb_early ? "EARLY RECOV [MB+GAP]" : zone_sb ? "STRONG BULL [PROV]" : zone_b ? "MOD BULL [PROV]" : zone_n ? "NEUTRAL" : zone_br ? "MOD BEAR [HIGH]" : "STRONG BEAR [HIGH]"
     f_trend = f_net > f_net[1] ? "RISING" : f_net < f_net[1] ? "FALLING" : "FLAT"
-    mibit_str = f_mibit_lt > 0.1 ? "BULL" :
-        f_mibit_lt < -0.1 ? "BEAR" :
-        mibit_gap > 0.0 ? "DECEL+" : "TRANSIT"
-    strf_str = strf_lt_dir > 0.0 and strf_lt_decel == 1.0 ? "MOM_BULL" :
-        strf_lt_dir > 0.0 ? "DECEL_BULL" :
-        strf_lt_dir < 0.0 and strf_lt_decel == 1.0 ? "MOM_BEAR" :
-        strf_lt_dir < 0.0 ? "DECEL_BEAR" : "TRANSIT"
+    mibit_str = f_mibit_lt > 0.1 ? "BULL" : f_mibit_lt < -0.1 ? "BEAR" : mibit_gap > 0.0 ? "DECEL+" : "TRANSIT"
+    strf_str = strf_lt_dir > 0.0 and strf_lt_decel == 1.0 ? "MOM_BULL" : strf_lt_dir > 0.0 ? "DECEL_BULL" : strf_lt_dir < 0.0 and strf_lt_decel == 1.0 ? "MOM_BEAR" : strf_lt_dir < 0.0 ? "DECEL_BEAR" : "TRANSIT"
     mult_label = str.tostring(multiplier, "#.###") + "x (" + mibit_str + ")"
     primary_label = str.tostring(f_primary, "#.####") + " " + strf_str
     chkpt_label = "Bull zones PROVISIONAL -> 2026-09-08"
-    sg_str = sg_active ? str.tostring(mstr_vs_lt_slow * 100, "#.1") + "% vs LT TL [STRUCT GAP]" :
-        str.tostring(mstr_vs_lt_slow * 100, "#.1") + "% vs LT TL [OK]"
+    sg_str = sg_active ? str.tostring(mstr_vs_lt_slow * 100, "#.1") + "% vs LT TL [STRUCT GAP]" : str.tostring(mstr_vs_lt_slow * 100, "#.1") + "% vs LT TL [OK]"
     sg_col = sg_active ? color.new(#ff9800, 0) : color.new(color.gray, 30)
 
     table.cell(tbl, 0, 0, "Force Field", text_color=color.white, text_size=size.small, bgcolor=color.new(color.gray, 65))
