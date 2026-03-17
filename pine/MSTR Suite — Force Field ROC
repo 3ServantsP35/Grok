@@ -106,9 +106,7 @@ strf_lt_dir = math.abs(strf_lt_gap) > 0.001 ? math.sign(strf_lt_gap) : 0.0
 strf_lt_decel = strf_lt_dir * strf_lt_vel < 0.0 ? 0.6 : 1.0
 strf_st_mag = math.min(math.abs(strf_st_gap) * 40.0, 1.0)
 
-f_primary = na(strf_ratio) ? 0.0 :
-    strf_lt_dir != 0.0 ? strf_lt_dir * strf_lt_decel * strf_st_mag :
-    strf_st_gap * 40.0
+f_primary = na(strf_ratio) ? 0.0 : strf_lt_dir != 0.0 ? strf_lt_dir * strf_lt_decel * strf_st_mag : strf_st_gap * 40.0
 
 // ════════════════════════════════════════════════════════════════════════════
 // COMPONENT 5 — MSTR/IBIT ratio (multiplier)
@@ -127,9 +125,7 @@ mibit_mag = math.min(math.abs(mibit_gap) * 40.0, 1.0)
 mibit_decel = mibit_dir * mibit_vel < 0.0 ? 0.6 : 1.0
 f_mibit_lt = mibit_dir * mibit_mag * mibit_decel
 
-multiplier = f_mibit_lt * f_primary > 0.0 ? 1.0 + 0.5 * math.abs(f_mibit_lt) :
-    f_mibit_lt == 0.0 ? 1.0 :
-    math.max(0.4, 1.0 - 0.4 * math.abs(f_mibit_lt))
+multiplier = f_mibit_lt * f_primary > 0.0 ? 1.0 + 0.5 * math.abs(f_mibit_lt) : f_mibit_lt == 0.0 ? 1.0 : math.max(0.4, 1.0 - 0.4 * math.abs(f_mibit_lt))
 
 // ════════════════════════════════════════════════════════════════════════════
 // NET FORCE
@@ -171,20 +167,9 @@ c_n = color.new(#90a4ae, 0)
 c_br = color.new(#ef5350, 0)
 c_sbr = color.new(#b71c1c, 0)
 
-f_color = sb_exhaust ? c_exhaust :
-    mb_early ? c_early :
-    zone_sb ? c_sb :
-    zone_b ? c_b :
-    zone_n ? c_n :
-    zone_br ? c_br : c_sbr
+f_color = sb_exhaust ? c_exhaust : mb_early ? c_early : zone_sb ? c_sb : zone_b ? c_b : zone_n ? c_n : zone_br ? c_br : c_sbr
 
-bg_col = sb_exhaust ? color.new(#ff9800, 90) :
-    mb_early ? color.new(#ffe082, 93) :
-    zone_sb ? color.new(#00e5ff, 93) :
-    zone_b ? color.new(#26a69a, 93) :
-    zone_n ? color(na) :
-    zone_br ? color.new(#ef5350, 90) :
-    color.new(#b71c1c, 85)
+bg_col = sb_exhaust ? color.new(#ff9800, 90) : mb_early ? color.new(#ffe082, 93) : zone_sb ? color.new(#00e5ff, 93) : zone_b ? color.new(#26a69a, 93) : zone_n ? color(na) : zone_br ? color.new(#ef5350, 90) : color.new(#b71c1c, 85)
 
 // ── Plots ─────────────────────────────────────────────────────────────────
 bgcolor(i_show_bg ? bg_col : na, title="Zone Background")
