@@ -40,6 +40,7 @@ i_t_sbr = input.float(-1.66, "STRONG BEAR  (F <)", step=0.05, group=grp_t)
 grp_d = "Display"
 i_show_comps = input.bool(false, "Show Component Lines", group=grp_d)
 i_show_bg    = input.bool(true,  "Show Zone Background", group=grp_d)
+i_show_markers = input.bool(false, "Show Event Markers", group=grp_d)
 
 // ── ATR Trackline (exact formula from SRI_LT.pine / SRI_ST.pine) ─────────────
 // Supertrend-style ATR trailing stop with RSI direction gate.
@@ -236,10 +237,10 @@ plot(f_net_roc_5, "F_net ROC 5", color=color.new(color.white, 100), display=disp
 plot(f_net_accel, "F_net Acceleration", color=color.new(color.white, 100), display=display.none)
 
 // FIX: plotshape uses "style=" not "shape=" in Pine v6
-plotshape(into_bear,    title="Into Bear",          style=shape.triangledown, location=location.top, color=c_br,      size=size.small)
-plotshape(into_bull,    title="Into Bull",          style=shape.triangleup,   location=location.bottom, color=c_b,       size=size.small)
-plotshape(into_sbear,   title="Into Strong Bear",   style=shape.xcross,       location=location.top, color=c_sbr,     size=size.small)
-plotshape(into_exhaust, title="Bounce Exhaustion",  style=shape.diamond,      location=location.top, color=c_exhaust, size=size.small)
+plotshape(i_show_markers and into_bear,    title="Into Bear",          style=shape.triangledown, location=location.top, color=c_br,      size=size.small)
+plotshape(i_show_markers and into_bull,    title="Into Bull",          style=shape.triangleup,   location=location.bottom, color=c_b,       size=size.small)
+plotshape(i_show_markers and into_sbear,   title="Into Strong Bear",   style=shape.xcross,       location=location.top, color=c_sbr,     size=size.small)
+plotshape(i_show_markers and into_exhaust, title="Bounce Exhaustion",  style=shape.diamond,      location=location.top, color=c_exhaust, size=size.small)
 
 // ── Info Table ──────────────────────────────────────────────────────────────
 var table tbl = table.new(position.top_right, 2, 10,
