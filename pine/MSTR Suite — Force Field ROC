@@ -195,10 +195,10 @@ plot(f_net_roc_3, "F_net ROC 3", color=color.new(color.white, 100), display=disp
 plot(f_net_roc_5, "F_net ROC 5", color=color.new(color.white, 100), display=display.none)
 plot(f_net_accel, "F_net Acceleration", color=color.new(color.white, 100), display=display.none)
 
-plotshape(into_bear, title="Into Bear", style=shape.triangledown, location=location.abovebar, color=c_br, size=size.small)
-plotshape(into_bull, title="Into Bull", style=shape.triangleup, location=location.belowbar, color=c_b, size=size.small)
-plotshape(into_sbear, title="Into Strong Bear", style=shape.xcross, location=location.abovebar, color=c_sbr, size=size.small)
-plotshape(into_exhaust, title="Bounce Exhaustion", style=shape.diamond, location=location.abovebar, color=c_exhaust, size=size.small)
+plotshape(into_bear, title="Into Bear", style=shape.triangledown, location=location.top, color=c_br, size=size.small)
+plotshape(into_bull, title="Into Bull", style=shape.triangleup, location=location.bottom, color=c_b, size=size.small)
+plotshape(into_sbear, title="Into Strong Bear", style=shape.xcross, location=location.top, color=c_sbr, size=size.small)
+plotshape(into_exhaust, title="Bounce Exhaustion", style=shape.diamond, location=location.top, color=c_exhaust, size=size.small)
 
 // ── Info Table ──────────────────────────────────────────────────────────────
 var table tbl = table.new(position.top_right, 2, 10,

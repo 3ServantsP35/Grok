@@ -161,6 +161,12 @@ multiplier = f_mibit_lt * f_primary > 0.0 ? 1.0 + 0.5 * math.abs(f_mibit_lt) :
 // ════════════════════════════════════════════════════════════════════════════
 f_net = multiplier * f_primary + f_credit + f_stable + f_self
 
+// Derived export fields for CSV analysis
+f_net_roc_1 = f_net - nz(f_net[1])
+f_net_roc_3 = f_net - nz(f_net[3])
+f_net_roc_5 = f_net - nz(f_net[5])
+f_net_accel = f_net_roc_1 - nz(f_net_roc_1[1])
+
 // ── Zone classification ────────────────────────────────────────────────────
 zone_sb  = f_net >  i_t_sb
 zone_b   = f_net >  i_t_b   and f_net <= i_t_sb
@@ -222,11 +228,17 @@ plot(multiplier,   "Multiplier",             color=(i_show_comps ? color.new(col
 plot(dF_net,       "dF_net (ROC)",           color=(i_show_comps ? color.new(color.teal,  30) : color.new(color.teal,  100)), linewidth=1)
 plot(dF_net_5bar,  "dF_net_5bar (momentum)", color=(i_show_comps ? color.new(color.teal,  55) : color.new(color.teal,  100)), linewidth=1)
 
+// Hidden export-only plots so TradingView CSV includes the key derivative fields
+plot(f_net_roc_1, "F_net ROC 1", color=color.new(color.white, 100), display=display.none)
+plot(f_net_roc_3, "F_net ROC 3", color=color.new(color.white, 100), display=display.none)
+plot(f_net_roc_5, "F_net ROC 5", color=color.new(color.white, 100), display=display.none)
+plot(f_net_accel, "F_net Acceleration", color=color.new(color.white, 100), display=display.none)
+
 // FIX: plotshape uses "style=" not "shape=" in Pine v6
-plotshape(into_bear,    title="Into Bear",          style=shape.triangledown, location=location.abovebar, color=c_br,      size=size.small)
-plotshape(into_bull,    title="Into Bull",          style=shape.triangleup,   location=location.belowbar, color=c_b,       size=size.small)
-plotshape(into_sbear,   title="Into Strong Bear",   style=shape.xcross,       location=location.abovebar, color=c_sbr,     size=size.small)
-plotshape(into_exhaust, title="Bounce Exhaustion",  style=shape.diamond,      location=location.abovebar, color=c_exhaust, size=size.small)
+plotshape(into_bear,    title="Into Bear",          style=shape.triangledown, location=location.top, color=c_br,      size=size.small)
+plotshape(into_bull,    title="Into Bull",          style=shape.triangleup,   location=location.bottom, color=c_b,       size=size.small)
+plotshape(into_sbear,   title="Into Strong Bear",   style=shape.xcross,       location=location.top, color=c_sbr,     size=size.small)
+plotshape(into_exhaust, title="Bounce Exhaustion",  style=shape.diamond,      location=location.top, color=c_exhaust, size=size.small)
 
 // ── Info Table ──────────────────────────────────────────────────────────────
 var table tbl = table.new(position.top_right, 2, 10,
