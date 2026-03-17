@@ -102,8 +102,7 @@ i_struct_gap_pct = input.float(-0.10, "Structural gap threshold", step=0.01,
      tooltip="Bull zone suppressed when price is this far below LT Slow TL. Default -10% (10% below TL).",
      group="Zone Thresholds (update after 2026-09-08 checkpoint)")
 sg_active   = mstr_vs_lt_slow < i_struct_gap_pct  // price far below LT Slow TL
-sb_exhaust  = zone_sb and sg_active                // STRONG BULL + struct gap = bounce exhaustion
-mb_early    = zone_b  and sg_active                // MOD BULL + struct gap = early recovery
+
 
 // ════════════════════════════════════════════════════════════════════════════
 // COMPONENT 4 — STRF/LQD ratio (primary force)
@@ -173,6 +172,8 @@ zone_b   = f_net >  i_t_b   and f_net <= i_t_sb
 zone_n   = f_net >  i_t_br  and f_net <= i_t_b
 zone_br  = f_net >  i_t_sbr and f_net <= i_t_br
 zone_sbr = f_net <= i_t_sbr
+sb_exhaust  = zone_sb and sg_active                // STRONG BULL + struct gap = bounce exhaustion
+mb_early    = zone_b  and sg_active                // MOD BULL + struct gap = early recovery
 
 zone_id  = zone_sb ? 2 : zone_b ? 1 : zone_n ? 0 : zone_br ? -1 : -2
 zone_chg   = zone_id != zone_id[1]
