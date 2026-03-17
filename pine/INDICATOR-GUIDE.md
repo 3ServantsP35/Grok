@@ -1151,6 +1151,44 @@ The ATR/RSI trackline (for single instruments) is the exact formula used by SRI_
 - **Trend = RISING while in BEAR zone**: Recovery beginning. Watch for zone transition. Not yet actionable.
 - **f_primary turns positive while f_stable still negative**: STRF/LQD credit recovered before liquidity — early bull signal, still waiting for macro confirmation.
 
+#### Force Field ROC — Interpretation Rule
+
+**File:** `pine/MSTR Suite — Force Field ROC`
+**Role:** Tactical derivative layer for the Force Field. The original Force Field remains the **base regime/state indicator**; the ROC version becomes the **primary operational read** when evaluating whether force is strengthening or weakening.
+
+**Formal rule:**
+- **Original Force Field wins on regime/state.** Use it to answer: *What force zone are we in right now?*
+- **Force Field ROC wins on change/timing.** Use it to answer: *Is that regime strengthening, weakening, accelerating, or exhausting?*
+
+This means the two indicators are **complementary, not redundant**.
+
+**Interpretation hierarchy:**
+1. **Read the original Force Field first** for current zone/state (`STRONG BULL`, `MOD BULL`, `NEUTRAL`, `MOD BEAR`, `STRONG BEAR`).
+2. **Read Force Field ROC second** for the condition of that state:
+   - `F_net ROC > 0` and rising = force improving
+   - `F_net ROC < 0` = force deteriorating
+   - `F_net Acceleration > 0` = improvement itself is strengthening
+   - `F_net Acceleration < 0` = thrust is fading
+3. **When they differ in tone, let ROC control the tactical interpretation without overriding the base regime.** Example: `F_net` still bullish while ROC turns down = **bullish regime, but decelerating** — do not treat as a fresh expansion leg.
+
+**Operational decision rule:**
+- **Original FF bullish + ROC rising/accelerating** → bullish and strengthening; continuation odds improving.
+- **Original FF bullish + ROC falling/decelerating** → bullish but tiring; prioritize consolidation/exhaustion risk over breakout enthusiasm.
+- **Original FF bearish + ROC rising** → bearish regime under repair; reduce urgency but do not front-run a full reversal.
+- **Original FF bearish + ROC falling** → bearish and worsening; highest confidence defensive posture.
+
+**Why the ROC version matters:**
+The original Force Field correctly identifies the **state** (for example, `F_net` remains positive), but it can understate the most important new information: whether that positive force is **strengthening or fading**. The ROC layer captures the difference between:
+- **bullish and accelerating**
+- **bullish but decelerating**
+
+That distinction is often the highest-value tactical edge.
+
+**Current framework stance:**
+- Keep **`MSTR_Suite_Force_Field.pine`** as the **canonical state/regime indicator**.
+- Use **`MSTR Suite — Force Field ROC`** as the **default analytical / decision-support indicator**.
+- Do **not** deprecate the original Force Field yet; it remains the anchor for zone logic and structural backdrop.
+
 #### Setting Alerts
 
 Four alert conditions are built in (configure via TradingView Alerts panel):
