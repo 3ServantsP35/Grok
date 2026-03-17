@@ -1,0 +1,292 @@
+//@version=6
+// ════════════════════════════════════════════════════════════════════════════
+// MSTR Suite — Force Field Oscillator
+// © RizenShine / CIO | Layer 0.75 — above GLI, below Regime
+//
+// F_net = multiplier × f_primary + f_credit + f_stable + f_self
+// f_primary = STRF/LQD — LT direction × ST magnitude
+// multiplier = MSTR/IBIT LT — amplifies aligned, dampens opposed
+// f_credit = STRC ST × 0.5
+// f_stable = STABLE.D LT × 0.4, inverted
+// f_self = MSTR ST × 0.3
+//
+// Zone thresholds (Pass 2 backtesting, N=342 bars, 2025-06 to 2026-03):
+// STRONG BULL F > -0.19 PROVISIONAL (checkpoint 2026-09-08)
+// MOD BULL F > -0.60 PROVISIONAL
+// NEUTRAL -1.15 to -0.60
+// MOD BEAR F < -1.15 HIGH 75% WR +10d, N=36
+// STRONG BEAR F < -1.66 HIGH 76% WR +10d, N=29
+// ════════════════════════════════════════════════════════════════════════════
+
+indicator("MSTR Suite — Force Field ROC", shorttitle="FF ROC", overlay=false,
+format=format.price, precision=4, max_lines_count=10)
+
+// ── Inputs ────────────────────────────────────────────────────────────────────
+grp_s = "Single-Instrument Tracklines (ATR/RSI)"
+i_atr_period = input.int(14, "ATR Period", minval=5, maxval=50, group=grp_s)
+i_atr_coeff = input.float(1.0,"ATR Coefficient", minval=0.5,maxval=3.0, group=grp_s, step=0.1)
+grp_r = "Ratio Tracklines (STRF/LQD and MSTR/IBIT)"
+i_fast_len = input.int(20, "Fast EMA Length (bars)", minval=5, maxval=100, group=grp_r)
+i_slow_len = input.int(50, "Slow SMA Length (bars)", minval=10, maxval=200, group=grp_r)
+i_fast_st = input.int(5, "ST Fast EMA (magnitude)",minval=2, maxval=20, group=grp_r)
+
+grp_t = "Zone Thresholds (update after 2026-09-08 checkpoint)"
+i_t_sb = input.float(-0.19, "STRONG BULL (F >)", step=0.05, group=grp_t)
+i_t_b = input.float(-0.60, "MOD BULL (F >)", step=0.05, group=grp_t)
+i_t_br = input.float(-1.15, "MOD BEAR (F <)", step=0.05, group=grp_t)
+i_t_sbr = input.float(-1.66, "STRONG BEAR (F <)", step=0.05, group=grp_t)
+
+grp_d = "Display"
+i_show_comps = input.bool(false, "Show Component Lines", group=grp_d)
+i_show_bg = input.bool(true, "Show Zone Background", group=grp_d)
+// ── ATR Trackline (exact formula from SRI_LT.pine / SRI_ST.pine) ─────────────
+// Supertrend-style ATR trailing stop with RSI direction gate.
+f_trackline(float coeff, int period) =>
+atr_val = ta.rma(ta.tr(true), period)
+upT = low - atr_val * coeff
+downT = high + atr_val * coeff
+bull = ta.rsi(close, period) >= 50
+var float tl = 0.0
+tl := bull ? math.max(upT, nz(tl[1])) : math.min(downT, nz(tl[1]))
+tl
+
+// ── Normalized Force ─────────────────────────────────────────────────────────
+// FIX: gap computed at function scope (not inside if/else) so [1] history works.
+f_norm(float fast_tl, float slow_tl, bool invert) =>
+valid = not na(fast_tl) and not na(slow_tl) and slow_tl != 0.0
+raw_gap = valid ? (fast_tl - slow_tl) / math.abs(slow_tl) : 0.0
+gap = invert ? -raw_gap : raw_gap
+gap_vel = gap - nz(gap[1])
+mag = math.min(math.abs(gap) * 40.0, 1.0)
+dir = math.abs(gap) > 0.001 ? math.sign(gap) : 0.0
+decel = dir * gap_vel < 0.0 ? 0.6 : 1.0
+valid ? dir * mag * decel : 0.0
+
+// ════════════════════════════════════════════════════════════════════════════
+// COMPONENT 1 — STRC (credit floor)
+// ST Fast = 2H, ST Slow = 1D | ATR/RSI formula | weight x0.5
+// ════════════════════════════════════════════════════════════════════════════
+strc_fast = request.security("NASDAQ:STRC", "120", f_trackline(i_atr_coeff, i_atr_period))
+strc_slow = request.security("NASDAQ:STRC", "D", f_trackline(i_atr_coeff, i_atr_period))
+f_credit = f_norm(strc_fast, strc_slow, false) * 0.5
+// ════════════════════════════════════════════════════════════════════════════
+// COMPONENT 2 — STABLE.D (liquidity friction, inverted)
+// LT Fast = 4H, LT Slow = 1W | ATR/RSI formula | weight x0.4
+// Rising stablecoin dominance = bearish for MSTR -> invert=true
+// ════════════════════════════════════════════════════════════════════════════
+stable_fast = request.security("CRYPTOCAP:STABLE.C.D", "240", f_trackline(i_atr_coeff, i_atr_period))
+stable_slow = request.security("CRYPTOCAP:STABLE.C.D", "W", f_trackline(i_atr_coeff, i_atr_period))
+f_stable = f_norm(stable_fast, stable_slow, true) * 0.4
+
+// ════════════════════════════════════════════════════════════════════════════
+// COMPONENT 3 — MSTR self-reference
+// ST Fast = 2H, ST Slow = 1D | ATR/RSI formula | weight x0.3
+// ════════════════════════════════════════════════════════════════════════════
+mstr_fast = request.security(syminfo.tickerid, "120", f_trackline(i_atr_coeff, i_atr_period))
+mstr_slow = request.security(syminfo.tickerid, "D", f_trackline(i_atr_coeff, i_atr_period))
+mstr_lt_slow = request.security(syminfo.tickerid, "W", f_trackline(i_atr_coeff, i_atr_period))
+f_self = f_norm(mstr_fast, mstr_slow, false) * 0.3
+
+// ── Structural Gap Gate ──────────────────────────────────────────────────────
+// Backtest finding (N=575, Jan 2025-Mar 2026):
+// STRONG_BULL + price >10% below LT Slow TL: 7% bull WR at +20d (93% BEARISH)
+// MOD_BULL + price >10% below LT Slow TL: 56% bull WR at +20d (mildly bullish)
+// When STRONG_BULL fires far below structural resistance, it signals
+// bounce exhaustion, not a trend reversal.
+mstr_vs_lt_slow = not na(mstr_lt_slow) and mstr_lt_slow != 0.0 ?
+(close - mstr_lt_slow) / mstr_lt_slow : 0.0
+i_struct_gap_pct = input.float(-0.10, "Structural gap threshold", step=0.01,
+tooltip="Bull zone suppressed when price is this far below LT Slow TL. Default -10% (10% below TL).",
+group="Zone Thresholds (update after 2026-09-08 checkpoint)")
+sg_active = mstr_vs_lt_slow < i_struct_gap_pct // price far below LT Slow TL
+sb_exhaust = zone_sb and sg_active // STRONG BULL + struct gap = bounce exhaustion
+mb_early = zone_b and sg_active // MOD BULL + struct gap = early recovery
+
+// ════════════════════════════════════════════════════════════════════════════
+// COMPONENT 4 — STRF/LQD ratio (primary force)
+// EMA/SMA on ratio per STRF_LQD_Ratio.pine convention
+// LT direction from EMA20/SMA50; ST magnitude from EMA5/SMA50
+// ════════════════════════════════════════════════════════════════════════════
+strf_c = request.security("NASDAQ:STRF", timeframe.period, close)
+lqd_c = request.security("BATS:LQD", timeframe.period, close)
+
+strf_ratio = not na(strf_c) and not na(lqd_c) and lqd_c != 0.0 ? strf_c / lqd_c : na
+
+strf_ltf = ta.ema(strf_ratio, i_fast_len)
+strf_stf = ta.ema(strf_ratio, i_fast_st)
+strf_stl = ta.sma(strf_ratio, i_slow_len)
+
+strf_lt_gap = not na(strf_ltf) and not na(strf_stl) and strf_stl != 0.0 ?
+(strf_ltf - strf_stl) / math.abs(strf_stl) : 0.0
+strf_st_gap = not na(strf_stf) and strf_stl != 0.0 ?
+(strf_stf - strf_stl) / math.abs(strf_stl) : 0.0
+
+strf_lt_vel = strf_lt_gap - nz(strf_lt_gap[1])
+strf_lt_dir = math.abs(strf_lt_gap) > 0.001 ? math.sign(strf_lt_gap) : 0.0
+strf_lt_decel = strf_lt_dir * strf_lt_vel < 0.0 ? 0.6 : 1.0
+strf_st_mag = math.min(math.abs(strf_st_gap) * 40.0, 1.0)
+
+f_primary = na(strf_ratio) ? 0.0 :
+strf_lt_dir != 0.0 ? strf_lt_dir * strf_lt_decel * strf_st_mag :
+strf_st_gap * 40.0
+
+// ════════════════════════════════════════════════════════════════════════════
+// COMPONENT 5 — MSTR/IBIT ratio (multiplier)
+// EMA20/SMA50 on ratio
+// ════════════════════════════════════════════════════════════════════════════
+mstr_now = request.security("BATS:MSTR", timeframe.period, close)
+ibit_c = request.security("BATS:IBIT", timeframe.period, close)
+
+mibit_ratio = not na(mstr_now) and not na(ibit_c) and ibit_c != 0.0 ? mstr_now / ibit_c : na
+mibit_ftl = ta.ema(mibit_ratio, i_fast_len)
+mibit_stl = ta.sma(mibit_ratio, i_slow_len)
+
+mibit_gap = not na(mibit_ftl) and not na(mibit_stl) and mibit_stl != 0.0 ?
+(mibit_ftl - mibit_stl) / math.abs(mibit_stl) : 0.0
+mibit_vel = mibit_gap - nz(mibit_gap[1])
+mibit_dir = math.abs(mibit_gap) > 0.001 ? math.sign(mibit_gap) : 0.0
+mibit_mag = math.min(math.abs(mibit_gap) * 40.0, 1.0)
+mibit_decel = mibit_dir * mibit_vel < 0.0 ? 0.6 : 1.0
+f_mibit_lt = mibit_dir * mibit_mag * mibit_decel
+
+multiplier = f_mibit_lt * f_primary > 0.0 ? 1.0 + 0.5 * math.abs(f_mibit_lt) :
+f_mibit_lt == 0.0 ? 1.0 :
+math.max(0.4, 1.0 - 0.4 * math.abs(f_mibit_lt))
+
+// ════════════════════════════════════════════════════════════════════════════
+// NET FORCE
+// ════════════════════════════════════════════════════════════════════════════
+f_net = multiplier * f_primary + f_credit + f_stable + f_self
+// Derived export fields for CSV analysis
+f_net_roc_1 = f_net - nz(f_net[1])
+f_net_roc_3 = f_net - nz(f_net[3])
+f_net_roc_5 = f_net - nz(f_net[5])
+f_net_accel = f_net_roc_1 - nz(f_net_roc_1[1])
+
+// ── Zone classification ────────────────────────────────────────────────────
+zone_sb = f_net > i_t_sb
+zone_b = f_net > i_t_b and f_net <= i_t_sb
+zone_n = f_net > i_t_br and f_net <= i_t_b
+zone_br = f_net > i_t_sbr and f_net <= i_t_br
+zone_sbr = f_net <= i_t_sbr
+
+zone_id = zone_sb ? 2 : zone_b ? 1 : zone_n ? 0 : zone_br ? -1 : -2
+zone_chg = zone_id != zone_id[1]
+into_bear = zone_chg and (zone_br or zone_sbr)
+into_bull = zone_chg and (zone_sb or zone_b)
+into_sbear = zone_chg and zone_sbr
+into_exhaust = sb_exhaust and not sb_exhaust[1] // STRONG BULL flips to exhaustion
+
+// ── Colors ────────────────────────────────────────────────────────────────
+c_sb = color.new(#00e5ff, 0) // strong bull (confirmed)
+c_b = color.new(#26a69a, 0) // mod bull
+c_exhaust = color.new(#ff9800, 0) // bounce exhaustion (SB + struct gap)
+c_early = color.new(#ffe082, 0) // early recovery (MB + struct gap)
+c_n = color.new(#90a4ae, 0) // neutral
+c_br = color.new(#ef5350, 0) // mod bear
+c_sbr = color.new(#b71c1c, 0) // strong bear
+
+f_color = (sb_exhaust ? c_exhaust :
+mb_early ? c_early :
+zone_sb ? c_sb :
+zone_b ? c_b :
+zone_n ? c_n :
+zone_br ? c_br : c_sbr)
+
+bg_col = (sb_exhaust ? color.new(#ff9800, 90) :
+mb_early ? color.new(#ffe082, 93) :
+zone_sb ? color.new(#00e5ff, 93) :
+zone_b ? color.new(#26a69a, 93) :
+zone_n ? color(na) :
+zone_br ? color.new(#ef5350, 90) :
+color.new(#b71c1c, 85))
+
+// ── Plots ─────────────────────────────────────────────────────────────────
+bgcolor(i_show_bg ? bg_col : na, title="Zone Background")
+
+hline(i_t_sb, "Strong Bull", color=color.new(#00e5ff, 55), linestyle=hline.style_dashed, linewidth=1)
+hline(i_t_b, "Mod Bull", color=color.new(#26a69a, 55), linestyle=hline.style_dashed, linewidth=1)
+hline(0, "Zero", color=color.new(color.gray, 50), linestyle=hline.style_solid, linewidth=1)
+hline(i_t_br, "Mod Bear", color=color.new(#ef5350, 55), linestyle=hline.style_dashed, linewidth=1)
+hline(i_t_sbr, "Strong Bear", color=color.new(#b71c1c, 55), linestyle=hline.style_dashed, linewidth=1)
+
+plot(f_net, "F_net", color=f_color, linewidth=2)
+
+plot(f_primary, "Primary (STRF/LQD)", color=i_show_comps ? color.new(color.yellow, 25) : color.new(color.yellow, 100), linewidth=1)
+plot(f_credit, "Credit (STRC x0.5)", color=(i_show_comps ? color.new(color.blue, 25) : color.new(color.blue, 100)), linewidth=1)
+plot(f_stable, "Friction (STABLE x0.4)",color=(i_show_comps ? color.new(color.orange, 25) : color.new(color.orange, 100)), linewidth=1)
+plot(f_self, "Self (MSTR x0.3)", color=(i_show_comps ? color.new(color.purple, 25) : color.new(color.purple, 100)), linewidth=1)
+// dF_net rate-of-change and 5-bar momentum (exported to CSV always)
+dF_net = f_net - nz(f_net[1])
+dF_net_5bar = math.sum(dF_net, 5)
+plot(multiplier, "Multiplier", color=(i_show_comps ? color.new(color.white, 40) : color.new(color.white, 100)), linewidth=1)
+plot(dF_net, "dF_net (ROC)", color=(i_show_comps ? color.new(color.teal, 30) : color.new(color.teal, 100)), linewidth=1)
+plot(dF_net_5bar, "dF_net_5bar (momentum)", color=(i_show_comps ? color.new(color.teal, 55) : color.new(color.teal, 100)), linewidth=1)
+
+// Hidden export-only plots so TradingView CSV includes the key derivative fields
+plot(f_net_roc_1, "F_net ROC 1", color=color.new(color.white, 100), display=display.none)
+plot(f_net_roc_3, "F_net ROC 3", color=color.new(color.white, 100), display=display.none)
+plot(f_net_roc_5, "F_net ROC 5", color=color.new(color.white, 100), display=display.none)
+plot(f_net_accel, "F_net Acceleration", color=color.new(color.white, 100), display=display.none)
+
+// FIX: plotshape uses "style=" not "shape=" in Pine v6
+plotshape(into_bear, title="Into Bear", style=shape.triangledown, location=location.abovebar, color=c_br, size=size.small)
+plotshape(into_bull, title="Into Bull", style=shape.triangleup, location=location.belowbar, color=c_b, size=size.small)
+plotshape(into_sbear, title="Into Strong Bear", style=shape.xcross, location=location.abovebar, color=c_sbr, size=size.small)
+plotshape(into_exhaust, title="Bounce Exhaustion", style=shape.diamond, location=location.abovebar, color=c_exhaust, size=size.small)
+
+// ── Info Table ──────────────────────────────────────────────────────────────
+var table tbl = table.new(position.top_right, 2, 10,
+bgcolor=color.new(color.black, 72),
+border_color=color.new(color.gray, 60), border_width=1,
+frame_color=color.new(color.gray, 40), frame_width=1)
+
+if barstate.islast
+zone_str = (sb_exhaust ? "BOUNCE EXHAUST [SB+GAP]" :
+mb_early ? "EARLY RECOV [MB+GAP]" :
+zone_sb ? "STRONG BULL [PROV]" :
+zone_b ? "MOD BULL [PROV]" :
+zone_n ? "NEUTRAL" :
+zone_br ? "MOD BEAR [HIGH]" : "STRONG BEAR [HIGH]")
+f_trend = f_net > f_net[1] ? "RISING" : f_net < f_net[1] ? "FALLING" : "FLAT"
+mibit_str = (f_mibit_lt > 0.1 ? "BULL" :
+f_mibit_lt < -0.1 ? "BEAR" :
+mibit_gap > 0.0 ? "DECEL+" : "TRANSIT")
+strf_str = (strf_lt_dir > 0.0 and strf_lt_decel == 1.0 ? "MOM_BULL" :
+strf_lt_dir > 0.0 ? "DECEL_BULL":
+strf_lt_dir < 0.0 and strf_lt_decel == 1.0 ? "MOM_BEAR" :
+strf_lt_dir < 0.0 ? "DECEL_BEAR": "TRANSIT")
+
+// FIX: build label strings as variables before table.cell() calls
+mult_label = str.tostring(multiplier, "#.###") + "x (" + mibit_str + ")"
+primary_label = str.tostring(f_primary, "#.####") + " " + strf_str
+chkpt_label = "Bull zones PROVISIONAL -> 2026-09-08"
+table.cell(tbl, 0, 0, "Force Field", text_color=color.white, text_size=size.small, bgcolor=color.new(color.gray, 65))
+table.cell(tbl, 1, 0, zone_str, text_color=f_color, text_size=size.small, bgcolor=color.new(color.gray, 65))
+table.cell(tbl, 0, 1, "F_net", text_color=color.gray, text_size=size.small)
+table.cell(tbl, 1, 1, str.tostring(f_net, "#.####"), text_color=f_color, text_size=size.small)
+table.cell(tbl, 0, 2, "Trend", text_color=color.gray, text_size=size.small)
+table.cell(tbl, 1, 2, f_trend, text_color=color.white, text_size=size.small)
+table.cell(tbl, 0, 3, "Multiplier", text_color=color.gray, text_size=size.small)
+table.cell(tbl, 1, 3, mult_label, text_color=color.white, text_size=size.small)
+table.cell(tbl, 0, 4, "Primary", text_color=color.gray, text_size=size.small)
+table.cell(tbl, 1, 4, primary_label, text_color=color.new(color.yellow, 10), text_size=size.small)
+table.cell(tbl, 0, 5, "Credit/STRC", text_color=color.gray, text_size=size.small)
+table.cell(tbl, 1, 5, str.tostring(f_credit, "#.####"), text_color=color.new(color.blue, 10), text_size=size.small)
+table.cell(tbl, 0, 6, "Liquidity", text_color=color.gray, text_size=size.small)
+table.cell(tbl, 1, 6, str.tostring(f_stable, "#.####"), text_color=color.new(color.orange, 10), text_size=size.small)
+table.cell(tbl, 0, 7, "MSTR Self", text_color=color.gray, text_size=size.small)
+table.cell(tbl, 1, 7, str.tostring(f_self, "#.####"), text_color=color.new(color.purple, 10), text_size=size.small)
+sg_str = sg_active ? str.tostring(mstr_vs_lt_slow * 100, "#.1") + "% vs LT TL [STRUCT GAP]" : str.tostring(mstr_vs_lt_slow * 100, "#.1") + "% vs LT TL [OK]"
+sg_col = sg_active ? color.new(#ff9800, 0) : color.new(color.gray, 30)
+table.cell(tbl, 0, 8, "Struct Gate", text_color=color.gray, text_size=size.small)
+table.cell(tbl, 1, 8, sg_str, text_color=sg_col, text_size=size.small)
+table.cell(tbl, 0, 9, "Checkpoint", text_color=color.new(color.gray, 40), text_size=size.tiny)
+table.cell(tbl, 1, 9, chkpt_label, text_color=color.new(color.gray, 40), text_size=size.tiny)
+
+// ── Alerts ──────────────────────────────────────────────────────────────────
+alertcondition(into_exhaust,"Force -> Bounce Exhaustion","MSTR Force Field: STRONG BULL + structural gap = bounce exhaustion, 93% bearish +20d")
+alertcondition(into_bear, "Force -> Bear Zone", "MSTR Force Field entered BEAR zone")
+alertcondition(into_bull, "Force -> Bull Zone (PROV)", "MSTR Force Field entered BULL zone — confirm gate before entry")
+alertcondition(into_sbear, "Force -> STRONG BEAR", "MSTR Force Field STRONG BEAR — 76% WR historically")
+alertcondition(zone_chg, "Force Zone Change", "MSTR Force Field zone changed")
