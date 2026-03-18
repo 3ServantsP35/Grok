@@ -14,6 +14,7 @@ Set DRY_RUN = True to print to stdout instead of posting to Discord.
 
 import sys
 import os
+import glob
 import traceback
 from datetime import datetime, timezone, timedelta
 from typing import Optional, Set
@@ -45,13 +46,14 @@ DRY_RUN = False  # Set True for local testing (suppresses Discord post)
 ENV_PATHS = ["/mnt/mstr-config/.env", "/Users/vera/mstr-engine/config/.env"]
 DATA_DIR   = "/mnt/mstr-data"
 SCRIPTS_DIR = "/mnt/mstr-scripts"
+LOCAL_REPO_DIR = "/Users/vera/.openclaw-mstr/workspace-mstr-cio/Grok"
 
-SUITE_CSVS = {
-    "MSTR_LT":   f"{DATA_DIR}/BATS_MSTR, 240_7b1cc.csv",
-    "STRC_LT":   f"{DATA_DIR}/BATS_STRC, 240_9969c.csv",
-    "STAB_DOM":  f"{DATA_DIR}/CRYPTOCAP_STABLE.C.D, 240_7a8a0.csv",
-    "STRF_LQD":  f"{DATA_DIR}/BATS_STRF_BATS_LQD, 240_40822.csv",
-    "MSTR_IBIT": f"{DATA_DIR}/BATS_MSTR_BATS_IBIT, 240_0ae35.csv",
+SUITE_PATTERNS = {
+    "MSTR_LT":   [f"{DATA_DIR}/BATS_MSTR, 240_*.csv", f"{LOCAL_REPO_DIR}/BATS_MSTR, 240_*.csv"],
+    "STRC_LT":   [f"{DATA_DIR}/BATS_STRC, 240_*.csv", f"{LOCAL_REPO_DIR}/BATS_STRC, 240_*.csv"],
+    "STAB_DOM":  [f"{DATA_DIR}/CRYPTOCAP_STABLE.C.D, 240_*.csv", f"{LOCAL_REPO_DIR}/CRYPTOCAP_STABLE.C.D, 240_*.csv"],
+    "STRF_LQD":  [f"{DATA_DIR}/BATS_STRF_BATS_LQD, 240_*.csv", f"{LOCAL_REPO_DIR}/BATS_STRF_BATS_LQD, 240_*.csv"],
+    "MSTR_IBIT": [f"{DATA_DIR}/BATS_MSTR_BATS_IBIT, 240_*.csv", f"{LOCAL_REPO_DIR}/BATS_MSTR_BATS_IBIT, 240_*.csv"],
 }
 
 MAX_DISCORD_LEN = 1900  # safe Discord message length
@@ -76,10 +78,24 @@ def load_env():
     return webhooks
 
 
+def resolve_csv_path(key: str):
+    """Resolve newest matching CSV from mounted data dir or local repo fallback."""
+    patterns = SUITE_PATTERNS[key]
+    matches = []
+    for pat in patterns:
+        matches.extend(glob.glob(pat))
+    if not matches:
+        return None
+    matches = sorted(matches, key=lambda x: os.path.getmtime(x), reverse=True)
+    return matches[0]
+
+
 def load_csv(key: str):
     """Load and clean a suite CSV. Returns None on failure."""
-    path = SUITE_CSVS[key]
+    path = resolve_csv_path(key)
     try:
+        if not path:
+            raise FileNotFoundError(f"no matches for {key}")
         df = pd.read_csv(path, low_memory=False)
         # Drop repeated header rows (TradingView exports sometimes embed headers)
         df = df[df["time"] != "time"].reset_index(drop=True)
