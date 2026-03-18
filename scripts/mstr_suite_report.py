@@ -857,132 +857,105 @@ def build_weekly_cost_section(week_data: dict, prev_week_data: dict) -> str:
     )
 
 
-def build_report(r1: dict, r2: dict, r3: dict, r4: dict, r5: dict, cost_section: str = "") -> str:
-    now    = et_now()
+def build_report(r1: dict, r2: dict, r3: dict, r4: dict, r5: dict,
+                 ff: dict, st_prog: dict, trend: dict,
+                 scenarios: list[dict], buckets: dict,
+                 cost_section: str = "") -> str:
+    now = et_now()
     date_s = now.strftime("%A, %B %-d, %Y")
 
-    # Composite score
-    score = r1["score"] + r2["score"] + r3["score"] + r4["score"] + r5["score"]
-    score_display = (
-        f"{r4.get('score_display', str(r4['score']))}"  # STRF/LQD shows ½
-    )
-    # Build readable score string
-    parts = [str(int(r1["score"])), str(int(r2["score"])), str(int(r3["score"])),
-             r4.get("score_display", str(r4["score"])), str(int(r5["score"]))]
-    score_str = f"{score:.1f}".rstrip("0").rstrip(".")
-    if score == int(score):
-        score_str = str(int(score))
-
-    outlook_label, outlook_note = get_outlook(score)
-    bar = fmt_score_bar(score)
-
-    # Safe-get helpers
     def sg(d, key, default=float("nan")):
         return d.get(key, default)
 
-    # ── Chart 1 block ──
-    if r1.get("error"):
-        ch1 = "① MSTR SRI LT  ⬜ DATA UNAVAILABLE"
-    else:
-        vlt_note = " *(VLT headwind)*" if sg(r1, "vlt_bias", 0) < 0 else ""
-        above_below = "above VLT Fast" if sg(r1, "price", 0) > sg(r1, "vlt_fast", 9e9) else "below VLT Fast"
-        ch1 = (
-            f"① MSTR SRI LT  {r1['status']}\n"
-            f"  Price: ${sg(r1,'price'):.2f} | LT Fast: ${sg(r1,'lt_fast'):.2f} | LT Slow: ${sg(r1,'lt_slow'):.2f}\n"
-            f"  VLT Fast: ${sg(r1,'vlt_fast'):.2f}{vlt_note} ({above_below})\n"
-            f"  LT Hist: {sg(r1,'lt_bias'):+.0f} | VLT Hist: {sg(r1,'vlt_bias'):+.0f} | LOI: {sg(r1,'loi'):+.1f}\n"
-            f"  → {r1['narrative']}"
-        )
+    # legacy corroboration score remains as a secondary metric only
+    corroboration = r1["score"] + r2["score"] + r3["score"] + r4["score"] + r5["score"]
+    bar = fmt_score_bar(corroboration)
 
-    # ── Chart 2 block ──
-    if r2.get("error"):
-        ch2 = "② STRC SRI LT  ⬜ DATA UNAVAILABLE"
-    else:
-        ch2 = (
-            f"② STRC SRI LT  {r2['status']}\n"
-            f"  Price: ${sg(r2,'strc_price'):.2f} | Fast TL: ${sg(r2,'fast_tl'):.2f} | Slow TL: ${sg(r2,'slow_tl'):.2f}\n"
-            f"  Gap: {sg(r2,'gap'):+.2f} | Hist: {sg(r2,'histogram'):+.0f} | Slope: {sg(r2,'fast_slope'):+.4f}/bar\n"
-            f"  → {r2['narrative']}"
-        )
-
-    # ── Chart 3 block ──
-    if r3.get("error"):
-        ch3 = "③ Stablecoin Dom SRI LT  ⬜ DATA UNAVAILABLE"
-    else:
-        ch3 = (
-            f"③ Stablecoin Dom SRI LT  {r3['status']}\n"
-            f"  Dom: {sg(r3,'stab_price'):.2f}% | LT Fast: {sg(r3,'lt_fast'):.2f}% | LT Slow: {sg(r3,'lt_slow'):.2f}%\n"
-            f"  LT Hist: {sg(r3,'lt_hist'):+.0f} (slope {sg(r3,'lt_hist_slope'):+.1f}/bar)\n"
-            f"  → {r3['narrative']}"
-        )
-
-    # ── Chart 4 block ──
-    if r4.get("error"):
-        ch4 = "④ STRF/LQD SRI LT  ⬜ DATA UNAVAILABLE"
-    else:
-        ch4 = (
-            f"④ STRF/LQD SRI LT  {r4['status']}\n"
-            f"  Ratio: {sg(r4,'ratio'):.4f} [{sg(r4,'above_below','—')}]\n"
-            f"  Fast TL: {sg(r4,'fast_tl'):.4f} | Slow TL: {sg(r4,'slow_tl'):.4f}\n"
-            f"  LOI: {sg(r4,'loi'):+.1f} | Fast slope: {sg(r4,'fast_slope'):+.5f}/bar\n"
-            f"  → {r4['narrative']}"
-        )
-
-    # ── Chart 5 block ──
-    if r5.get("error"):
-        ch5 = "⑤ MSTR/IBIT SRI LT  ⬜ DATA UNAVAILABLE"
-    else:
-        ch5 = (
-            f"⑤ MSTR/IBIT SRI LT  {r5['status']}\n"
-            f"  Ratio: {sg(r5,'ratio'):.4f} | TFs: {sg(r5,'tf_bar','—')}\n"
-            f"  LT Slow TL: {sg(r5,'lt_slow_tl'):.4f} | VLT Slow TL: {sg(r5,'vlt_slow_tl'):.4f}\n"
-            f"  → {r5['narrative']}"
-        )
-
-    # ── Key Levels ──
-    mstr_lt_fast = sg(r1, "lt_fast", 0)
-    mstr_lt_slow = sg(r1, "lt_slow", 0)
-    mstr_vlt_fast = sg(r1, "vlt_fast", 0)
-    strc_fast    = sg(r2, "fast_tl", 0)
-    stab_lt_fast = sg(r3, "lt_fast", 0)
-    stab_lt_slow = sg(r3, "lt_slow", 0)
-    ibit_lt_slow = sg(r5, "lt_slow_tl", 0)
-
-    key_levels = (
-        f"KEY LEVELS THIS WEEK\n"
-        f"  MSTR:      ${mstr_lt_fast:.2f} support | ${mstr_lt_slow:.2f} resistance | ${mstr_vlt_fast:.2f} VLT gate\n"
-        f"  STRC:      $97.00 stress level | ${strc_fast:.2f} Fast TL watch\n"
-        f"  Stab Dom:  {stab_lt_fast:.2f}% Fast TL | {stab_lt_slow:.2f}% Slow TL\n"
-        f"  STRF/LQD:  1.0000 regime threshold\n"
-        f"  MSTR/IBIT: {ibit_lt_slow:.4f} LT Slow TL"
+    structural_label = "🟢 structurally supportive" if corroboration >= 3.5 else (
+        "🟡 mixed / transitional" if corroboration >= 2.0 else "🔴 structurally weak"
     )
 
-    # ── Action Items ──
-    action_items = generate_action_items(r1, r2, r3, r4, r5)
+    ff_summary = (
+        f"**Force Field:** {ff.get('zone', 'UNKNOWN')} | {ff.get('state', 'n/a')} | "
+        f"F_net {ff.get('f_net', float('nan')):.3f} | ROC1 {ff.get('roc1', float('nan')):+.3f} | "
+        f"ROC3 {ff.get('roc3', float('nan')):+.3f} | ROC5 {ff.get('roc5', float('nan')):+.3f} | "
+        f"Accel {ff.get('accel', float('nan')):+.3f}"
+        if ff.get("error") is None else "**Force Field:** DATA UNAVAILABLE"
+    )
+    st_summary = (
+        f"**ST Progression:** {st_prog.get('state', 'n/a')} | {st_prog.get('cross_state', 'unknown')} | "
+        f"spread {st_prog.get('spread', float('nan')):+.3f} | "
+        f"ST slope {st_prog.get('st_slow_slope', float('nan')):+.3f} | LT slope {st_prog.get('lt_slow_slope', float('nan')):+.3f}"
+        if st_prog.get("error") is None else "**ST Progression:** DATA UNAVAILABLE"
+    )
+    trend_summary = (
+        f"**Trend Geometry:** local R {trend.get('local_resistance', float('nan')):.2f} ({trend.get('local_res_label','n/a')}) | "
+        f"global R {trend.get('global_resistance', float('nan')):.2f} ({trend.get('global_res_label','n/a')}) | "
+        f"local S {trend.get('local_support', float('nan')):.2f} ({trend.get('local_sup_label','n/a')}) | "
+        f"global S {trend.get('global_support', float('nan')):.2f} ({trend.get('global_sup_label','n/a')})"
+        if trend.get("error") is None else "**Trend Geometry:** DATA UNAVAILABLE"
+    )
 
+    scenario_lines = "\n".join(
+        f"  • {s['name']}: {s['probability']}%"
+        for s in scenarios
+    ) if scenarios else "  • unavailable"
+
+    bucket_lines = (
+        f"  • AB3: {buckets.get('AB3', 'n/a')}\n"
+        f"  • AB2: {buckets.get('AB2', 'n/a')}\n"
+        f"  • AB1: {buckets.get('AB1', 'n/a')}\n"
+        f"  • AB4: {buckets.get('AB4', 'n/a')}"
+    )
+
+    # structural chart summaries
+    ch1 = "① MSTR LT  ⬜ DATA UNAVAILABLE" if r1.get("error") else (
+        f"① MSTR LT  {r1['status']} | Price ${sg(r1,'price'):.2f} | LT Hist {sg(r1,'lt_bias'):+.0f} | "
+        f"VLT Hist {sg(r1,'vlt_bias'):+.0f} | LOI {sg(r1,'loi'):+.1f} | {r1['narrative']}"
+    )
+    ch2 = "② STRC LT  ⬜ DATA UNAVAILABLE" if r2.get("error") else (
+        f"② STRC LT  {r2['status']} | Price ${sg(r2,'strc_price'):.2f} | Gap {sg(r2,'gap'):+.2f} | {r2['narrative']}"
+    )
+    ch3 = "③ Stablecoin Dom LT  ⬜ DATA UNAVAILABLE" if r3.get("error") else (
+        f"③ Stablecoin Dom LT  {r3['status']} | Dom {sg(r3,'stab_price'):.2f}% | Hist {sg(r3,'lt_hist'):+.0f} | {r3['narrative']}"
+    )
+    ch4 = "④ STRF/LQD LT  ⬜ DATA UNAVAILABLE" if r4.get("error") else (
+        f"④ STRF/LQD LT  {r4['status']} | Ratio {sg(r4,'ratio'):.4f} | LOI {sg(r4,'loi'):+.1f} | {r4['narrative']}"
+    )
+    ch5 = "⑤ MSTR/IBIT LT  ⬜ DATA UNAVAILABLE" if r5.get("error") else (
+        f"⑤ MSTR/IBIT LT  {r5['status']} | Ratio {sg(r5,'ratio'):.4f} | TFs {sg(r5,'tf_bar','—')} | {r5['narrative']}"
+    )
+
+    top_scenario = scenarios[0]['name'] if scenarios else 'Unavailable'
+    top_prob = scenarios[0]['probability'] if scenarios else 0
     sep = "══════════════════════════════"
 
     report = (
-        f"📊 **MSTR CHART SUITE — Weekly Brief**\n"
+        f"📊 **MSTR CHART SUITE — Force-Aware Brief**\n"
         f"{date_s} | Market Close\n"
         f"\n{sep}\n"
-        f"**COMPOSITE: {score_str}/5 — {outlook_label}**\n"
-        f"{bar} {outlook_note}\n"
+        f"**PRIMARY PATH:** {top_scenario} ({top_prob}%)\n"
+        f"**STRUCTURAL CORROBORATION:** {corroboration:.1f}/5 — {structural_label}\n"
+        f"{bar}\n"
         f"{sep}\n\n"
-        f"{ch1}\n\n"
-        f"{ch2}\n\n"
-        f"{ch3}\n\n"
-        f"{ch4}\n\n"
-        f"{ch5}\n\n"
-        f"{sep}\n"
-        f"{key_levels}\n"
-        f"{sep}\n"
-        f"**WEEKEND ACTION ITEMS**\n"
-        f"{action_items}\n"
+        f"**1) Structural State**\n"
+        f"{ch1}\n{ch2}\n{ch3}\n{ch4}\n{ch5}\n\n"
+        f"**2) Force Diagnostics**\n"
+        f"{ff_summary}\n"
+        f"{st_summary}\n\n"
+        f"**3) Trend Geometry**\n"
+        f"{trend_summary}\n\n"
+        f"**4) Scenario Probabilities**\n"
+        f"{scenario_lines}\n\n"
+        f"**5) CIO Conclusion**\n"
+        f"  • Highest-probability path: {top_scenario}\n"
+        f"  • Tactical force read: {ff.get('tactical', 'n/a')}\n"
+        f"  • Structural progression read: {st_prog.get('state', 'n/a')}\n"
+        f"\n**6) Bucket Strategy Translation**\n"
+        f"{bucket_lines}\n"
         f"{sep}"
         + (f"\n\n{cost_section}" if cost_section else "")
     )
-
     return report
 
 
@@ -1061,6 +1034,11 @@ def generate_suite_report():
     r3 = safe_analyze(analyze_stab_dom,  dfs["STAB_DOM"])
     r4 = safe_analyze(analyze_strf_lqd,  dfs["STRF_LQD"])
     r5 = safe_analyze(analyze_mstr_ibit, dfs["MSTR_IBIT"])
+    ff = safe_analyze(analyze_force_state, dfs["MSTR_LT"])
+    st_prog = safe_analyze(analyze_st_progression, dfs["MSTR_LT"])
+    trend = safe_analyze(lambda df: analyze_trend_geometry(df, "MSTR"), dfs["MSTR_LT"])
+    scenarios = build_scenarios(r1, ff, st_prog, trend)
+    buckets = translate_to_buckets(scenarios, ff, st_prog)
 
     # Print status summary
     total = r1["score"] + r2["score"] + r3["score"] + r4["score"] + r5["score"]
@@ -1085,7 +1063,7 @@ def generate_suite_report():
         cost_section = f"💰 **Weekly API Cost:** Error computing — {e}"
 
     # Build report
-    report = build_report(r1, r2, r3, r4, r5, cost_section=cost_section)
+    report = build_report(r1, r2, r3, r4, r5, ff, st_prog, trend, scenarios, buckets, cost_section=cost_section)
 
     # Post — full report to Gavin/CIO, summary to Greg/Gary
     summary_keys = {"DISCORD_WEBHOOK_GREG", "DISCORD_WEBHOOK_GARY"}
