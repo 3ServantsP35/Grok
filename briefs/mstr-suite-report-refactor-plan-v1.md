@@ -181,10 +181,14 @@ Use `scripts/trend_line_engine.py`
 Minimum outputs:
 - `local_resistance`
 - `global_resistance`
+- `local_support`
+- `global_support`
 - `first_reset_support`
 - `deeper_reset_support`
 - `distance_to_local_resistance_pct`
 - `distance_to_global_resistance_pct`
+- `distance_to_local_support_pct`
+- `distance_to_global_support_pct`
 - projected values by date
 - confidence / fit quality if available
 
