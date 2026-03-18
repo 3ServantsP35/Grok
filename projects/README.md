@@ -35,7 +35,7 @@
 | P-PINE-V6 | Pine v6 Migration | ✅ All 12 scripts on v6 | CIO |
 | P-DOI | Distribution Signal Layer (Momentum assets) | 🔴 HIGH — Pine v1 live; CRS integration queued | CIO |
 | P-MR-ENTRY | Cross-Asset LEAP Opportunity Framework (all in-scope assets) | 🟡 MED — Phase 1 research complete; calibrations live | CIO |
-| P-MSTR-SUITE | MSTR Chart Suite — force-aware MSTR path dashboard | 🔴 HIGH — Re-scope active; live discretionary use | Gavin/CIO |
+| P-MSTR-SUITE | MSTR Chart Suite — force-aware MSTR path dashboard | 🔴 HIGH — Live validated prototype; calibration active | Gavin/CIO |
 | P-FF | Force Field / Force Field ROC | 🟡 FF live; FF ROC live; docs + CSV exports updated | CIO |
 
 ---
@@ -645,11 +645,11 @@ Trend line geometry (P10) is now an explicit dependency because the key practica
 |------|--------|
 | Phase 1: Original hypothesis doc | ✅ `briefs/mstr-chart-suite-hypothesis-v1.md` |
 | Phase 1b: Re-scoped spec | ✅ `briefs/mstr-chart-suite-spec-v2.md` |
-| Report script `mstr_suite_report.py` | 🔄 Existing script found; needs redesign around force + ROC + trend lines |
-| Force-aware report draft for discretionary use | ⬜ Next build target |
+| Report script `mstr_suite_report.py` | ✅ Running end-to-end on Mac mini; ongoing calibration around semantics/weighting |
+| Force-aware report draft for discretionary use | ✅ Live output running + posting to Discord |
 | Cron: Friday 3:30 PM ET reminder | ⬜ Pending crontab install |
 | Cron: Friday 4:30 PM ET report | ⬜ Pending crontab install |
-| Phase 2: Quant validation of FF + FF ROC contribution | ⬜ Pending |
+| Phase 2: Quant validation of FF + FF ROC contribution | 🔄 Next major phase |
 | Phase 3: Composite score / scenario validation | ⬜ After Phase 2 |
 | Optional: Add BTC SRI LT as Chart 6 | ⬜ Proposed after validation |
 
