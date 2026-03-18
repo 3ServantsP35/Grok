@@ -17,7 +17,7 @@
 | P8 | Pine Scripts — Mirror Layer | ✅ Pivoted & Stable | Gavin |
 | P9 | MSTR/IBIT Pair Trade | ⏸️ Deferred | Gavin |
 | P10 | Trend Line Engine | 🟡 Live prototype tested; resistance-line analysis now in active use | CIO |
-| P11 | STRC Spread Monitor | 🟡 Needs cron | Greg |
+| P11 | STRC Spread Monitor | ✅ Retired — scope absorbed into P-FF | CIO |
 | P12 | Python Decision Engine | ✅ Phase 1+2 Complete | CIO |
 | P13 | Trade Journal | 🟡 Schema defined — queued | CIO |
 | P14 | Bearish Bias Indicator Suite | ✅ Retired — scope superseded by P-DOI | Gavin |
@@ -348,6 +348,12 @@ Comprehensive tutorial for all 12 Pine Script indicators. Covers all four famili
 | SRIBI Oscillators | SRIBI_VST, SRIBI_ST, SRIBI_LT, SRIBI_VLT |
 | SRI Forecast | SRI_Forecast_AB1, SRI_Forecast_AB2, SRI_Forecast_AB3 |
 | Income Tools | AB2_CRS v2 |
+
+---
+
+### P11: STRC Spread Monitor
+**Status:** ✅ Retired — absorbed into P-FF
+**Rationale:** The useful STRC monitoring scope now lives inside the Force Field framework as the credit component (`f_credit`) and its ROC-based interpretation layer. No standalone P11 track is needed unless a future dedicated STRC-only analytics module is requested.
 
 ---
 
