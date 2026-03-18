@@ -36,6 +36,7 @@ The refactored script must align with:
 - ST SRI companion views alongside LT views
 - ST/LT slow-trackline progression / cross logic
 - trend line geometry integration
+- Fibonacci retracement confluence layer
 - scenario engine
 - bucket strategy translation
 - correct weighting hierarchy
@@ -202,6 +203,22 @@ The trend geometry layer must answer:
 
 ---
 
+## Phase C.75 — Add Fibonacci retracement layer
+
+### New required function
+`analyze_fibonacci_context(df, trend) -> dict`
+
+Minimum outputs:
+- dominant swing low
+- dominant swing high
+- 38.2% retracement zone
+- 50% retracement zone
+- 61.8% retracement zone
+- confluence notes vs trend lines / SRI supports
+
+### Best-practice rule
+Use Fibonacci retracement as a **confluence layer**, not a standalone trigger. It should help distinguish likely shallow reset zones from deeper 1B candidate zones.
+
 ## Phase C.5 — Add ST progression layer
 
 ### New required function
@@ -228,16 +245,18 @@ Use weighted narrative logic in this order:
 2. force quality
 3. ST/LT progression state
 4. trend line confrontation
-5. 5-chart corroboration
+5. Fibonacci confluence
+6. 5-chart corroboration
 
 ### Transitional scoring option
 If a numeric score is still desired, use category weights instead of equal chart-count weights.
 
 Suggested conceptual weighting:
-- Force regime: 25%
-- Force quality / ROC: 25%
+- Force regime: 22.5%
+- Force quality / ROC: 22.5%
 - ST/LT progression: 20%
-- Trend line geometry: 20%
+- Trend line geometry: 17.5%
+- Fibonacci confluence: 7.5%
 - 5-chart alignment corroboration: 10%
 
 This can remain qualitative at first; no need to overfit prematurely.

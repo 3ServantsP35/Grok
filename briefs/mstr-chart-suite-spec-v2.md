@@ -28,6 +28,7 @@ Its job is to estimate the **next 2–8 week path** for MSTR by combining:
 3. Force Field ROC / acceleration,
 4. trend line geometry,
 5. scenario probabilities.
+6. Fibonacci retracement confluence.
 
 ---
 
@@ -135,6 +136,28 @@ Use for:
 - first-reset vs deeper-reset path framing
 - scenario branching
 
+### 3.5 Fibonacci Retracement Confluence
+**Role:** Retracement-depth / confluence layer  
+**Question answered:** *If price resets instead of breaking out immediately, how deep is the most probable retracement zone?*
+
+Use for:
+- shallow retracement zone
+- medium reset zone
+- deep reset / 1B candidate zone
+- confluence with trend lines, SRI tracklines, and FF/FF ROC deterioration or stabilization
+
+**Best-practice stance:**
+- Draw the sequence from the **dominant swing low to the dominant swing high** in an uptrend
+- Treat Fibonacci as a **confluence tool**, not a standalone signal
+- Prioritize levels where fib zones align with:
+  - trend lines
+  - SRI support / slow-trackline structure
+  - Force Field ROC stabilization or deterioration
+- Use fibs mainly to improve distinction between:
+  - shallow reset
+  - deeper 1B reset
+  - structural failure
+
 **Current maturity assessment:**
 - Practical utility: HIGH
 - Engineering maturity: MEDIUM
@@ -202,8 +225,8 @@ Output labels:
 - bearish and worsening
 - exhausted / rebuilding
 
-### Section 3 — Trend Line Geometry
-Purpose: identify the structural lines price must break or hold.
+### Section 3 — Trend Line Geometry + Fibonacci Confluence
+Purpose: identify the structural lines price must break or hold and the most likely retracement depth if price resets.
 
 Include:
 - local resistance line
@@ -211,12 +234,14 @@ Include:
 - first reset support
 - deeper reset / 1B support
 - projected line values by date
+- key Fibonacci retracement zones
 - confidence / fit quality when available
 
 Output:
 - break candidate
 - likely test/reject level
 - reset destination map
+- fib confluence map for shallow vs deep retracement
 
 ### Section 4 — Scenario Probabilities
 Purpose: translate structure + force + geometry into paths.
