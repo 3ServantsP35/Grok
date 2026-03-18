@@ -658,6 +658,104 @@ def analyze_trend_geometry(df: pd.DataFrame, asset: str = "MSTR") -> dict:
         print(f"[ERROR] analyze_trend_geometry: {e}")
         return {"brief": "Trend geometry unavailable", "error": str(e)}
 
+
+
+def build_scenarios(r1: dict, ff: dict, st_prog: dict, trend: dict) -> list[dict]:
+    """Build high-level 2–8 week path scenarios from force + progression + geometry."""
+    scenarios = []
+
+    price = r1.get("price", float("nan"))
+    local_r = trend.get("local_resistance", float("nan"))
+    local_s = trend.get("local_support", float("nan"))
+    force_bull = ff.get("f_net", -999) > -0.60
+    roc3 = ff.get("roc3", 0.0)
+    accel = ff.get("accel", 0.0)
+    st_state = st_prog.get("state", "")
+
+    breakout_prob = 15
+    shallow_reset_prob = 35
+    deeper_reset_prob = 20
+    failure_prob = 10
+
+    # force state
+    if force_bull and roc3 > 0 and accel > 0:
+        breakout_prob += 15
+        shallow_reset_prob -= 5
+    elif force_bull and roc3 <= 0:
+        shallow_reset_prob += 15
+        deeper_reset_prob += 5
+    elif not force_bull and roc3 > 0:
+        deeper_reset_prob += 10
+    else:
+        failure_prob += 15
+        deeper_reset_prob += 10
+
+    # ST progression
+    if "progression confirmed" in st_state:
+        breakout_prob += 10
+    elif "early bullish progression" in st_state:
+        breakout_prob += 5
+        shallow_reset_prob += 5
+    elif "repair / bottoming" in st_state:
+        deeper_reset_prob += 10
+    elif "bearish progression" in st_state:
+        failure_prob += 10
+        deeper_reset_prob += 10
+
+    # geometry proximity
+    if price == price and local_r == local_r and price >= 0.97 * local_r:
+        shallow_reset_prob += 10
+        if roc3 > 0:
+            breakout_prob += 5
+        else:
+            breakout_prob -= 5
+    if price == price and local_s == local_s and price <= 1.03 * local_s and roc3 > 0:
+        breakout_prob += 5
+
+    probs = {
+        "Immediate breakout continuation": breakout_prob,
+        "Shallow reset then breakout": shallow_reset_prob,
+        "Deeper 1B reset": deeper_reset_prob,
+        "Bearish structure failure": failure_prob,
+    }
+    total = sum(max(v, 1) for v in probs.values())
+    for name, raw in probs.items():
+        prob = round(max(raw, 1) * 100 / total)
+        scenarios.append({"name": name, "probability": prob})
+
+    scenarios.sort(key=lambda x: x["probability"], reverse=True)
+    return scenarios
+
+
+def translate_to_buckets(scenarios: list[dict], ff: dict, st_prog: dict) -> dict:
+    """Translate scenarios into bucket-level strategic posture only."""
+    top = scenarios[0]["name"] if scenarios else "Unknown"
+    force_bull = ff.get("f_net", -999) > -0.60
+    roc3 = ff.get("roc3", 0.0)
+
+    if top == "Immediate breakout continuation":
+        ab3 = "Hold / selective add on confirmation"
+        ab2 = "Bullish directional edge"
+        ab1 = "Avoid capping upside too early"
+        ab4 = "Do not over-raise cash"
+    elif top == "Shallow reset then breakout":
+        ab3 = "Wait for better structural add zone"
+        ab2 = "Directional reversal setup likely after rejection confirms"
+        ab1 = "Theta window improving if upside becomes capped"
+        ab4 = "Preserve staging capital for reset"
+    elif top == "Deeper 1B reset":
+        ab3 = "Patience — wait for deeper accumulation zone"
+        ab2 = "Bearish directional edge on failed support"
+        ab1 = "Near-term call-selling more favorable than chasing longs"
+        ab4 = "Raise / preserve cash for redeploy"
+    else:
+        ab3 = "De-risk / avoid new deployment"
+        ab2 = "Bearish directional posture favored"
+        ab1 = "Only conservative theta if structure stabilizes"
+        ab4 = "Preserve cash defensively"
+
+    return {"AB3": ab3, "AB2": ab2, "AB1": ab1, "AB4": ab4}
+
 # ─────────────────────────────────────────────────────────────────────────────
 # ACTION ITEMS
 # ─────────────────────────────────────────────────────────────────────────────
