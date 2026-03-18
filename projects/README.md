@@ -377,10 +377,16 @@ Comprehensive tutorial for all 12 Pine Script indicators. Covers all four famili
 - FF ROC answers: **is that regime strengthening, weakening, accelerating, or exhausting?**
 - Operational hierarchy: read original FF first for structural zone, then FF ROC for timing/quality of force
 
+**Infrastructure note:**
+- CIO/Cyler is now running natively on the **Mac mini**, not the stale VPS sandbox
+- Direct local repo read/write plus GitHub commit/push capability has been restored and verified
+- Indicator edits should now be made **repo-first** in GitHub-tracked files to avoid copy/paste drift
+
 **Next step:**
 - Validate FF ROC versus live MSTR continuation/rejection behavior over the next 2–4 weeks
 - Decide later whether the legacy FF should remain fully parallel or be demoted to a background-only indicator
-**Lead:** CIO
+
+---
 
 All Pine scripts in the repo are now on `@version=6`. CRS was the only script created under v5; migrated in the same session it was built.
 
@@ -589,6 +595,8 @@ P-PINE-GUIDE ──→ Greg + Gary onboarding
 
 **Critical path to full live operation:** Greg installs crontab → all automation starts → post-launch build queue opens
 
+**Runtime / repo status (2026-03-18):** Native Mac mini runtime confirmed; local repo read/write and direct GitHub push capability restored.
+
 ---
 
 ## P-MSTR-SUITE — MSTR Chart Suite
@@ -631,5 +639,5 @@ P-PINE-GUIDE ──→ Greg + Gary onboarding
 
 ---
 
-*Last updated: 2026-03-05 by CIO. Gavin manages priorities and sequencing.*
+*Last updated: 2026-03-18 by CIO. Gavin manages priorities and sequencing.*
 *Privacy rule: This tracker contains no personal portfolio data. Personal trade history, P&L, and positions live exclusively in the private database.*
