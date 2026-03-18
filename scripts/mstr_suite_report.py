@@ -730,7 +730,54 @@ def analyze_trend_geometry(df: pd.DataFrame, asset: str = "MSTR") -> dict:
         return {"brief": "Trend geometry unavailable", "error": str(e)}
 
 
-def build_scenarios(r1: dict, ff: dict, st_prog: dict, trend: dict) -> list[dict]:
+def analyze_fibonacci_context(df: pd.DataFrame, trend: dict) -> dict:
+    """Fibonacci retracement confluence from dominant swing low/high."""
+    try:
+        price = last(df["close"])
+        # Use recent 120 bars (~20 trading days on 4H) to identify dominant swing range.
+        lookback = min(len(df), 120)
+        window = df.iloc[-lookback:]
+        swing_low = float(window["low"].min()) if "low" in window.columns else float(window["close"].min())
+        swing_high = float(window["high"].max()) if "high" in window.columns else float(window["close"].max())
+        rng = swing_high - swing_low
+        if rng <= 0:
+            raise ValueError("invalid swing range")
+
+        fib_382 = swing_high - 0.382 * rng
+        fib_500 = swing_high - 0.500 * rng
+        fib_618 = swing_high - 0.618 * rng
+
+        local_s = trend.get("local_support", float("nan"))
+        global_s = trend.get("global_support", float("nan"))
+
+        confluences = []
+        for name, lvl in [("38.2%", fib_382), ("50%", fib_500), ("61.8%", fib_618)]:
+            notes = []
+            if local_s == local_s and abs(lvl - local_s) / price < 0.03:
+                notes.append("local support confluence")
+            if global_s == global_s and abs(lvl - global_s) / price < 0.03:
+                notes.append("global support confluence")
+            confluences.append({"level": name, "price": lvl, "notes": notes})
+
+        # Pick likely shallow / medium / deep reset map
+        return {
+            "swing_low": swing_low,
+            "swing_high": swing_high,
+            "fib_382": fib_382,
+            "fib_500": fib_500,
+            "fib_618": fib_618,
+            "shallow_zone": fib_382,
+            "medium_zone": fib_500,
+            "deep_zone": fib_618,
+            "confluences": confluences,
+            "error": None,
+        }
+    except Exception as e:
+        print(f"[ERROR] analyze_fibonacci_context: {e}")
+        return {"error": str(e)}
+
+
+def build_scenarios(r1: dict, ff: dict, st_prog: dict, trend: dict, fib: dict) -> list[dict]:
     """Build high-level 2–8 week path scenarios from force + progression + geometry."""
     scenarios = []
 
@@ -753,6 +800,9 @@ def build_scenarios(r1: dict, ff: dict, st_prog: dict, trend: dict) -> list[dict
     near_local_s = price == price and local_s == local_s and local_s > 0 and abs(price - local_s) / price < 0.04
     far_from_r = price == price and local_r == local_r and local_r > 0 and abs(local_r - price) / price > 0.08
     weak_support_gap = price == price and local_s == local_s and local_s > 0 and abs(price - local_s) / price > 0.08
+    fib382 = fib.get("fib_382", float("nan"))
+    fib500 = fib.get("fib_500", float("nan"))
+    fib618 = fib.get("fib_618", float("nan"))
 
     # Force regime and quality
     if force_bull and roc3 > 0 and accel > 0:
@@ -813,6 +863,15 @@ def build_scenarios(r1: dict, ff: dict, st_prog: dict, trend: dict) -> list[dict
     if weak_support_gap and roc3 <= 0:
         deeper_reset_prob += 6
         failure_prob += 4
+
+    # Fibonacci retracement confluence
+    if fib382 == fib382 and local_s == local_s and abs(fib382 - local_s) / price < 0.03:
+        shallow_reset_prob += 6
+    if fib500 == fib500 and ((local_s == local_s and abs(fib500 - local_s) / price < 0.03) or (global_s == global_s and abs(fib500 - global_s) / price < 0.03)):
+        shallow_reset_prob += 4
+        deeper_reset_prob += 3
+    if fib618 == fib618 and global_s == global_s and abs(fib618 - global_s) / price < 0.04:
+        deeper_reset_prob += 8
 
     probs = {
         "Immediate breakout continuation": breakout_prob,
@@ -961,7 +1020,7 @@ def build_weekly_cost_section(week_data: dict, prev_week_data: dict) -> str:
 
 
 def build_report(r1: dict, r2: dict, r3: dict, r4: dict, r5: dict,
-                 ff: dict, st_prog: dict, trend: dict,
+                 ff: dict, st_prog: dict, trend: dict, fib: dict,
                  scenarios: list[dict], buckets: dict,
                  cost_section: str = "") -> str:
     now = et_now()
@@ -997,6 +1056,10 @@ def build_report(r1: dict, r2: dict, r3: dict, r4: dict, r5: dict,
         f"local S {trend.get('local_support', float('nan')):.2f} ({trend.get('local_sup_label','n/a')}) | "
         f"global S {trend.get('global_support', float('nan')):.2f} ({trend.get('global_sup_label','n/a')})"
         if trend.get("error") is None else "**Trend Geometry:** DATA UNAVAILABLE"
+    )
+    fib_summary = (
+        f"**Fibonacci:** 38.2% {fib.get('fib_382', float('nan')):.2f} | 50% {fib.get('fib_500', float('nan')):.2f} | 61.8% {fib.get('fib_618', float('nan')):.2f}"
+        if fib.get("error") is None else "**Fibonacci:** DATA UNAVAILABLE"
     )
 
     scenario_lines = "\n".join(
@@ -1047,7 +1110,8 @@ def build_report(r1: dict, r2: dict, r3: dict, r4: dict, r5: dict,
         f"{ff_summary}\n"
         f"{st_summary}\n\n"
         f"**3) Trend Geometry**\n"
-        f"{trend_summary}\n\n"
+        f"{trend_summary}\n"
+        f"{fib_summary}\n\n"
         f"**4) Scenario Probabilities**\n"
         f"{scenario_lines}\n\n"
         f"**5) CIO Conclusion**\n"
@@ -1166,7 +1230,7 @@ def generate_suite_report():
         cost_section = f"💰 **Weekly API Cost:** Error computing — {e}"
 
     # Build report
-    report = build_report(r1, r2, r3, r4, r5, ff, st_prog, trend, scenarios, buckets, cost_section=cost_section)
+    report = build_report(r1, r2, r3, r4, r5, ff, st_prog, trend, fib, scenarios, buckets, cost_section=cost_section)
 
     # Post — full report to Gavin/CIO, summary to Greg/Gary
     summary_keys = {"DISCORD_WEBHOOK_GREG", "DISCORD_WEBHOOK_GARY"}
