@@ -472,6 +472,84 @@ def analyze_mstr_ibit(df: pd.DataFrame) -> dict:
 
 
 
+def analyze_st_progression(df: pd.DataFrame) -> dict:
+    """ST companion view + ST/LT slow-trackline progression layer."""
+    try:
+        def get_optional(col, default=float("nan")):
+            return last(df[col], default) if col in df.columns else default
+
+        st_fast = get_optional("ST Fast Trackline")
+        st_slow = get_optional("ST Slow Trackline")
+        lt_fast = get_optional("LT Fast Trackline")
+        lt_slow = get_optional("LT Slow Trackline")
+        st_hist = get_optional("ST SRI Bias Histogram")
+        lt_hist = get_optional("LT SRI Bias Histogram")
+        vst_hist = get_optional("VST SRI Bias Histogram")
+        vlt_hist = get_optional("VLT SRI Bias Histogram")
+
+        st_slow_slope = slope5(df["ST Slow Trackline"]) if "ST Slow Trackline" in df.columns else 0.0
+        lt_slow_slope = slope5(df["LT Slow Trackline"]) if "LT Slow Trackline" in df.columns else 0.0
+
+        if pd.isna(st_slow) or pd.isna(lt_slow):
+            return {
+                "state": "⬜ DATA UNAVAILABLE",
+                "cross_state": "unknown",
+                "error": "missing ST/LT slow tracklines",
+            }
+
+        spread = st_slow - lt_slow
+        prev_st = last(df["ST Slow Trackline"].iloc[:-1]) if "ST Slow Trackline" in df.columns and len(df) >= 2 else st_slow
+        prev_lt = last(df["LT Slow Trackline"].iloc[:-1]) if "LT Slow Trackline" in df.columns and len(df) >= 2 else lt_slow
+        prev_spread = prev_st - prev_lt
+
+        if spread > 0 and prev_spread <= 0:
+            cross_state = "fresh bullish cross"
+        elif spread < 0 and prev_spread >= 0:
+            cross_state = "fresh bearish cross"
+        elif spread > 0:
+            cross_state = "ST above LT"
+        elif spread < 0:
+            cross_state = "ST below LT"
+        else:
+            cross_state = "at crossover"
+
+        if spread > 0 and st_slow_slope > 0 and lt_slow_slope > 0:
+            state = "🟢 progression confirmed"
+        elif spread > 0 and st_slow_slope > 0:
+            state = "🟡 early bullish progression"
+        elif spread < 0 and st_slow_slope < 0 and lt_slow_slope < 0:
+            state = "🔴 bearish progression"
+        elif spread < 0 and st_slow_slope > 0:
+            state = "🟡 repair / bottoming progression"
+        else:
+            state = "🟡 transitional"
+
+        narrative = (
+            f"{cross_state} | ST slow slope {st_slow_slope:+.3f}/bar | "
+            f"LT slow slope {lt_slow_slope:+.3f}/bar | "
+            f"ST hist {st_hist:+.0f} LT hist {lt_hist:+.0f}"
+        )
+
+        return {
+            "state": state,
+            "cross_state": cross_state,
+            "spread": spread,
+            "st_slow": st_slow,
+            "lt_slow": lt_slow,
+            "st_slow_slope": st_slow_slope,
+            "lt_slow_slope": lt_slow_slope,
+            "st_hist": st_hist,
+            "lt_hist": lt_hist,
+            "vst_hist": vst_hist,
+            "vlt_hist": vlt_hist,
+            "narrative": narrative,
+            "error": None,
+        }
+    except Exception as e:
+        print(f"[ERROR] analyze_st_progression: {e}")
+        return {"state": "⬜ DATA UNAVAILABLE", "cross_state": "unknown", "error": str(e)}
+
+
 def analyze_force_state(df: pd.DataFrame) -> dict:
     """Force Field + FF ROC layer from MSTR CSV exports."""
     try:
