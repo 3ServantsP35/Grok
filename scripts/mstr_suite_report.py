@@ -1005,7 +1005,7 @@ def generate_suite_report():
 
     # Load all CSVs
     dfs = {}
-    for key in SUITE_CSVS:
+    for key in SUITE_PATTERNS:
         dfs[key] = load_csv(key)
 
     # Check if all missing
