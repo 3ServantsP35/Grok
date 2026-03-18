@@ -35,7 +35,7 @@
 | P-PINE-V6 | Pine v6 Migration | ✅ All 12 scripts on v6 | CIO |
 | P-DOI | Distribution Signal Layer (Momentum assets) | 🔴 HIGH — Pine v1 live; CRS integration queued | CIO |
 | P-MR-ENTRY | Cross-Asset LEAP Opportunity Framework (all in-scope assets) | 🟡 MED — Phase 1 research complete; calibrations live | CIO |
-| P-MSTR-SUITE | MSTR Chart Suite — 5-chart weekly confirmation ladder | 🔴 HIGH — Active build + live discretionary use | Gavin/CIO |
+| P-MSTR-SUITE | MSTR Chart Suite — force-aware MSTR path dashboard | 🔴 HIGH — Re-scope active; live discretionary use | Gavin/CIO |
 | P-FF | Force Field / Force Field ROC | 🟡 FF live; FF ROC live; docs + CSV exports updated | CIO |
 
 ---
@@ -609,21 +609,54 @@ P-PINE-GUIDE ──→ Greg + Gary onboarding
 
 **Owner:** Gavin (methodology), CIO (build)  
 **Initiated:** 2026-03-05  
-**Priority:** HIGH — Weekend advisory tool for Greg, Gavin, Gary
+**Priority:** HIGH — medium-term MSTR forecasting tool for Greg, Gavin, Gary
 
-### Hypothesis
-5 SRI charts (MSTR LT, STRC LT, Stablecoin Dom LT, STRF/LQD LT, MSTR/IBIT LT) form a confirmation ladder that can assess MSTR's 30–60 day directional outlook with high confidence when 4+ signals align.
+### Updated Direction (2026-03-18)
+P-MSTR-SUITE is being re-scoped from a simple **5-chart weekly confirmation ladder** into a:
+
+**Force-aware MSTR path forecasting dashboard**
+
+The suite should now answer:
+1. What force regime is MSTR in?
+2. Is force strengthening or weakening?
+3. What structural trend lines matter most right now?
+4. Does current force have enough energy to break resistance, or is a reset more likely first?
+5. What is the highest-probability 2–8 week path?
+
+**Reason for re-scope:** recent Force Field + Force Field ROC work showed that static chart alignment is not enough. The highest-value distinction is often:
+- aligned and accelerating
+vs
+- aligned but fading
+
+Trend line geometry (P10) is now an explicit dependency because the key practical question is whether MSTR has enough force to break the relevant resistance/support structure.
+
+### Core Dependencies
+| Dependency | Role |
+|---|---|
+| Original Force Field | Base regime/state indicator |
+| Force Field ROC | Tactical change-of-state / momentum-quality layer |
+| Trend Line Engine (P10) | Structural geometry: local/global resistance, support, reset paths |
+| 5-chart suite inputs | Structural corroboration layer |
 
 ### Deliverables
 | Item | Status |
 |------|--------|
-| Phase 1: Hypothesis document | ✅ `briefs/mstr-chart-suite-hypothesis-v1.md` |
-| Report script `mstr_suite_report.py` | 🔄 Building |
+| Phase 1: Original hypothesis doc | ✅ `briefs/mstr-chart-suite-hypothesis-v1.md` |
+| Phase 1b: Re-scoped spec | ✅ `briefs/mstr-chart-suite-spec-v2.md` |
+| Report script `mstr_suite_report.py` | 🔄 Existing script found; needs redesign around force + ROC + trend lines |
+| Force-aware report draft for discretionary use | ⬜ Next build target |
 | Cron: Friday 3:30 PM ET reminder | ⬜ Pending crontab install |
 | Cron: Friday 4:30 PM ET report | ⬜ Pending crontab install |
-| Phase 2: Quantitative backtest | ⬜ After Phase 1 validated |
-| Phase 3: Composite score validation | ⬜ After Phase 2 |
-| Optional: Add BTC SRI LT as Chart 6 | ⬜ Proposed for Phase 2 |
+| Phase 2: Quant validation of FF + FF ROC contribution | ⬜ Pending |
+| Phase 3: Composite score / scenario validation | ⬜ After Phase 2 |
+| Optional: Add BTC SRI LT as Chart 6 | ⬜ Proposed after validation |
+
+### Required Report Sections
+1. Structural state
+2. Force diagnostics (FF + FF ROC)
+3. Trend line geometry
+4. Scenario probabilities
+5. CIO conclusion / invalidation map
 
 ### CSV Mapping (Friday push required)
 | Chart | CSV Pattern |
