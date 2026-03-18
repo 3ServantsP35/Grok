@@ -470,6 +470,78 @@ def analyze_mstr_ibit(df: pd.DataFrame) -> dict:
         return {"status": "⬜ DATA UNAVAILABLE", "score": 0, "error": str(e)}
 
 
+
+
+def analyze_force_state(df: pd.DataFrame) -> dict:
+    """Force Field + FF ROC layer from MSTR CSV exports."""
+    try:
+        f_net = last(df["F_net"])
+
+        def get_optional(col, default=float("nan")):
+            return last(df[col], default) if col in df.columns else default
+
+        roc1 = get_optional("F_net ROC 1")
+        roc3 = get_optional("F_net ROC 3")
+        roc5 = get_optional("F_net ROC 5")
+        accel = get_optional("F_net Acceleration")
+
+        # Fallbacks for older CSV schemas
+        if pd.isna(roc1):
+            roc1 = f_net - last(df["F_net"].iloc[:-1]) if len(df) >= 2 else 0.0
+        if pd.isna(roc3):
+            roc3 = f_net - last(df["F_net"].iloc[:-3]) if len(df) >= 4 else roc1
+        if pd.isna(roc5):
+            roc5 = f_net - last(df["F_net"].iloc[:-5]) if len(df) >= 6 else roc3
+        if pd.isna(accel):
+            prev_roc1 = last(df["F_net ROC 1"].iloc[:-1]) if "F_net ROC 1" in df.columns and len(df) >= 2 else 0.0
+            accel = roc1 - prev_roc1
+
+        if f_net > -0.19:
+            zone = "STRONG BULL"
+        elif f_net > -0.60:
+            zone = "MOD BULL"
+        elif f_net > -1.15:
+            zone = "NEUTRAL"
+        elif f_net > -1.66:
+            zone = "MOD BEAR"
+        else:
+            zone = "STRONG BEAR"
+
+        if f_net > -0.60 and roc3 > 0 and accel > 0:
+            state = "🟢 bullish and strengthening"
+        elif f_net > -0.60 and roc3 <= 0:
+            state = "🟡 bullish but decelerating"
+        elif f_net <= -0.60 and roc3 > 0:
+            state = "🟡 bearish but repairing"
+        elif f_net <= -0.60 and roc3 <= 0:
+            state = "🔴 bearish and worsening"
+        else:
+            state = "🟡 exhausted / rebuilding"
+
+        if f_net > -0.60 and roc3 > 0:
+            tactical = "Force supports continuation / breakout attempts"
+        elif f_net > -0.60 and roc3 <= 0:
+            tactical = "Force still positive, but reset / consolidation risk elevated"
+        elif f_net <= -0.60 and roc3 > 0:
+            tactical = "Repairing force — watch for stabilization before directional confidence improves"
+        else:
+            tactical = "Force deterioration active — defensive posture favored"
+
+        return {
+            "zone": zone,
+            "state": state,
+            "f_net": f_net,
+            "roc1": roc1,
+            "roc3": roc3,
+            "roc5": roc5,
+            "accel": accel,
+            "tactical": tactical,
+            "error": None,
+        }
+    except Exception as e:
+        print(f"[ERROR] analyze_force_state: {e}")
+        return {"zone": "UNKNOWN", "state": "⬜ DATA UNAVAILABLE", "error": str(e)}
+
 # ─────────────────────────────────────────────────────────────────────────────
 # ACTION ITEMS
 # ─────────────────────────────────────────────────────────────────────────────
