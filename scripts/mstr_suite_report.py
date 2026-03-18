@@ -19,6 +19,7 @@ from datetime import datetime, timezone, timedelta
 
 import pandas as pd
 import requests
+from trend_line_engine import TrendLineEngine
 try:
     from dotenv import load_dotenv
 except ImportError:
@@ -619,6 +620,43 @@ def analyze_force_state(df: pd.DataFrame) -> dict:
     except Exception as e:
         print(f"[ERROR] analyze_force_state: {e}")
         return {"zone": "UNKNOWN", "state": "⬜ DATA UNAVAILABLE", "error": str(e)}
+
+
+
+def analyze_trend_geometry(df: pd.DataFrame, asset: str = "MSTR") -> dict:
+    """Trend-line geometry layer via P10 Trend Line Engine."""
+    try:
+        eng = TrendLineEngine()
+        result = eng.analyze(df.copy(), asset)
+
+        def pick_first(lines):
+            return lines[0] if lines else None
+
+        local_res = pick_first(result.near_resistance)
+        global_res = result.near_resistance[1] if len(result.near_resistance) > 1 else None
+        local_sup = pick_first(result.near_support)
+        global_sup = result.near_support[1] if len(result.near_support) > 1 else None
+
+        return {
+            "current_price": result.current_price,
+            "local_resistance": local_res.proj_now if local_res else float("nan"),
+            "global_resistance": global_res.proj_now if global_res else float("nan"),
+            "local_support": local_sup.proj_now if local_sup else float("nan"),
+            "global_support": global_sup.proj_now if global_sup else float("nan"),
+            "distance_to_local_resistance_pct": abs(local_res.distance_pct) if local_res else float("nan"),
+            "distance_to_global_resistance_pct": abs(global_res.distance_pct) if global_res else float("nan"),
+            "distance_to_local_support_pct": abs(local_sup.distance_pct) if local_sup else float("nan"),
+            "distance_to_global_support_pct": abs(global_sup.distance_pct) if global_sup else float("nan"),
+            "local_res_label": local_res.label if local_res else "n/a",
+            "global_res_label": global_res.label if global_res else "n/a",
+            "local_sup_label": local_sup.label if local_sup else "n/a",
+            "global_sup_label": global_sup.label if global_sup else "n/a",
+            "brief": result.to_brief_str(max_resistance=4, max_support=4),
+            "error": None,
+        }
+    except Exception as e:
+        print(f"[ERROR] analyze_trend_geometry: {e}")
+        return {"brief": "Trend geometry unavailable", "error": str(e)}
 
 # ─────────────────────────────────────────────────────────────────────────────
 # ACTION ITEMS
