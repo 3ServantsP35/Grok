@@ -209,7 +209,7 @@ def analyze_mstr_lt(df: pd.DataFrame) -> dict:
         lt_bias    = last(df["LT SRI Bias Histogram"])
         vlt_bias   = last(df["VLT SRI Bias Histogram"])
         st_bias    = last(df["ST SRI Bias Histogram"])
-        vst_bias   = last(df["VST SRI Bias Histogram"])
+        vst_bias   = last(df["VST SRI Bias Histogram"]) if "VST SRI Bias Histogram" in df.columns else last(df["ST SRI Bias Histogram"])
         loi        = last(df["LOI"])
         lt_fast_slope = slope5(df["LT Fast Trackline"])
 
@@ -259,11 +259,11 @@ def analyze_strc_lt(df: pd.DataFrame) -> dict:
     """Chart 2 — STRC SRI LT"""
     try:
         strc_price = last(df["close"])
-        fast_tl    = last(df["Fast Trackline"])
-        slow_tl    = last(df["Slow Trackline"])
-        histogram  = last(df["SRI Bias Histogram"])
+        fast_tl    = last(df["ST Fast Trackline"]) if "ST Fast Trackline" in df.columns else last(df["Fast Trackline"])
+        slow_tl    = last(df["ST Slow Trackline"]) if "ST Slow Trackline" in df.columns else last(df["Slow Trackline"])
+        histogram  = last(df["ST SRI Bias Histogram"]) if "ST SRI Bias Histogram" in df.columns else last(df["SRI Bias Histogram"])
         gap        = fast_tl - slow_tl
-        fast_slope = slope5(df["Fast Trackline"])
+        fast_slope = slope5(df["ST Fast Trackline"]) if "ST Fast Trackline" in df.columns else slope5(df["Fast Trackline"])
 
         # Stress classification
         if strc_price < 97 and fast_tl < slow_tl:
@@ -416,7 +416,7 @@ def analyze_mstr_ibit(df: pd.DataFrame) -> dict:
         vlt_hist = last(df["VLT SRI Bias Histogram"])
         lt_hist  = last(df["LT SRI Bias Histogram"])
         st_hist  = last(df["ST SRI Bias Histogram"])
-        vst_hist = last(df["VST SRI Bias Histogram"])
+        vst_hist = last(df["VST SRI Bias Histogram"]) if "VST SRI Bias Histogram" in df.columns else last(df["ST SRI Bias Histogram"])
 
         lt_slow_tl  = last(df["LT Slow Trackline"])
         vlt_slow_tl = last(df["VLT Slow Trackline"])
