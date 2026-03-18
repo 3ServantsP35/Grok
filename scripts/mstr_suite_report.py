@@ -42,7 +42,7 @@ except ImportError:
 
 DRY_RUN = False  # Set True for local testing (suppresses Discord post)
 
-ENV_PATH   = "/mnt/mstr-config/.env"
+ENV_PATHS = ["/mnt/mstr-config/.env", "/Users/vera/mstr-engine/config/.env"]
 DATA_DIR   = "/mnt/mstr-data"
 SCRIPTS_DIR = "/mnt/mstr-scripts"
 
@@ -63,7 +63,10 @@ MAX_DISCORD_LEN = 1900  # safe Discord message length
 
 def load_env():
     """Load .env and return dict of DISCORD webhook URLs."""
-    load_dotenv(ENV_PATH)
+    for env_path in ENV_PATHS:
+        if os.path.exists(env_path):
+            load_dotenv(env_path)
+            break
     webhooks = {}
     for key in ("DISCORD_WEBHOOK_GAVIN", "DISCORD_WEBHOOK_GREG",
                 "DISCORD_WEBHOOK_GARY", "DISCORD_WEBHOOK_CIO"):
