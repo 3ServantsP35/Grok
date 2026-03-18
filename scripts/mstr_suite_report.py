@@ -684,6 +684,22 @@ def analyze_trend_geometry(df: pd.DataFrame, asset: str = "MSTR") -> dict:
                 return None
             return sorted(filtered, key=lambda l: (abs(l.proj_now - px), -l.quality))[0]
 
+        def clean_label(line, role):
+            if line is None:
+                return 'n/a'
+            label = line.label
+            if line.source == 'SRI':
+                return label
+            if 'Inter Res' in label:
+                return 'Intermediate swing resistance'
+            if 'Inter Sup' in label:
+                return 'Intermediate swing support'
+            if 'Major Res' in label:
+                return 'Major swing resistance'
+            if 'Major Sup' in label:
+                return 'Major swing support'
+            return f"{role} ({label})"
+
         all_res = result.near_resistance + result.far_resistance + result.former_sup_now_resistance
         all_sup = result.near_support + result.far_support + result.former_res_now_support
 
@@ -702,10 +718,10 @@ def analyze_trend_geometry(df: pd.DataFrame, asset: str = "MSTR") -> dict:
             "distance_to_global_resistance_pct": abs((global_res.proj_now - px) / px * 100) if global_res else float("nan"),
             "distance_to_local_support_pct": abs((px - local_sup.proj_now) / px * 100) if local_sup else float("nan"),
             "distance_to_global_support_pct": abs((px - global_sup.proj_now) / px * 100) if global_sup else float("nan"),
-            "local_res_label": local_res.label if local_res else "n/a",
-            "global_res_label": global_res.label if global_res else "n/a",
-            "local_sup_label": local_sup.label if local_sup else "n/a",
-            "global_sup_label": global_sup.label if global_sup else "n/a",
+            "local_res_label": clean_label(local_res, 'Local resistance'),
+            "global_res_label": clean_label(global_res, 'Global resistance'),
+            "local_sup_label": clean_label(local_sup, 'Local support'),
+            "global_sup_label": clean_label(global_sup, 'Global support'),
             "brief": result.to_brief_str(max_resistance=4, max_support=4),
             "error": None,
         }
