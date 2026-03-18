@@ -71,6 +71,36 @@ Produce a weekly and on-demand report that answers:
 5. **What would confirm or invalidate that path?**
 
 ---
+## Portfolio Role Boundary
+
+P-MSTR-SUITE is a **CIO-level strategy and bucket-allocation project**, not a trade-ticket engine.
+
+It should answer:
+- which bucket currently has the best strategic opportunity (AB3 / AB2 / AB1 / AB4)
+- whether the environment favors deployment, patience, reset, or defense
+- whether the highest-probability opportunity is structural (AB3), directional (AB2), or theta/income (AB1)
+
+It should **not** decide:
+- exact strikes
+- exact expiries
+- exact position sizing for an individual account
+- exact trade structure for Greg, Gavin, or Gary
+
+Those execution decisions belong in:
+- **PPR workflows**
+- channel-specific portfolio dialogue
+- user-specific trade recommendation threads
+
+### Required output boundary
+Each suite report should end with a **Bucket Strategy Translation** section:
+- **AB3:** add / hold / wait / de-risk
+- **AB2:** bullish directional / bearish directional / no AB2 edge
+- **AB1:** favorable theta window / avoid theta / neutral
+- **AB4:** deploy / preserve / raise cash staging
+
+But the suite should stop at the strategic level. Specific trade construction belongs downstream in PPR.
+
+---
 
 ## Core Dependencies
 
@@ -195,6 +225,21 @@ Must answer:
 - what matters next
 - what confirms the thesis
 - what would break the thesis
+
+### Section 6 — Bucket Strategy Translation
+Purpose: translate path forecasts into high-level bucket posture only.
+
+Must output:
+- **AB3:** structural deployment posture
+- **AB2:** directional-opportunity posture
+- **AB1:** theta/income posture
+- **AB4:** cash/reserve posture
+
+Constraint:
+- No exact trade structures here
+- No strike/expiry selection here
+- No account-specific execution here
+- Those move into PPR and portfolio-channel discussions
 
 ---
 

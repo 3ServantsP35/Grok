@@ -46,6 +46,7 @@
 
 ### P5: Alerts & Automation *(merged with P-UAA)*
 **Status:** 🔴 Blocked — crontab (Greg) + alert event vocabulary (Gavin)
+**Alignment note (2026-03-18):** P-MSTR-SUITE should feed **high-level bucket-state alerts** (AB3/AB2/AB1/AB4 opportunity posture), not specific trade tickets. Execution details remain downstream in PPR / channel-specific dialogue.
 **Lead:** CIO | **Approver:** Greg + Gavin
 
 Two distinct blockers. The automation plumbing is fully built and tested. Nothing fires until Greg installs crontab. In parallel, the alert event vocabulary must be redesigned around the Stage State taxonomy — that design work (owned by Gavin) can proceed independently of the cron install.
@@ -174,6 +175,7 @@ Standardized weekly report for every tracked asset. Declares Stage State (10-sta
 
 ### P-PPR: Personalized Portfolio Report
 **Status:** ✅ Workflow validated by Gavin 2026-03-03
+**Alignment note (2026-03-18):** PPR is the execution layer for P-MSTR-SUITE outputs. The suite should identify which bucket is favored; PPR converts that into user-specific trade structures, strikes, expiries, and sizing.
 **Lead:** CIO | **Approver:** Gavin
 
 Per-user report generated on-demand in each user's dedicated channel only. Translates the shared MSR into a personalized recommendation applying the user's income profile, LEAP coverage, Platform Value modifier, and personal deploy gate.
