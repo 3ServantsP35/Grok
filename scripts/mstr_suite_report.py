@@ -16,6 +16,7 @@ import sys
 import os
 import traceback
 from datetime import datetime, timezone, timedelta
+from typing import Optional, Set
 
 import pandas as pd
 import requests
@@ -114,7 +115,7 @@ def fmt_score_bar(score: float, max_score: float = 5.0) -> str:
 
 
 def send_discord(webhooks: dict, message: str,
-                 summary_only_keys: set | None = None):
+                 summary_only_keys: Optional[Set[str]] = None):
     """
     Post message to all webhooks.
     summary_only_keys: if set, those webhooks get only the first line (summary).
