@@ -274,7 +274,7 @@ def analyze_mstr_lt(df: pd.DataFrame) -> dict:
             "error": None,
         }
     except Exception as e:
-        print(f"[ERROR] analyze_mstr_lt: {e}")
+        print(f"[ERROR] analyze_mstr_lt: {e} | available cols: {list(df.columns)[:12]}...")
         return {"status": "⬜ DATA UNAVAILABLE", "score": 0, "error": str(e)}
 
 
@@ -321,7 +321,7 @@ def analyze_strc_lt(df: pd.DataFrame) -> dict:
             "error": None,
         }
     except Exception as e:
-        print(f"[ERROR] analyze_strc_lt: {e}")
+        print(f"[ERROR] analyze_strc_lt: {e} | available cols: {list(df.columns)[:12]}...")
         return {"status": "⬜ DATA UNAVAILABLE", "score": 0, "error": str(e)}
 
 
@@ -494,7 +494,7 @@ def analyze_mstr_ibit(df: pd.DataFrame) -> dict:
             "error": None,
         }
     except Exception as e:
-        print(f"[ERROR] analyze_mstr_ibit: {e}")
+        print(f"[ERROR] analyze_mstr_ibit: {e} | available cols: {list(df.columns)[:12]}...")
         return {"status": "⬜ DATA UNAVAILABLE", "score": 0, "error": str(e)}
 
 
@@ -543,12 +543,14 @@ def analyze_st_progression(df: pd.DataFrame) -> dict:
 
         if spread > 0 and st_slow_slope > 0 and lt_slow_slope > 0:
             state = "🟢 progression confirmed"
-        elif spread > 0 and st_slow_slope > 0:
+        elif spread > 0 and st_slow_slope > 0 and lt_slow_slope <= 0:
             state = "🟡 early bullish progression"
-        elif spread < 0 and st_slow_slope < 0 and lt_slow_slope < 0:
-            state = "🔴 bearish progression"
+        elif spread < 0 and st_slow_slope > 0 and lt_slow_slope >= 0:
+            state = "🟡 bullish repair under resistance"
         elif spread < 0 and st_slow_slope > 0:
             state = "🟡 repair / bottoming progression"
+        elif spread < 0 and st_slow_slope < 0 and lt_slow_slope < 0:
+            state = "🔴 bearish progression"
         else:
             state = "🟡 transitional"
 
@@ -693,11 +695,13 @@ def analyze_trend_geometry(df: pd.DataFrame, asset: str = "MSTR") -> dict:
             if 'Inter Res' in label:
                 return 'Intermediate swing resistance'
             if 'Inter Sup' in label:
-                return 'Intermediate swing support'
+                return 'Former intermediate support → active resistance' if 'resistance' in role.lower() else 'Intermediate swing support'
             if 'Major Res' in label:
                 return 'Major swing resistance'
             if 'Major Sup' in label:
-                return 'Major swing support'
+                return 'Former major support → active resistance' if 'resistance' in role.lower() else 'Major swing support'
+            if 'former' in role.lower():
+                return f"{role}: {label}"
             return f"{role} ({label})"
 
         all_res = result.near_resistance + result.far_resistance + result.former_sup_now_resistance
@@ -837,6 +841,9 @@ def build_scenarios(r1: dict, ff: dict, st_prog: dict, trend: dict, fib: dict) -
         failure_prob += 12
         deeper_reset_prob += 8
         breakout_prob -= 8
+    elif "bullish repair under resistance" in st_state:
+        shallow_reset_prob += 12
+        breakout_prob += 2
     elif "transitional" in st_state:
         shallow_reset_prob += 8
 
@@ -867,6 +874,9 @@ def build_scenarios(r1: dict, ff: dict, st_prog: dict, trend: dict, fib: dict) -
     # Fibonacci retracement confluence
     if fib382 == fib382 and local_s == local_s and abs(fib382 - local_s) / price < 0.03:
         shallow_reset_prob += 6
+    if fib618 == fib618 and abs(fib618 - price) / price < 0.02:
+        shallow_reset_prob += 3
+        deeper_reset_prob += 2
     if fib500 == fib500 and ((local_s == local_s and abs(fib500 - local_s) / price < 0.03) or (global_s == global_s and abs(fib500 - global_s) / price < 0.03)):
         shallow_reset_prob += 4
         deeper_reset_prob += 3
@@ -1057,10 +1067,20 @@ def build_report(r1: dict, r2: dict, r3: dict, r4: dict, r5: dict,
         f"global S {trend.get('global_support', float('nan')):.2f} ({trend.get('global_sup_label','n/a')})"
         if trend.get("error") is None else "**Trend Geometry:** DATA UNAVAILABLE"
     )
-    fib_summary = (
-        f"**Fibonacci:** 38.2% {fib.get('fib_382', float('nan')):.2f} | 50% {fib.get('fib_500', float('nan')):.2f} | 61.8% {fib.get('fib_618', float('nan')):.2f}"
-        if fib.get("error") is None else "**Fibonacci:** DATA UNAVAILABLE"
-    )
+    if fib.get("error") is None:
+        fib_notes = []
+        for item in fib.get("confluences", []):
+            if item.get("notes"):
+                fib_notes.append(f"{item['level']}→{', '.join(item['notes'])}")
+        fib_note_str = " | ".join(fib_notes) if fib_notes else "no strong confluence yet"
+        fib_summary = (
+            f"**Fibonacci:** 38.2% {fib.get('fib_382', float('nan')):.2f} (shallow) | "
+            f"50% {fib.get('fib_500', float('nan')):.2f} (medium) | "
+            f"61.8% {fib.get('fib_618', float('nan')):.2f} (deep/1B) | "
+            f"Confluence: {fib_note_str}"
+        )
+    else:
+        fib_summary = "**Fibonacci:** DATA UNAVAILABLE"
 
     scenario_lines = "\n".join(
         f"  • {s['name']}: {s['probability']}%"
