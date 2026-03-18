@@ -1204,7 +1204,7 @@ def generate_suite_report():
     ff = safe_analyze(analyze_force_state, dfs["MSTR_LT"])
     st_prog = safe_analyze(analyze_st_progression, dfs["MSTR_LT"])
     trend = safe_analyze(lambda df: analyze_trend_geometry(df, "MSTR"), dfs["MSTR_LT"])
-    scenarios = build_scenarios(r1, ff, st_prog, trend)
+    scenarios = build_scenarios(r1, ff, st_prog, trend, fib)
     buckets = translate_to_buckets(scenarios, ff, st_prog)
 
     # Print status summary
