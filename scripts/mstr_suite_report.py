@@ -429,7 +429,7 @@ def analyze_mstr_ibit(df: pd.DataFrame) -> dict:
             last(df["VLT SRI Bias Histogram"].iloc[:-5]) if len(df) >= 6 else vlt_hist,
             last(df["LT SRI Bias Histogram"].iloc[:-5])  if len(df) >= 6 else lt_hist,
             last(df["ST SRI Bias Histogram"].iloc[:-5])  if len(df) >= 6 else st_hist,
-            last(df["VST SRI Bias Histogram"].iloc[:-5]) if len(df) >= 6 else vst_hist,
+            (last(df["VST SRI Bias Histogram"].iloc[:-5]) if "VST SRI Bias Histogram" in df.columns else last(df["ST SRI Bias Histogram"].iloc[:-5])) if len(df) >= 6 else vst_hist,
         ]
         all_rising = all(h > h5 for h, h5 in zip(hists, hists_5ago))
         trending_up = lt_hist > hists_5ago[1] and st_hist > hists_5ago[2]
