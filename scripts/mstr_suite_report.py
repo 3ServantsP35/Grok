@@ -199,54 +199,77 @@ def et_now() -> datetime:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def analyze_mstr_lt(df: pd.DataFrame) -> dict:
-    """Chart 1 — MSTR SRI LT"""
+    """Chart 1 — MSTR SRI LT with better structural classification."""
     try:
-        price      = last(df["close"])
-        lt_fast    = last(df["LT Fast Trackline"])
-        lt_slow    = last(df["LT Slow Trackline"])
-        vlt_fast   = last(df["VLT Fast Trackline"])
-        vlt_slow   = last(df["VLT Slow Trackline"])
-        lt_bias    = last(df["LT SRI Bias Histogram"])
-        vlt_bias   = last(df["VLT SRI Bias Histogram"])
-        st_bias    = last(df["ST SRI Bias Histogram"])
-        vst_bias   = last(df["VST SRI Bias Histogram"]) if "VST SRI Bias Histogram" in df.columns else last(df["ST SRI Bias Histogram"])
-        loi        = last(df["LOI"])
+        price     = last(df["close"])
+        lt_fast   = last(df["LT Fast Trackline"])
+        lt_slow   = last(df["LT Slow Trackline"])
+        vlt_fast  = last(df["VLT Fast Trackline"])
+        vlt_slow  = last(df["VLT Slow Trackline"])
+        lt_bias   = last(df["LT SRI Bias Histogram"])
+        vlt_bias  = last(df["VLT SRI Bias Histogram"])
+        st_bias   = last(df["ST SRI Bias Histogram"]) if "ST SRI Bias Histogram" in df.columns else float("nan")
+        loi       = last(df["LOI"])
+
         lt_fast_slope = slope5(df["LT Fast Trackline"])
+        lt_slow_slope = slope5(df["LT Slow Trackline"])
+        vlt_fast_slope = slope5(df["VLT Fast Trackline"])
 
-        price_vs_lt_fast = price > lt_fast
-        price_vs_lt_slow = price > lt_slow
-        price_vs_vlt_fast = price > vlt_fast
+        above_lt_fast = price > lt_fast
+        above_lt_slow = price > lt_slow
+        above_vlt_fast = price > vlt_fast
 
-        # Signal status
-        if price_vs_lt_fast and lt_bias > 0:
+        # Structural classification hierarchy
+        if lt_bias > 0 and vlt_bias > 0 and above_vlt_fast and lt_fast_slope >= 0:
             status = "🟢 BULLISH"
-            score  = 1
-        elif price_vs_lt_fast:
+            score = 1
+        elif lt_bias > 0 and above_vlt_fast:
             status = "🟡 RECOVERING"
-            score  = 0
-        else:
+            score = 0.5
+        elif lt_bias > 0 and vlt_bias <= 0:
+            status = "🟡 MIXED"
+            score = 0.5
+        elif lt_bias <= 0 and vlt_bias <= 0 and not above_vlt_fast:
             status = "🔴 BEARISH"
-            score  = 0
+            score = 0
+        else:
+            status = "🟡 TRANSITIONAL"
+            score = 0.5
 
-        above_below_vlt = "above VLT Fast" if price_vs_vlt_fast else "below VLT Fast"
-        vlt_note = ""
-        if vlt_bias < 0:
-            vlt_note = " *(VLT headwind active — structural resistance)*"
+        if lt_bias > 0 and vlt_bias > 0:
+            backdrop = "bullish structure active"
+        elif lt_bias > 0 and vlt_bias <= 0:
+            backdrop = "LT improved, VLT headwind still present"
+        elif lt_bias <= 0 and vlt_bias > 0:
+            backdrop = "VLT support intact, LT weakening"
+        else:
+            backdrop = "structural headwind active"
 
-        narrative = f"Price {above_below_vlt} TL | LT slope {lt_fast_slope:+.2f}/bar{vlt_note}"
+        level_note = (
+            f"Price {'above' if above_vlt_fast else 'below'} VLT Fast TL | "
+            f"LT slope {lt_fast_slope:+.2f}/bar | "
+            f"LT Hist {lt_bias:+.0f} / VLT Hist {vlt_bias:+.0f}"
+        )
+        narrative = f"{backdrop} | {level_note}"
 
         return {
             "status": status,
-            "score":  score,
-            "price":  price,
+            "score": score,
+            "price": price,
             "lt_fast": lt_fast,
             "lt_slow": lt_slow,
             "vlt_fast": vlt_fast,
             "vlt_slow": vlt_slow,
             "lt_bias": lt_bias,
             "vlt_bias": vlt_bias,
+            "st_bias": st_bias,
             "loi": loi,
             "lt_fast_slope": lt_fast_slope,
+            "lt_slow_slope": lt_slow_slope,
+            "vlt_fast_slope": vlt_fast_slope,
+            "above_lt_fast": above_lt_fast,
+            "above_lt_slow": above_lt_slow,
+            "above_vlt_fast": above_vlt_fast,
             "narrative": narrative,
             "error": None,
         }
