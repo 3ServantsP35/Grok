@@ -33,6 +33,8 @@ The refactored script must align with:
 ### What is missing
 - Force Field integration
 - FF ROC interpretation
+- ST SRI companion views alongside LT views
+- ST/LT slow-trackline progression / cross logic
 - trend line geometry integration
 - scenario engine
 - bucket strategy translation
@@ -128,6 +130,8 @@ Move current per-chart analyzers into a dedicated “structural analyzers” blo
 - `analyze_strf_lqd()`
 - `analyze_mstr_ibit()`
 
+Then add ST companion analyzers or extensions for the same charts where data/columns exist.
+
 These should feed **Section 1 — Structural State**.
 
 ---
@@ -194,6 +198,21 @@ The trend geometry layer must answer:
 
 ---
 
+## Phase C.5 — Add ST progression layer
+
+### New required function
+`analyze_st_progression(...) -> dict`
+
+Minimum outputs:
+- ST state for each core chart where available
+- ST slow-trackline slope
+- LT slow-trackline slope
+- ST vs LT slow-trackline relationship
+- whether an ST/LT slow-trackline cross is forming, confirmed, or failing
+
+### Why this matters
+ST views are not optional garnish. They are the **transition layer** that helps identify whether macro stage progression is actually advancing before LT alone fully confirms. In particular, **ST/LT crosses of slow tracklines** should be treated as structurally important progression signals.
+
 ## Phase D — Replace old composite score logic
 
 ### Old model to demote
@@ -203,17 +222,19 @@ Chart-count alignment should no longer be the main score.
 Use weighted narrative logic in this order:
 1. force regime
 2. force quality
-3. trend line confrontation
-4. 5-chart corroboration
+3. ST/LT progression state
+4. trend line confrontation
+5. 5-chart corroboration
 
 ### Transitional scoring option
 If a numeric score is still desired, use category weights instead of equal chart-count weights.
 
 Suggested conceptual weighting:
-- Force regime: 30%
-- Force quality / ROC: 30%
-- Trend line geometry: 25%
-- 5-chart alignment corroboration: 15%
+- Force regime: 25%
+- Force quality / ROC: 25%
+- ST/LT progression: 20%
+- Trend line geometry: 20%
+- 5-chart alignment corroboration: 10%
 
 This can remain qualitative at first; no need to overfit prematurely.
 
@@ -317,12 +338,15 @@ Audit column availability in current MSTR suite CSVs for FF / FF ROC fields.
 Implement `analyze_force_state()` using existing MSTR CSV exports.
 
 ### Step 3
-Audit `trend_line_engine.py` interface and define the smallest usable integration for local/global resistance + support projections.
+Add ST companion-view / ST-LT progression analysis, with explicit handling for ST/LT slow-trackline relationships and crosses.
 
 ### Step 4
-Refactor the report output to include the new sections before changing reminder/automation behavior.
+Audit `trend_line_engine.py` interface and define the smallest usable integration for local/global resistance + support projections.
 
 ### Step 5
+Refactor the report output to include the new sections before changing reminder/automation behavior.
+
+### Step 6
 Only after the live discretionary report looks correct, revisit automation and validation.
 
 ---

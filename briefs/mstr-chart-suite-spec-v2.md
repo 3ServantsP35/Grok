@@ -149,6 +149,19 @@ These remain relevant as structure/context inputs:
 4. STRF/LQD LT
 5. MSTR/IBIT LT
 
+### 5. ST SRI Companion Views (new required complement)
+**Role:** transitional / progression layer between tactical force and structural LT state  
+**Question answered:** *Is the medium-term move progressing, stalling, or rolling over before LT fully confirms?*
+
+Use for:
+- ST/LT slow-trackline relationship
+- ST slow-trackline crosses of LT slow-trackline
+- identifying macro stage progressions before the LT picture alone fully resolves
+- distinguishing healthy structural progression from fading LT-only appearances
+
+**Why this matters:**
+Recent work has reinforced that LT views alone are not enough. The **ST SRI views are highly complementary to LT**, especially when tracking stage transitions. In particular, **ST/LT crosses of slow tracklines are fundamentally important for identifying macro stage progressions** and should be treated as first-class suite inputs.
+
 ---
 
 ## New Report Architecture
@@ -162,6 +175,8 @@ Include:
 - Stablecoin Dom LT state
 - STRF/LQD LT state
 - MSTR/IBIT LT state
+- ST companion reads for each core chart where available
+- ST/LT slow-trackline progression and cross status
 - original Force Field zone
 
 Output:
@@ -300,6 +315,7 @@ Inspect `mstr_suite_report.py` and classify:
 - reusable pieces
 - obsolete alignment-only assumptions
 - where FF / ROC / trend line sections should be inserted
+- where ST companion views and ST/LT slow-trackline progression logic should be inserted
 
 ### Priority 2
 Define a minimal trend line interface for the suite report:
