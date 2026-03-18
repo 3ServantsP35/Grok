@@ -53,15 +53,6 @@ SUITE_CSVS = {
     "MSTR_IBIT": f"{DATA_DIR}/BATS_MSTR_BATS_IBIT, 240_0ae35.csv",
 }
 
-# Outlook thresholds — (min_inclusive, max_inclusive)
-OUTLOOK_LEVELS = [
-    (4.5, 5.0, "🟢 STRONG BULLISH",    "High confidence 30–60 day upside. Full suite aligned."),
-    (3.5, 4.5, "🟢 BULLISH",            "Majority of ladder bullish. Favorable risk/reward."),
-    (2.5, 3.5, "🟡 CAUTIOUSLY BULLISH", "Mixed signals. Trend intact but confirmation lacking."),
-    (1.5, 2.5, "🟠 NEUTRAL",            "No directional edge. Watch for signals to align."),
-    (0.0, 1.5, "🔴 CAUTIOUS",           "Multiple warning signals. Reduce or hold current sizing."),
-]
-
 MAX_DISCORD_LEN = 1900  # safe Discord message length
 
 
@@ -120,13 +111,6 @@ def fmt_score_bar(score: float, max_score: float = 5.0) -> str:
     filled = round(score * 8 / max_score)
     bar = "█" * filled + "░" * (8 - filled)
     return f"[{bar}]"
-
-
-def get_outlook(score: float) -> tuple[str, str]:
-    for lo, hi, label, note in OUTLOOK_LEVELS:
-        if lo <= score <= hi:
-            return label, note
-    return "🔴 CAUTIOUS", "Multiple warning signals."
 
 
 def send_discord(webhooks: dict, message: str,
