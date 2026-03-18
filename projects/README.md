@@ -1,6 +1,6 @@
 # #mstr-cio Project Tracker
 **Managed by:** Gavin (rizenshine5359) — Project Manager
-**Updated:** 2026-03-05
+**Updated:** 2026-03-18
 
 ---
 
@@ -16,7 +16,7 @@
 | P7 | Framework Architecture | ✅ Complete — Approved | Gavin |
 | P8 | Pine Scripts — Mirror Layer | ✅ Pivoted & Stable | Gavin |
 | P9 | MSTR/IBIT Pair Trade | ⏸️ Deferred | Gavin |
-| P10 | Trend Line Engine | 🟡 Live prototype tested 2026-03-04 | CIO |
+| P10 | Trend Line Engine | 🟡 Live prototype tested; resistance-line analysis now in active use | CIO |
 | P11 | STRC Spread Monitor | 🟡 Needs cron | Greg |
 | P12 | Python Decision Engine | ✅ Phase 1+2 Complete | CIO |
 | P13 | Trade Journal | 🟡 Schema defined — queued | CIO |
@@ -35,7 +35,8 @@
 | P-PINE-V6 | Pine v6 Migration | ✅ All 12 scripts on v6 | CIO |
 | P-DOI | Distribution Signal Layer (Momentum assets) | 🔴 HIGH — Pine v1 live; CRS integration queued | CIO |
 | P-MR-ENTRY | Cross-Asset LEAP Opportunity Framework (all in-scope assets) | 🟡 MED — Phase 1 research complete; calibrations live | CIO |
-| P-MSTR-SUITE | MSTR Chart Suite — 5-chart weekly confirmation ladder | 🔴 HIGH — Active build | Gavin/CIO |
+| P-MSTR-SUITE | MSTR Chart Suite — 5-chart weekly confirmation ladder | 🔴 HIGH — Active build + live discretionary use | Gavin/CIO |
+| P-FF | Force Field / Force Field ROC | 🟡 FF live; FF ROC live; docs + CSV exports updated | CIO |
 
 ---
 
@@ -89,7 +90,7 @@ Then verify: `sudo -u openclaw crontab -l`
 ---
 
 ### P10: Trend Line Engine
-**Status:** 🟡 Live prototype tested — not yet wired into pipeline
+**Status:** 🟡 Live prototype tested — now actively used in discretionary MSTR resistance/support analysis; not yet wired into pipeline
 **Lead:** CIO | **Approver:** Greg + Gavin
 
 Objective: CIO reads key trend lines as linear equations on date/price coordinates — visible in analysis without requiring TradingView.
@@ -134,7 +135,7 @@ Full 4-layer architecture documentation for Greg (technical) and Gary (education
 ---
 
 ### P-MSR: Market Structure Reports
-**Status:** ✅ Framework v1.1 complete | All 7 assets updated 2026-03-04
+**Status:** ✅ Framework v1.1 complete | Actively used for GLD/GLDM proxy work and ongoing MSTR structure reviews
 **Lead:** CIO | **Approver:** Gavin
 **Framework:** `briefs/stage-state-framework-v1.md`
 **Reports:** `market-structure-reports/`
@@ -333,7 +334,7 @@ Full rewrite of the AB2 call-selling indicator with corrected philosophy: Stage 
 ---
 
 ### P-PINE-GUIDE: Pine Indicator Tutorial Guide
-**Status:** ✅ Complete
+**Status:** ✅ Complete — updated with Force Field vs Force Field ROC interpretation rule
 **Lead:** CIO
 **File:** [`pine/INDICATOR-GUIDE.md`](https://github.com/3ServantsP35/Grok/blob/main/pine/INDICATOR-GUIDE.md) | **Commit:** `044c4130`
 
@@ -351,7 +352,34 @@ Comprehensive tutorial for all 12 Pine Script indicators. Covers all four famili
 ---
 
 ### P-PINE-V6: Pine v6 Migration
-**Status:** ✅ Complete — all 12 scripts on Pine v6
+**Status:** ✅ Complete — all core scripts on Pine v6; recent Force Field / FF ROC parser fixes pushed live
+
+---
+
+### P-FF: Force Field / Force Field ROC
+**Status:** 🟡 Active — both indicators live; FF ROC promoted to primary analytical read
+**Lead:** CIO
+
+**Current state:**
+- Original Force Field remains the base regime/state indicator
+- Force Field ROC is now the primary tactical / decision-support indicator
+- FF ROC is live on GitHub and documented in `pine/INDICATOR-GUIDE.md`
+- CSV export fields now include:
+  - `F_net ROC 1`
+  - `F_net ROC 3`
+  - `F_net ROC 5`
+  - `F_net Acceleration`
+- Pine parser/formatting fixes were pushed directly to GitHub from the Mac mini runtime
+- Legacy Force Field display/marker behavior is still usable, but marker rendering remains visually suboptimal when enabled
+
+**Canonical interpretation rule:**
+- Original FF answers: **what regime/state are we in?**
+- FF ROC answers: **is that regime strengthening, weakening, accelerating, or exhausting?**
+- Operational hierarchy: read original FF first for structural zone, then FF ROC for timing/quality of force
+
+**Next step:**
+- Validate FF ROC versus live MSTR continuation/rejection behavior over the next 2–4 weeks
+- Decide later whether the legacy FF should remain fully parallel or be demoted to a background-only indicator
 **Lead:** CIO
 
 All Pine scripts in the repo are now on `@version=6`. CRS was the only script created under v5; migrated in the same session it was built.
