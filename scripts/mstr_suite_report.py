@@ -720,51 +720,83 @@ def build_scenarios(r1: dict, ff: dict, st_prog: dict, trend: dict) -> list[dict
 
     price = r1.get("price", float("nan"))
     local_r = trend.get("local_resistance", float("nan"))
+    global_r = trend.get("global_resistance", float("nan"))
     local_s = trend.get("local_support", float("nan"))
+    global_s = trend.get("global_support", float("nan"))
     force_bull = ff.get("f_net", -999) > -0.60
     roc3 = ff.get("roc3", 0.0)
     accel = ff.get("accel", 0.0)
     st_state = st_prog.get("state", "")
 
-    breakout_prob = 15
-    shallow_reset_prob = 35
-    deeper_reset_prob = 20
-    failure_prob = 10
+    breakout_prob = 20
+    shallow_reset_prob = 30
+    deeper_reset_prob = 15
+    failure_prob = 8
 
-    # force state
+    near_local_r = price == price and local_r == local_r and local_r > 0 and abs(local_r - price) / price < 0.04
+    near_local_s = price == price and local_s == local_s and local_s > 0 and abs(price - local_s) / price < 0.04
+    far_from_r = price == price and local_r == local_r and local_r > 0 and abs(local_r - price) / price > 0.08
+    weak_support_gap = price == price and local_s == local_s and local_s > 0 and abs(price - local_s) / price > 0.08
+
+    # Force regime and quality
     if force_bull and roc3 > 0 and accel > 0:
-        breakout_prob += 15
-        shallow_reset_prob -= 5
+        breakout_prob += 18
+        shallow_reset_prob += 4
+    elif force_bull and roc3 > 0 and accel <= 0:
+        breakout_prob += 8
+        shallow_reset_prob += 12
     elif force_bull and roc3 <= 0:
-        shallow_reset_prob += 15
-        deeper_reset_prob += 5
+        shallow_reset_prob += 18
+        deeper_reset_prob += 8
+        breakout_prob -= 6
     elif not force_bull and roc3 > 0:
         deeper_reset_prob += 10
+        shallow_reset_prob += 6
+        breakout_prob -= 5
     else:
-        failure_prob += 15
+        failure_prob += 18
         deeper_reset_prob += 10
+        breakout_prob -= 12
 
     # ST progression
     if "progression confirmed" in st_state:
-        breakout_prob += 10
+        breakout_prob += 12
     elif "early bullish progression" in st_state:
-        breakout_prob += 5
-        shallow_reset_prob += 5
+        breakout_prob += 6
+        shallow_reset_prob += 4
     elif "repair / bottoming" in st_state:
         deeper_reset_prob += 10
+        shallow_reset_prob += 6
     elif "bearish progression" in st_state:
-        failure_prob += 10
-        deeper_reset_prob += 10
+        failure_prob += 12
+        deeper_reset_prob += 8
+        breakout_prob -= 8
+    elif "transitional" in st_state:
+        shallow_reset_prob += 8
 
-    # geometry proximity
-    if price == price and local_r == local_r and price >= 0.97 * local_r:
-        shallow_reset_prob += 10
-        if roc3 > 0:
-            breakout_prob += 5
+    # Geometry interaction
+    if near_local_r:
+        if roc3 > 0 and accel > 0:
+            breakout_prob += 6
+            shallow_reset_prob += 8
         else:
-            breakout_prob -= 5
-    if price == price and local_s == local_s and price <= 1.03 * local_s and roc3 > 0:
+            shallow_reset_prob += 15
+            deeper_reset_prob += 5
+            breakout_prob -= 6
+
+    if near_local_s:
+        if roc3 > 0:
+            breakout_prob += 8
+            shallow_reset_prob += 4
+        else:
+            deeper_reset_prob += 8
+
+    if far_from_r and force_bull and roc3 > 0:
         breakout_prob += 5
+
+    if weak_support_gap and roc3 <= 0:
+        deeper_reset_prob += 6
+        failure_prob += 4
 
     probs = {
         "Immediate breakout continuation": breakout_prob,
@@ -772,6 +804,7 @@ def build_scenarios(r1: dict, ff: dict, st_prog: dict, trend: dict) -> list[dict
         "Deeper 1B reset": deeper_reset_prob,
         "Bearish structure failure": failure_prob,
     }
+
     total = sum(max(v, 1) for v in probs.values())
     for name, raw in probs.items():
         prob = round(max(raw, 1) * 100 / total)
