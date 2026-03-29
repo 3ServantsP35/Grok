@@ -135,6 +135,7 @@ string status = ab2_state ? "AB2 bearish conviction regime" : ab1_state ? "AB1 t
 string conviction = ab2_state ? "Entry viable" : ab1_state ? "Entry viable" : theta_regime ? "Keep active" : "No"
 string ab1_viable = ab1_state ? "Entry viable" : theta_regime ? "Keep active" : "No"
 string ab2_viable = ab2_state ? "Entry viable" : ab1_state ? "Developing" : "No"
+string delta_posture = ab2_state ? "Aggressive (~70Δ or lower)" : ab1_state ? "Moderate (~30Δ or lower)" : theta_regime ? "Conservative (~20Δ or lower)" : "None"
 string invalidation = ab2_state or ab1_state ? str.format("Close > ST FTL {0}", str.tostring(st_ftl, "#.##")) : str.format("Reclaim ST FTL {0}", str.tostring(st_ftl, "#.##"))
 
 bool green_t = theta_regime and not (bar_index > 0 and theta_regime[1])
@@ -159,7 +160,7 @@ plotshape(show_red_t and red_t, title="Red T", text="T", style=shape.labeldown, 
 // ═══════════════════════════════════════════════════════════════
 // TABLE
 // ═══════════════════════════════════════════════════════════════
-var table t = table.new(position.bottom_right, 2, 6,
+var table t = table.new(position.bottom_right, 2, 7,
     bgcolor=color.new(color.black, 30), border_width=1, border_color=color.new(color.gray, 60))
 
 if barstate.islast and show_table
@@ -175,8 +176,10 @@ if barstate.islast and show_table
     table.cell(t, 1, 3, ab1_viable, text_color=ab1_viable == "Entry viable" ? color.yellow : ab1_viable == "Keep active" ? color.green : color.gray, text_size=size.tiny)
     table.cell(t, 0, 4, "AB2", text_color=color.gray, text_size=size.tiny)
     table.cell(t, 1, 4, ab2_viable, text_color=ab2_viable == "Entry viable" ? color.red : ab2_viable == "Developing" ? color.orange : color.gray, text_size=size.tiny)
-    table.cell(t, 0, 5, "Invalidation", text_color=color.gray, text_size=size.tiny)
-    table.cell(t, 1, 5, invalidation, text_color=color.gray, text_size=size.tiny)
+    table.cell(t, 0, 5, "Delta", text_color=color.gray, text_size=size.tiny)
+    table.cell(t, 1, 5, delta_posture, text_color=ab2_state ? color.red : ab1_state ? color.yellow : theta_regime ? color.green : color.gray, text_size=size.tiny)
+    table.cell(t, 0, 6, "Invalidation", text_color=color.gray, text_size=size.tiny)
+    table.cell(t, 1, 6, invalidation, text_color=color.gray, text_size=size.tiny)
 
 // ═══════════════════════════════════════════════════════════════
 // ALERTS
