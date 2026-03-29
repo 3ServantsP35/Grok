@@ -129,13 +129,16 @@ bool red_state = yellow_state and bucket_lt_deterioration and bucket_support_vac
 
 int top_score = red_state ? red_score : yellow_state ? yellow_score : green_state ? green_score : 0
 string phase = red_state ? "D" : yellow_state ? "C" : green_state ? "A/B" : "-"
-string status = red_state ? "Red T active" : yellow_state ? "Yellow T active" : green_state ? "Green T active" : "Inactive"
-string conviction = red_state ? "High" : yellow_state ? "Medium" : green_state ? "Low" : "None"
+string status = red_state ? "AB2 bearish state active" : yellow_state ? "AB1 entry state active" : green_state ? "Theta-active cap regime" : "Inactive"
+string conviction = red_state ? "High" : yellow_state ? "Elevated" : green_state ? "Capped" : "None"
 string ab1_viable = yellow_state ? "Yes" : green_state ? "Keep active" : "No"
-string ab2_viable = red_state ? "Yes" : yellow_state ? "Developing" : "No"
+string ab2_viable = red_state ? "Yes" : yellow_state ? "No" : "No"
 string invalidation = str.format("Close > ST FTL {0}", str.tostring(st_ftl, "#.##"))
 
-bool green_t = green_state and not (bar_index > 0 and green_state[1])
+int green_cooldown = 6
+bool green_begin = green_state and not (bar_index > 0 and green_state[1])
+int bars_since_green_begin = ta.barssince(green_begin)
+bool green_t = green_begin and (na(bars_since_green_begin[1]) or bars_since_green_begin[1] > green_cooldown)
 bool yellow_t = yellow_state and not (bar_index > 0 and yellow_state[1])
 bool red_t = red_state and not (bar_index > 0 and red_state[1])
 
@@ -165,14 +168,14 @@ if barstate.islast and show_table
     color val_clr = top_score >= 7 ? color.red : top_score >= 5 ? color.orange : top_score >= 3 ? color.green : color.gray
     table.cell(t, 0, 0, "AB1-2 MSTR", text_color=color.white, text_size=size.small, bgcolor=hdr_bg)
     table.cell(t, 1, 0, status, text_color=color.white, text_size=size.small, bgcolor=hdr_bg)
-    table.cell(t, 0, 1, "Phase", text_color=color.gray, text_size=size.tiny)
+    table.cell(t, 0, 1, "State", text_color=color.gray, text_size=size.tiny)
     table.cell(t, 1, 1, phase, text_color=val_clr, text_size=size.tiny)
-    table.cell(t, 0, 2, "Conviction", text_color=color.gray, text_size=size.tiny)
+    table.cell(t, 0, 2, "Trade Utility", text_color=color.gray, text_size=size.tiny)
     table.cell(t, 1, 2, str.format("{0} ({1})", conviction, str.tostring(top_score)), text_color=val_clr, text_size=size.tiny)
     table.cell(t, 0, 3, "AB1", text_color=color.gray, text_size=size.tiny)
     table.cell(t, 1, 3, ab1_viable, text_color=ab1_viable == "Yes" ? color.yellow : ab1_viable == "Keep active" ? color.green : color.gray, text_size=size.tiny)
     table.cell(t, 0, 4, "AB2", text_color=color.gray, text_size=size.tiny)
-    table.cell(t, 1, 4, ab2_viable, text_color=ab2_viable == "Yes" ? color.red : ab2_viable == "Developing" ? color.orange : color.gray, text_size=size.tiny)
+    table.cell(t, 1, 4, ab2_viable, text_color=ab2_viable == "Yes" ? color.red : color.gray, text_size=size.tiny)
     table.cell(t, 0, 5, "Invalidation", text_color=color.gray, text_size=size.tiny)
     table.cell(t, 1, 5, invalidation, text_color=color.gray, text_size=size.tiny)
 
