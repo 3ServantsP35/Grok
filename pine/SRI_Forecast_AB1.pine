@@ -180,7 +180,7 @@ bool deep_anchor  = loi_min_120 < deep_thresh
 // Caution flag:  LOI rollover after LOI > +20 — 54.8% at 3% drawdown (not a hard exit)
 // ═══════════════════════════════════════════════════════════════
 
-bool lt_just_turned_pos = lt_pos and not nz(lt_pos[1], false)
+bool lt_just_turned_pos = lt_pos and not (bar_index > 0 and lt_pos[1])
 bool qqq_primary_entry  = is_qqq and lt_just_turned_pos and st_pos   // 70% win rate
 bool qqq_secondary      = is_qqq and ct3_cross                        // CT3 cross — secondary
 bool qqq_caution        = is_qqq and loi > 20.0 and loi < nz(loi[1]) and nz(loi[1]) < nz(loi[2])
