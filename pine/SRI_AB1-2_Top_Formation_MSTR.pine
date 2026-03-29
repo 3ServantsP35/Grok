@@ -125,7 +125,9 @@ if bucket_failed_reclaim
 
 bool theta_regime = green_score >= 3
 bool ab1_state = theta_regime and bucket_st_break and bucket_roc_deterioration and (bucket_failed_reclaim or bucket_lt_fast_resistance) and yellow_score >= 6
-bool ab2_state = ab1_state and bucket_lt_deterioration and bucket_support_vacuum and red_score >= 6
+bool second_leg_pressure = close < nz(close[1]) and nz(close[1]) < nz(close[2])
+bool failed_bounce = close < st_ftl and high < nz(high[1]) and close < open
+bool ab2_state = ab1_state and bucket_lt_deterioration and bucket_support_vacuum and (failed_bounce or second_leg_pressure) and red_score >= 5
 
 int top_score = ab2_state ? red_score : ab1_state ? yellow_score : theta_regime ? green_score : 0
 string phase = ab2_state ? "AB2" : ab1_state ? "AB1" : theta_regime ? "THETA" : "-"
