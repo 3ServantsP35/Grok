@@ -135,9 +135,9 @@ string ab1_viable = yellow_state ? "Yes" : green_state ? "Keep active" : "No"
 string ab2_viable = red_state ? "Yes" : yellow_state ? "Developing" : "No"
 string invalidation = str.format("Close > ST FTL {0}", str.tostring(st_ftl, "#.##"))
 
-bool green_t = green_state and not nz(green_state[1], false)
-bool yellow_t = yellow_state and not nz(yellow_state[1], false)
-bool red_t = red_state and not nz(red_state[1], false)
+bool green_t = green_state and not (bar_index > 0 and green_state[1])
+bool yellow_t = yellow_state and not (bar_index > 0 and yellow_state[1])
+bool red_t = red_state and not (bar_index > 0 and red_state[1])
 
 // ═══════════════════════════════════════════════════════════════
 // PLOTS
