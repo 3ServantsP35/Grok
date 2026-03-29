@@ -124,8 +124,8 @@ if bucket_failed_reclaim
     red_score += 1
 
 bool green_state = green_score >= 3
-bool yellow_state = yellow_score >= 6
-bool red_state = red_score >= 7 and yellow_state
+bool yellow_state = green_state and bucket_st_break and bucket_roc_deterioration and (bucket_failed_reclaim or bucket_lt_fast_resistance) and yellow_score >= 6
+bool red_state = yellow_state and bucket_lt_deterioration and bucket_support_vacuum and red_score >= 6
 
 int top_score = red_state ? red_score : yellow_state ? yellow_score : green_state ? green_score : 0
 string phase = red_state ? "D" : yellow_state ? "C" : green_state ? "A/B" : "-"
