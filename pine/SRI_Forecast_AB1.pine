@@ -40,6 +40,7 @@ bool show_table      = input.bool(true, "Show Info Table",          group=grp_di
 bool show_legend     = input.bool(true, "Show Legend",              group=grp_disp)
 bool show_bg         = input.bool(true, "Show CT Tier Background",  group=grp_disp)
 bool show_tracklines = input.bool(true, "Show LT Tracklines",       group=grp_disp)
+bool show_topping    = input.bool(true, "Show MSTR Topping Ladder", group=grp_disp)
 
 // ═══════════════════════════════════════════════════════════════
 // ASSET CLASS AUTO-DETECT
@@ -221,6 +222,38 @@ bool cond_tailwind_trap = ct_tier == 3 and is_btc_proxy  // CT3 = LT already cau
 string context = lt_neg and vlt_neg ? "HEADWIND" : lt_pos and vlt_pos ? "TAILWIND" : "MIXED"
 
 // ═══════════════════════════════════════════════════════════════
+// MSTR TOPPING FORMATION LADDER v1 (first-pass integration)
+// Tactical overlay for bearish topping / local-top pressure.
+// ═══════════════════════════════════════════════════════════════
+
+bool is_mstr_family = str.contains(str.upper(syminfo.ticker), "MSTR")
+bool top_reject = close < lt_ftl and high >= lt_ftl
+bool top_band_deterioration = st_sribi < nz(st_sribi[1]) and vst_sribi < nz(vst_sribi[1])
+bool top_lt_deterioration   = lt_sribi < nz(lt_sribi[1])
+bool top_track_fail         = close < st_ftl and st_ftl < nz(st_ftl[1])
+float support_gap_pct       = close != 0 ? math.max(0.0, (close - vlt_ftl) / close * 100) : 0.0
+bool top_support_vacuum     = close > vlt_ftl and support_gap_pct > 4.0
+bool top_roc_deterioration  = ((vlt_sribi - nz(vlt_sribi[10])) < nz(vlt_sribi - nz(vlt_sribi[10]))[1]) and st_sribi < nz(st_sribi[1])
+
+int top_score = 0
+if top_reject
+    top_score += 1
+if top_band_deterioration
+    top_score += 1
+if top_lt_deterioration
+    top_score += 1
+if top_track_fail
+    top_score += 1
+if top_support_vacuum
+    top_score += 2
+if top_roc_deterioration
+    top_score += 2
+
+string top_phase = top_score >= 7 ? "D" : top_score >= 5 ? "C" : top_score >= 3 ? "B" : top_score >= 1 ? "A" : "-"
+string top_state = top_score >= 7 ? "HI" : top_score >= 5 ? "ACTIVE" : top_score >= 3 ? "WATCH" : "INACTIVE"
+bool top_active = is_mstr_family and top_score >= 5
+
+// ═══════════════════════════════════════════════════════════════
 // COLORS & BACKGROUND
 // ═══════════════════════════════════════════════════════════════
 
@@ -230,7 +263,7 @@ color c_avoid     = color.new(color.red,    88)
 color c_trap      = color.new(color.orange, 90)
 color c_neutral   = na
 
-color bg_color = cond_avoid ? c_avoid : cond_favorable ? c_favorable : cond_watch ? c_watch : cond_tailwind_trap ? c_trap : c_neutral
+color bg_color = top_active and show_topping ? color.new(color.red, 90) : cond_avoid ? c_avoid : cond_favorable ? c_favorable : cond_watch ? c_watch : cond_tailwind_trap ? c_trap : c_neutral
 bgcolor(show_bg ? bg_color : na)
 
 // ═══════════════════════════════════════════════════════════════
@@ -265,7 +298,7 @@ plot(show_tracklines ? lt_stl : na, "LT Slow TL", color=lt_bullish ? color.new(c
 // INFO TABLE
 // ═══════════════════════════════════════════════════════════════
 
-var table t = table.new(position.bottom_right, 2, 13,
+var table t = table.new(position.bottom_right, 2, 15,
     bgcolor=color.new(color.black, 30), border_width=1, border_color=color.new(color.gray, 60))
 
 if barstate.islast and show_table
@@ -350,6 +383,16 @@ if barstate.islast and show_table
                  ct_tier == 2 ? "CT2 ✓ — watching CT3" : ct_tier == 3 ? "CT3 ✓ — watch VLT for CT4" : "CT4 reached"
             table.cell(t, 1, 10, nxt, text_color=color.gray, text_size=size.tiny)
 
+        color top_clr = top_score >= 7 ? color.red : top_score >= 5 ? color.orange : top_score >= 3 ? color.yellow : color.gray
+        table.cell(t, 0, 11, "Top Phase", text_color=color.gray, text_size=size.tiny)
+        table.cell(t, 1, 11, str.format("{0} / {1}", top_phase, top_state), text_color=top_clr, text_size=size.tiny)
+        table.cell(t, 0, 12, "Top Score", text_color=color.gray, text_size=size.tiny)
+        table.cell(t, 1, 12, str.tostring(top_score), text_color=top_clr, text_size=size.tiny)
+        table.cell(t, 0, 13, "Top Bias", text_color=color.gray, text_size=size.tiny)
+        table.cell(t, 1, 13, top_active ? "AB1 tactical bear pressure active" : "No active topping cluster", text_color=top_clr, text_size=size.tiny)
+        table.cell(t, 0, 14, "Override", text_color=color.gray, text_size=size.tiny)
+        table.cell(t, 1, 14, top_active ? "Top pressure overrides residual bullishness" : "Standard CT logic", text_color=top_clr, text_size=size.tiny)
+
 // ═══════════════════════════════════════════════════════════════
 // LEGEND
 // ═══════════════════════════════════════════════════════════════
@@ -422,3 +465,5 @@ alertcondition(qqq_caution, title="AB1 — QQQ LOI Caution",
 bool was_favorable = cond_favorable[1]
 alertcondition(ct_stepped_down and was_favorable, title="AB1 — Condition Lost",
     message="AB1: Favorable CT level dropped. Reassess entry.")
+alertcondition(top_active, title="AB1 — MSTR Topping Formation Active",
+    message="AB1 Topping Ladder: bearish topping formation active on MSTR. Tactical bearish monetization pressure rising.")

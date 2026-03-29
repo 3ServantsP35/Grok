@@ -40,6 +40,7 @@ bool show_legend  = input.bool(true,  "Show Legend",              group=grp_disp
 bool show_bg      = input.bool(true,  "Show Context Background",  group=grp_disp)
 bool show_ribbon  = input.bool(false, "Show Forecast Ribbon",     group=grp_disp)
 bool show_tracklines = input.bool(true, "Show LT Tracklines",     group=grp_disp)
+bool show_topping = input.bool(true, "Show MSTR Topping Ladder",  group=grp_disp)
 
 // ═══════════════════════════════════════════════════════════════
 // ASSET CLASS AUTO-DETECT
@@ -174,6 +175,52 @@ bool time_stop_hit  = bars_in_window >= 90
 bool ibit_override = is_ibit
 
 // ═══════════════════════════════════════════════════════════════
+// MSTR TOPPING FORMATION LADDER v1 (first-pass integration)
+// Phase ladder is conceptual; signals below are weighted, non-sequential evidence.
+// This is a tactical overlay for MSTR-family assets, not a replacement for AB2 core logic.
+// ═══════════════════════════════════════════════════════════════
+
+bool is_mstr_family = str.contains(str.upper(syminfo.ticker), "MSTR")
+
+// Bucket A — rejection / failed reclaim behavior
+bool top_reject = close < lt_ftl and high >= lt_ftl
+
+// Bucket B — deterioration / collapse proxies
+bool top_band_deterioration = st_sribi < nz(st_sribi[1]) and vst_sribi < nz(vst_sribi[1])
+bool top_lt_deterioration   = lt_sribi < nz(lt_sribi[1])
+
+// Bucket C — trackline failure
+bool top_track_fail = close < st_ftl and st_ftl < nz(st_ftl[1])
+bool top_fast_fail  = close < lt_ftl and lt_ftl < nz(lt_ftl[1])
+
+// Bucket D — support vacuum / downside release
+float support_gap_pct = close != 0 ? math.max(0.0, (close - vlt_ftl) / close * 100) : 0.0
+bool top_support_vacuum = close > vlt_ftl and support_gap_pct > 4.0
+
+// Bucket E — FF ROC tactical deterioration proxy from SRIBI slope structure
+bool top_roc_deterioration = sribi_avg < nz(sribi_avg[1]) and st_sribi < nz(st_sribi[1]) and lt_sribi <= nz(lt_sribi[1])
+
+int top_score = 0
+if top_reject
+    top_score += 1
+if top_band_deterioration
+    top_score += 1
+if top_lt_deterioration
+    top_score += 1
+if top_track_fail
+    top_score += 1
+if top_fast_fail
+    top_score += 1
+if top_support_vacuum
+    top_score += 2
+if top_roc_deterioration
+    top_score += 2
+
+string top_phase = top_score >= 7 ? "D" : top_score >= 5 ? "C" : top_score >= 3 ? "B" : top_score >= 1 ? "A" : "-"
+string top_state = top_score >= 7 ? "ACTIVE" : top_score >= 5 ? "DEVELOPING" : top_score >= 3 ? "WATCH" : "INACTIVE"
+bool top_active = is_mstr_family and top_score >= 5
+
+// ═══════════════════════════════════════════════════════════════
 // CONDITION COLORS
 // Green  = window open (MIXED + ST+ + VST+) — favorable for Bull Put
 // Orange = MIXED but ST not yet + — wait for ST cross
@@ -183,6 +230,7 @@ bool ibit_override = is_ibit
 // ═══════════════════════════════════════════════════════════════
 
 color bg_col = ibit_override                  ? color.new(color.purple, 92) :
+     top_active and show_topping    ? color.new(color.red, 90)    :
      window_open                   ? color.new(color.green,  87) :
      is_mixed and st_pos and not loi_ok ? color.new(color.red, 92) :
      is_mixed and not st_pos       ? color.new(color.orange, 90) :
@@ -301,12 +349,14 @@ if barstate.islast and show_table
     bool loi_blocking = is_mixed and st_pos and not loi_ok  // context + ST ok but LOI too deep
 
     color hdr_bg = ibit_override  ? color.new(color.purple, 40) :
+         top_active   ? color.new(color.red, 35) :
          window_open   ? color.new(color.green, 30) :
          loi_blocking  ? color.new(color.red, 45) :
          is_mixed and not st_pos ? color.new(color.orange, 40) :
          is_tailwind ? color.new(color.red, 40) : color.new(color.gray, 40)
 
     string hdr_str = ibit_override  ? "DISABLED (crypto)" :
+         top_active   ? str.format("TOPPING {0} (score {1})", top_state, str.tostring(top_score)) :
          window_open   ? "WINDOW OPEN" :
          loi_blocking  ? str.format("LOI BLOCKED ({0})", str.tostring(loi_ab2, "#.#")) :
          is_mixed and not st_pos ? "MIXED — WAIT ST" :
@@ -364,10 +414,19 @@ if barstate.islast and show_table
     table.cell(t, 0, 10, "LOI Filter", text_color=color.gray, text_size=size.tiny)
     table.cell(t, 1, 10, loi_str2, text_color=loi_clr2, text_size=size.tiny)
 
-    // IBIT disabled warning
+    color top_clr = top_score >= 7 ? color.red : top_score >= 5 ? color.orange : top_score >= 3 ? color.yellow : color.gray
+    table.cell(t, 0, 11, "Top Phase", text_color=color.gray, text_size=size.tiny)
+    table.cell(t, 1, 11, str.format("{0} / {1}", top_phase, top_state), text_color=top_clr, text_size=size.tiny)
+    table.cell(t, 0, 12, "Top Score", text_color=color.gray, text_size=size.tiny)
+    table.cell(t, 1, 12, str.tostring(top_score), text_color=top_clr, text_size=size.tiny)
+
+    // IBIT disabled warning / topping bias
     if ibit_override
-        table.cell(t, 0, 11, "⛔ IBIT", text_color=color.purple, text_size=size.tiny)
-        table.cell(t, 1, 11, "AB2 disabled — MIXED ctx unreliable on crypto-adjacent", text_color=color.purple, text_size=size.tiny)
+        table.cell(t, 0, 13, "⛔ IBIT", text_color=color.purple, text_size=size.tiny)
+        table.cell(t, 1, 13, "AB2 disabled — MIXED ctx unreliable on crypto-adjacent", text_color=color.purple, text_size=size.tiny)
+    else
+        table.cell(t, 0, 13, "Top Bias", text_color=color.gray, text_size=size.tiny)
+        table.cell(t, 1, 13, top_active ? "Directional bear credibility rising" : "No active topping cluster", text_color=top_clr, text_size=size.tiny)
 
 // ═══════════════════════════════════════════════════════════════
 // LEGEND
@@ -417,3 +476,5 @@ alertcondition(time_stop_warn and not time_stop_hit, title="AB2 — Time Stop Wa
     message="AB2 Time Stop: 80 bars elapsed in window. Review spread — exit within 10 bars.")
 alertcondition(time_stop_hit, title="AB2 — Time Stop Hit (90 bars)",
     message="AB2 Time Stop: 90-bar maximum reached. Close spread regardless of P&L.")
+alertcondition(top_active, title="AB2 — MSTR Topping Formation Active",
+    message="AB2 Topping Ladder: bearish topping formation active on MSTR. Tactical deterioration and directional bear credibility rising.")
