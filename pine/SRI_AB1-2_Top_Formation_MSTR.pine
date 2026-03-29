@@ -1,7 +1,7 @@
 // SRI AB1-2 Top Formation - MSTR
 // Dedicated MSTR-specific topping-formation indicator.
-// Green T  = topping begins
-// Yellow T = topping confirmed enough for AB1 tactical bearish monetization
+// Green T  = keep theta-centric short calls active; price likely capped under fast trackline
+// Yellow T = significant-drop risk rising; stronger / higher-delta call sales become viable
 // Red T    = topping mature enough for AB2 directional bearish credibility
 // © RizenShine — framework by CIO
 
@@ -69,6 +69,7 @@ bool bucket_lt_deterioration   = lt_sribi < nz(lt_sribi[1])
 // C — structure break / tactical failure
 bool bucket_st_break = close < st_ftl and st_ftl < nz(st_ftl[1])
 bool bucket_lt_fast_resistance = close < lt_ftl and lt_ftl < nz(lt_ftl[1])
+bool bucket_fastline_cap = close < st_ftl and high <= st_ftl * 1.01
 
 // D — support vacuum / downside release
 float support_gap_pct = close != 0 ? math.max(0.0, (close - vlt_ftl) / close * 100) : 0.0
@@ -82,34 +83,61 @@ bool bucket_roc_deterioration = vlt_roc < prev_vlt_roc and st_sribi < nz(st_srib
 // ═══════════════════════════════════════════════════════════════
 // SCORE + PHASE + VIABILITY
 // ═══════════════════════════════════════════════════════════════
-int top_score = 0
-if bucket_reject
-    top_score += 1
-if bucket_failed_reclaim
-    top_score += 1
+int green_score = 0
+if bucket_fastline_cap
+    green_score += 2
 if bucket_band_deterioration
-    top_score += 1
-if bucket_lt_deterioration
-    top_score += 1
-if bucket_st_break
-    top_score += 1
-if bucket_lt_fast_resistance
-    top_score += 1
-if bucket_support_vacuum
-    top_score += 2
+    green_score += 1
+if bucket_reject
+    green_score += 1
 if bucket_roc_deterioration
-    top_score += 2
+    green_score += 1
 
-string phase = top_score >= 7 ? "D" : top_score >= 5 ? "C" : top_score >= 3 ? "B" : top_score >= 1 ? "A" : "-"
-string status = top_score >= 7 ? "Red T active" : top_score >= 5 ? "Yellow T active" : top_score >= 3 ? "Green T active" : "Inactive"
-string conviction = top_score >= 7 ? "High" : top_score >= 5 ? "Medium" : top_score >= 3 ? "Low" : "None"
-string ab1_viable = top_score >= 5 ? "Yes" : top_score >= 3 ? "Watch" : "No"
-string ab2_viable = top_score >= 7 ? "Yes" : top_score >= 5 ? "Developing" : "No"
-string invalidation = str.format("Reclaim > {0}", str.tostring(lt_ftl, "#.##"))
+int yellow_score = 0
+if bucket_reject
+    yellow_score += 1
+if bucket_failed_reclaim
+    yellow_score += 1
+if bucket_band_deterioration
+    yellow_score += 1
+if bucket_st_break
+    yellow_score += 2
+if bucket_lt_fast_resistance
+    yellow_score += 1
+if bucket_roc_deterioration
+    yellow_score += 2
+if bucket_support_vacuum
+    yellow_score += 1
 
-bool green_t = top_score >= 3 and nz(top_score[1]) < 3
-bool yellow_t = top_score >= 5 and nz(top_score[1]) < 5
-bool red_t = top_score >= 7 and nz(top_score[1]) < 7
+int red_score = 0
+if bucket_st_break
+    red_score += 1
+if bucket_lt_fast_resistance
+    red_score += 1
+if bucket_lt_deterioration
+    red_score += 1
+if bucket_support_vacuum
+    red_score += 2
+if bucket_roc_deterioration
+    red_score += 2
+if bucket_failed_reclaim
+    red_score += 1
+
+bool green_state = green_score >= 3
+bool yellow_state = yellow_score >= 6
+bool red_state = red_score >= 7 and yellow_state
+
+int top_score = red_state ? red_score : yellow_state ? yellow_score : green_state ? green_score : 0
+string phase = red_state ? "D" : yellow_state ? "C" : green_state ? "A/B" : "-"
+string status = red_state ? "Red T active" : yellow_state ? "Yellow T active" : green_state ? "Green T active" : "Inactive"
+string conviction = red_state ? "High" : yellow_state ? "Medium" : green_state ? "Low" : "None"
+string ab1_viable = yellow_state ? "Yes" : green_state ? "Keep active" : "No"
+string ab2_viable = red_state ? "Yes" : yellow_state ? "Developing" : "No"
+string invalidation = str.format("Close > ST FTL {0}", str.tostring(st_ftl, "#.##"))
+
+bool green_t = green_state and not nz(green_state[1], false)
+bool yellow_t = yellow_state and not nz(yellow_state[1], false)
+bool red_t = red_state and not nz(red_state[1], false)
 
 // ═══════════════════════════════════════════════════════════════
 // PLOTS
@@ -142,7 +170,7 @@ if barstate.islast and show_table
     table.cell(t, 0, 2, "Conviction", text_color=color.gray, text_size=size.tiny)
     table.cell(t, 1, 2, str.format("{0} ({1})", conviction, str.tostring(top_score)), text_color=val_clr, text_size=size.tiny)
     table.cell(t, 0, 3, "AB1", text_color=color.gray, text_size=size.tiny)
-    table.cell(t, 1, 3, ab1_viable, text_color=ab1_viable == "Yes" ? color.yellow : ab1_viable == "Watch" ? color.orange : color.gray, text_size=size.tiny)
+    table.cell(t, 1, 3, ab1_viable, text_color=ab1_viable == "Yes" ? color.yellow : ab1_viable == "Keep active" ? color.green : color.gray, text_size=size.tiny)
     table.cell(t, 0, 4, "AB2", text_color=color.gray, text_size=size.tiny)
     table.cell(t, 1, 4, ab2_viable, text_color=ab2_viable == "Yes" ? color.red : ab2_viable == "Developing" ? color.orange : color.gray, text_size=size.tiny)
     table.cell(t, 0, 5, "Invalidation", text_color=color.gray, text_size=size.tiny)
@@ -151,6 +179,6 @@ if barstate.islast and show_table
 // ═══════════════════════════════════════════════════════════════
 // ALERTS
 // ═══════════════════════════════════════════════════════════════
-alertcondition(green_t, title="AB1-2 MSTR — Green T", message="AB1-2 MSTR: topping formation begins (Green T). Early warning only.")
-alertcondition(yellow_t, title="AB1-2 MSTR — Yellow T", message="AB1-2 MSTR: topping formation confirmed enough for AB1 viability (Yellow T).")
-alertcondition(red_t, title="AB1-2 MSTR — Red T", message="AB1-2 MSTR: topping formation mature enough for AB2 viability (Red T).")
+alertcondition(green_t, title="AB1-2 MSTR — Green T", message="AB1-2 MSTR: keep theta-centric short calls active. Price likely capped under fast trackline (Green T).")
+alertcondition(yellow_t, title="AB1-2 MSTR — Yellow T", message="AB1-2 MSTR: significant-drop risk rising. Stronger / higher-delta call sales become viable (Yellow T).")
+alertcondition(red_t, title="AB1-2 MSTR — Red T", message="AB1-2 MSTR: topping formation mature enough for AB2 directional bearish credibility (Red T).")
