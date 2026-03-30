@@ -15,7 +15,8 @@
 | **Max notional per position** | **5% of portfolio** (GLD: 3%) |
 | **IV gate (at execution)** | >70th pctl → prefer spreads (sell premium); <30th pctl → prefer long puts |
 | **Conflicting regime** | Check Howell phase before entry for TSLA (blocked in Turbulence) |
-| **MSTR** | Routed to **Expression 3** — do not enter independently |
+| **MSTR** | Use primarily for **theta / PMCC / premium-harvest management**; do not treat as default direct AB2 directional vehicle |
+| **BTC / IBIT** | Preferred directional-expression layer when signal quality is cleaner than on MSTR |
 
 **Entry hierarchy:** CONFIRMED → trade eligible. CONFIRMED_PLUS → elevated conviction, same instrument, potentially larger notional (within 5% cap).
 
@@ -39,10 +40,10 @@
 - 45-60 DTE preferred: enough theta buffer; not so long that reversals erase premium.
 
 **BTC_CORRELATED (IBIT)**  
-- Instrument: Long put LEAP (90-120 DTE).  
-- AB1-style sizing applies — treat as a tactical LEAP entry in bearish direction.  
+- Instrument: Primary candidate for **clean directional BTC-linked expression** when AB2-style bearish conviction is present.  
+- Default structure remains long put LEAP (90-120 DTE) in this v1 spec, but future revisions may broaden to other delta-heavy structures when signal quality validates more cleanly than on MSTR.  
 - IBIT options have wider bid/ask spreads than SPY — factor spread cost into break-even calculation.  
-- Entry only when OBV primary shows bearish divergence (BTC-correlated top confirmation).
+- Strategic rationale: prefer IBIT when directional signal quality appears cleaner than MSTR, which can be distorted by dilution, preferred issuance, mNAV behavior, and equity reflexivity.
 
 **MR (SPY, QQQ, IWM)**  
 - Instrument: Debit put spread (OTM 5-10%).  
@@ -59,7 +60,12 @@
 
 ## 3. Integration with Expression 3 (MSTR)
 
-**MSTR is not traded directly through the P-BEAR directional playbook.** When MSTR reaches P-BEAR CONFIRMED, the signal feeds into Expression 3 eligibility scoring:
+**MSTR is not the default direct directional vehicle in the P-BEAR playbook.** Under the updated execution architecture, MSTR should be treated primarily as a **theta / PMCC / premium-harvest instrument**. When MSTR reaches P-BEAR CONFIRMED, the signal should first be interpreted as:
+- a warning about MSTR-specific premium / short-call posture,
+- a possible input into Expression 3,
+- and a possible confirmation that directional expression may belong in **BTC / IBIT** rather than in standalone MSTR bearish delta structures.
+
+When MSTR reaches P-BEAR CONFIRMED, the signal feeds into Expression 3 eligibility scoring:
 
 | Expression 3 Condition | Source |
 |---|---|

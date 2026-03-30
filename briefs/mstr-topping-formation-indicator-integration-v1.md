@@ -60,10 +60,12 @@ This is the critical design rule.
 ## AB1 goal
 AB1 should become more sensitive to **early tactical topping formation pressure**.
 
+Under the updated execution architecture, AB1 on **MSTR** should be interpreted primarily as a **theta-management / premium-sale layer**, not as a pure directional oracle.
+
 It should answer:
 - is a local top forming?
-- is the short-horizon bearish reversal becoming actionable?
-- is there enough downside path to monetize tactically?
+- is the short-horizon bearish reversal becoming actionable for **call-sale / theta monetization**?
+- is there enough capped-downside path to monetize tactically without assuming MSTR is the cleanest direct delta vehicle?
 
 ## AB2 goal
 AB2 should only upgrade when the topping formation has progressed into **directional bearish credibility**.
