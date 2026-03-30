@@ -143,18 +143,20 @@ bool downside_extension_not_extreme = recent_drop_pct < 9.0 and dist_below_ftl_p
 bool climactic_flush = ((open - close) / close * 100 > 4.5) and ((high - low) / close * 100 > 6.0)
 bool not_too_late = downside_extension_not_extreme and not climactic_flush
 
-bool fresh_tactical_failure = bucket_failed_reclaim or bucket_st_break or (bucket_fastline_cap and close < nz(close[1]))
-bool fresh_rollover = bucket_roc_deterioration or histogram_turn_down or bucket_band_deterioration
-bool ab1_state = theta_regime and fresh_tactical_failure and fresh_rollover and not_too_late and yellow_score >= 4
+bool early_failed_reclaim = close < st_ftl and high >= st_ftl and close <= open
+bool early_break_pressure = close < st_ftl and close < nz(close[1]) and st_ftl <= nz(st_ftl[1])
+bool early_rollover = bucket_roc_deterioration or histogram_turn_down
+bool early_not_extended = recent_drop_pct < 6.5 and dist_below_ftl_pct < 4.0
+bool ab1_state = theta_regime and (early_failed_reclaim or early_break_pressure) and early_rollover and early_not_extended
 
 bool stronger_bearish_pressure = bucket_support_vacuum or bucket_lt_deterioration or bucket_lt_fast_resistance
-bool oversold_bounce_risk = recent_drop_pct > 11.0 or dist_below_ftl_pct > 8.0
-bool ab2_state = ab1_state and stronger_bearish_pressure and not oversold_bounce_risk and red_score >= 3
+bool red_not_exhausted = recent_drop_pct < 9.5 and dist_below_ftl_pct < 6.0
+bool ab2_state = ab1_state and stronger_bearish_pressure and red_not_exhausted and red_score >= 2
 
-bool exhaustion_extension = recent_drop_pct > 8.0 or dist_below_ftl_pct > 5.0
-bool downside_decelerating = hist > nz(hist[1]) or vlt_roc > nz(vlt_roc[1])
-bool flush_reversal_bar = ((close - low) / math.max(high - low, syminfo.mintick)) > 0.55 and close > open
-bool b_exhaust_state = theta_regime and exhaustion_extension and downside_decelerating and (flush_reversal_bar or close > nz(close[1]))
+bool exhaustion_extension = recent_drop_pct > 6.5 or dist_below_ftl_pct > 4.5
+bool downside_decelerating = hist > nz(hist[1]) or vlt_roc > nz(vlt_roc[1]) or close > nz(close[1])
+bool flush_reversal_bar = ((close - low) / math.max(high - low, syminfo.mintick)) > 0.55 and close >= open
+bool b_exhaust_state = theta_regime and exhaustion_extension and downside_decelerating and (flush_reversal_bar or close > nz(close[1]) or yellow_score >= 4)
 
 int top_score = ab2_state ? red_score : ab1_state ? yellow_score : theta_regime ? green_score : 0
 string phase = ab2_state ? "RED" : ab1_state ? "YELLOW" : theta_regime ? "GREEN" : "-"
