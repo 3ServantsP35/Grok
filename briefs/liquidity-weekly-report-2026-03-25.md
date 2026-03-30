@@ -1,5 +1,5 @@
 # CIO Weekly Liquidity Report
-**Date:** 2026-03-25 | **Scope:** Global liquidity outlook through year-end 2026 | **Status:** Base-case macro projection
+**Date:** 2026-03-29 refresh of 2026-03-25 brief | **Scope:** Global liquidity outlook through year-end 2026 | **Status:** Base-case macro projection refreshed from latest CSV set
 
 ---
 
@@ -20,7 +20,8 @@ For Bitcoin, that implies:
 
 ## Current Snapshot
 
-**Pull time:** 2026-03-25 12:10 UTC / 8:10 AM ET
+**Refresh check:** Latest CSV set confirmed present in local repo after GitHub sync on 2026-03-29.
+**Original pull time for live quote snapshot:** 2026-03-25 12:10 UTC / 8:10 AM ET
 
 | Asset | Level | Source |
 |---|---:|---|

@@ -60,6 +60,8 @@ Think of it like renting out a parking space while you wait for your beach house
 
 **What AB1 is NOT:** AB1 does not use 2-year LEAPs or directional conviction plays. It is purely about harvesting time decay from the current market conditions.
 
+**New MSTR-specific note:** For MSTR, AB1 also benefits from a new concept called the **MSTR Topping Formation Ladder**. This is a simple way of saying: when a local top seems to be forming, the engine should not wait for one perfect signal. It should look for groups of warning signs — rejection at resistance, internal weakening, short-term structure breaking, and not enough nearby support underneath price. That is the kind of setup that can make short call sales or other tactical income trades more attractive.
+
 > **Analogy:** AB1 is like a food truck that parks outside your construction site and sells lunch every day. Small tickets, high volume, consistent cash. The construction itself (AB3) is the big project — the food truck just keeps the cash flowing while you wait.
 
 ---
@@ -80,6 +82,8 @@ These are not frequent. AB2 fires maybe once per quarter, when the evidence is o
 - **Non-negotiable rule:** No naked shorts. Every short option leg has a defined hedge. Always.
 
 **What AB2 is NOT:** AB2 is not routine income. It is not a weekly activity. It fires when the engine has high conviction, not when the market is merely interesting.
+
+**New MSTR-specific note:** The new **MSTR Topping Formation Ladder** should make AB2 more disciplined. AB2 should not react to the first sign of weakness. It should only become interested when the topping process has moved beyond early warning and into a more directionally credible bearish reversal — especially when broader structure is failing and meaningful support is still too far away to stop the move quickly.
 
 > **Analogy:** AB2 is like placing a substantial bet on a horse race — not because you bet on every race, but because you've studied this particular race, this track, this weather, and you've found something the market is mispricing. You bet meaningfully when the edge is real. You watch otherwise.
 

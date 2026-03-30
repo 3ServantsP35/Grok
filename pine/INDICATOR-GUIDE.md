@@ -1177,6 +1177,26 @@ This means the two indicators are **complementary, not redundant**.
 - **Original FF bearish + ROC rising** → bearish regime under repair; reduce urgency but do not front-run a full reversal.
 - **Original FF bearish + ROC falling** → bearish and worsening; highest confidence defensive posture.
 
+#### MSTR Topping Formation Ladder v1 — integration rule
+
+For MSTR, Force Field ROC should now also be read inside the **MSTR Topping Formation Ladder v1**:
+- **Phase A — Rejection / Exhaustion**
+- **Phase B — Deterioration / Compression Collapse**
+- **Phase C — Structure Break / Tactical Failure**
+- **Phase D — Support Vacuum / Downside Release**
+
+The important change is that the ladder is made of **phases**, while the underlying chart signals are treated as **non-sequential, role-based, weighted confirmation evidence**.
+
+**Why this matters:**
+FF ROC should no longer be treated as a generic supporting diagnostic. For MSTR topping formations, it should act as a **tactical override input** when structural bullish remnants still exist but short-term deterioration is accelerating.
+
+**Required tactical rule:**
+> When higher-timeframe bullish structure remains technically alive, but ST/LT deterioration cluster is active and meaningful support is too far away, tactical topping-formation signals take priority over residual bullish structure.
+
+This is especially important for:
+- **AB1** tactical bearish monetization (for example, call-sale timing against LEAPs)
+- **AB2** bearish directional credibility after broader structure failure is underway
+
 **Why the ROC version matters:**
 The original Force Field correctly identifies the **state** (for example, `F_net` remains positive), but it can understate the most important new information: whether that positive force is **strengthening or fading**. The ROC layer captures the difference between:
 - **bullish and accelerating**

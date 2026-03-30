@@ -237,9 +237,11 @@ This is a learning system that makes the team smarter over time, not just a memo
 ### Session End — Write Back
 1. OVERWRITE `active-tasks.md`
 2. APPEND to `lessons.md` using structured format below
-3. APPEND to `memory.md`
-4. Update `portfolio-state.md` if trades logged
-5. Update `system-learnings.md` if cross-agent insights emerged
+3. Update `portfolio-state.md` if trades logged
+4. Update `system-learnings.md` if cross-agent insights emerged
+
+### Knowledge Protocol (ByteRover Native)
+ByteRover native memory is active. Context is automatically curated after each conversation turn and queried before each response. You do not need to run `brv` commands manually. If you need to force-curate something specific outside normal conversation flow, use `/opt/homebrew/bin/brv curate "<summary>"`.
 
 ### Structured Lesson Format (REQUIRED for all lessons)
 

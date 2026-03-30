@@ -19,7 +19,7 @@
 | P10 | Trend Line Engine | 🟡 Live prototype tested; resistance-line analysis now in active use | CIO |
 | P11 | STRC Spread Monitor | ✅ Retired — scope absorbed into P-FF | CIO |
 | P12 | Python Decision Engine | ✅ Phase 1+2 Complete | CIO |
-| P13 | Trade Journal | 🟡 Schema defined — queued | CIO |
+| P13 | Recommendation Performance Journal | 🔴 HIGH — reporting redesign for trade recommendation + price prediction performance | CIO |
 | P14 | Bearish Bias Indicator Suite | ✅ Retired — scope superseded by P-DOI | Gavin |
 | P-BEAR | Bearish Signal & Adjustment Architecture | ✅ All phases complete | CIO |
 | P-HOWELL | Howell Phase Engine | ✅ Complete — Live | CIO |

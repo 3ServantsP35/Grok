@@ -675,6 +675,34 @@ This signal is named `BREADTH_DIVERGENCE` in the system.
 | Speculation | Reduce max_delta by 0.05 on all Equity/Cyclical assets |
 | Turbulence | **PAUSE AB2** across all assets — preserve LEAP optionality |
 
+### 6b.5a MSTR Topping Formation Ladder v1 (new topping-formation framework)
+
+For MSTR specifically, bearish reversal / local-top analysis should no longer rely on a rigid ordered signal ladder. Instead, use the **MSTR Topping Formation Ladder v1**:
+
+- **Phase A — Rejection / Exhaustion**
+- **Phase B — Deterioration / Compression Collapse**
+- **Phase C — Structure Break / Tactical Failure**
+- **Phase D — Support Vacuum / Downside Release**
+
+The key design rule is:
+- **the ladder is made of phases**
+- **the signals inside each phase are non-sequential, role-based, weighted confirmation evidence**
+
+This framework exists to improve local-top detection and bearish reversal timing, especially for MSTR AB1 tactical monetization and later AB2 directional bearish credibility.
+
+### 6b.5b AB1 / AB2 mapping under the topping ladder
+
+- **AB1** should respond earlier, typically during late Phase B or Phase C, when tactical deterioration is already tradable even if higher-timeframe bullish structure is not fully broken.
+- **AB2** should require broader confirmation, typically when Phase C or D is active and LT deterioration / failed reclaim behavior make the bearish reversal directionally credible.
+
+### 6b.5c Tactical override rule
+
+A required interpretation rule for MSTR:
+
+> When higher-timeframe bullish structure remains technically alive, but ST/LT deterioration cluster is active and meaningful support is too far away, tactical topping-formation signals take priority over residual bullish structure.
+
+This rule is specifically meant to prevent missing local tops because isolated LT/VLT bullish remnants still exist while tactical deterioration is already dominant.
+
 ### 6b.6 The Turbulence → Rebound Transition (Primary AB3 Signal for Beta Assets)
 
 In Howell's framework, Beta/Risk On assets (MSTR, IBIT) are the **first to recover** at the beginning of Rebound — they lead the rotation out of Turbulence. This is consistent with BTC historically leading global risk-on recoveries.

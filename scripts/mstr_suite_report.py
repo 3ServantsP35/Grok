@@ -79,15 +79,20 @@ def load_env():
 
 
 def resolve_csv_path(key: str):
-    """Resolve newest matching CSV from mounted data dir or local repo fallback."""
+    """Resolve newest matching CSV from mounted data dir or local repo fallback.
+
+    TradingView exports can arrive in batches, and filesystem mtimes are not always
+    reliable across copies/syncs. Prefer the lexicographically latest matching file
+    name after de-duplication, which aligns with the hash-suffixed upload pattern.
+    """
     patterns = SUITE_PATTERNS[key]
     matches = []
     for pat in patterns:
         matches.extend(glob.glob(pat))
     if not matches:
         return None
-    matches = sorted(matches, key=lambda x: os.path.getmtime(x), reverse=True)
-    return matches[0]
+    matches = sorted(set(matches))
+    return matches[-1]
 
 
 def load_csv(key: str):
