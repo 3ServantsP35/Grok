@@ -1,8 +1,9 @@
 // SRI AB1-2 Top Formation - MSTR
-// Dedicated MSTR-specific topping-formation indicator.
-// Green T  = keep theta-centric short calls active; price likely capped under fast trackline
-// Yellow T = significant-drop risk rising; stronger / higher-delta call sales become viable
-// Red T    = topping mature enough for AB2 directional bearish credibility
+// Dedicated MSTR-specific bearish-theta utility indicator for MSTR.
+// Green T  = keep conservative theta-centric short calls active; price likely capped
+// Yellow T = upgraded AB1 bearish income opportunity with room left to monetize
+// Red T    = strongest bearish-theta posture this indicator should authorize
+// B        = local bearish move exhaustion; consider close/reduce short calls
 // © RizenShine — framework by CIO
 
 //@version=6
@@ -24,6 +25,7 @@ bool show_slow_trackline = input.bool(false, "Show Slow Trackline", group=grp_di
 bool show_green_t = input.bool(true, "Show Green T", group=grp_disp)
 bool show_yellow_t = input.bool(true, "Show Yellow T", group=grp_disp)
 bool show_red_t = input.bool(true, "Show Red T", group=grp_disp)
+bool show_b_exhaust = input.bool(true, "Show B Exhaustion", group=grp_disp)
 
 // ═══════════════════════════════════════════════════════════════
 // TRACKLINES + SRIBI
@@ -133,24 +135,40 @@ if bucket_failed_reclaim
     red_score += 1
 
 bool theta_regime = green_score >= 3
-bool ab1_state = theta_regime and bucket_st_break and bucket_roc_deterioration and (bucket_failed_reclaim or bucket_lt_fast_resistance) and yellow_score >= 6
-bool second_leg_pressure = close < nz(close[1]) and nz(close[1]) < nz(close[2])
-bool failed_bounce = close < st_ftl and high < nz(high[1]) and close < open
-bool red_structural_cluster = (hist < 0) and (loi < -20) and (vlt_sribi < 0) and (close < st_ftl)
-bool ab2_state = ab1_state and red_structural_cluster and red_score >= 4
+
+float recent_drop_pct = close != 0 ? math.max(0.0, (ta.highest(high, 5) - close) / close * 100) : 0.0
+float dist_below_ftl_pct = close != 0 ? math.max(0.0, (st_ftl - close) / close * 100) : 0.0
+bool histogram_turn_down = hist < nz(hist[1]) and nz(hist[1]) < nz(hist[2])
+bool downside_extension_not_extreme = recent_drop_pct < 9.0 and dist_below_ftl_pct < 6.0
+bool climactic_flush = ((open - close) / close * 100 > 4.5) and ((high - low) / close * 100 > 6.0)
+bool not_too_late = downside_extension_not_extreme and not climactic_flush
+
+bool fresh_tactical_failure = bucket_failed_reclaim or bucket_st_break or (bucket_fastline_cap and close < nz(close[1]))
+bool fresh_rollover = bucket_roc_deterioration or histogram_turn_down or bucket_band_deterioration
+bool ab1_state = theta_regime and fresh_tactical_failure and fresh_rollover and not_too_late and yellow_score >= 4
+
+bool stronger_bearish_pressure = bucket_support_vacuum or bucket_lt_deterioration or bucket_lt_fast_resistance
+bool oversold_bounce_risk = recent_drop_pct > 11.0 or dist_below_ftl_pct > 8.0
+bool ab2_state = ab1_state and stronger_bearish_pressure and not oversold_bounce_risk and red_score >= 3
+
+bool exhaustion_extension = recent_drop_pct > 8.0 or dist_below_ftl_pct > 5.0
+bool downside_decelerating = hist > nz(hist[1]) or vlt_roc > nz(vlt_roc[1])
+bool flush_reversal_bar = ((close - low) / math.max(high - low, syminfo.mintick)) > 0.55 and close > open
+bool b_exhaust_state = theta_regime and exhaustion_extension and downside_decelerating and (flush_reversal_bar or close > nz(close[1]))
 
 int top_score = ab2_state ? red_score : ab1_state ? yellow_score : theta_regime ? green_score : 0
-string phase = ab2_state ? "AB2" : ab1_state ? "AB1" : theta_regime ? "THETA" : "-"
-string status = ab2_state ? "AB2 bearish conviction regime" : ab1_state ? "AB1 tactical short-call regime" : theta_regime ? "Theta-active cap regime" : "Inactive"
-string conviction = ab2_state ? "Entry viable" : ab1_state ? "Entry viable" : theta_regime ? "Keep active" : "No"
+string phase = ab2_state ? "RED" : ab1_state ? "YELLOW" : theta_regime ? "GREEN" : "-"
+string status = ab2_state ? "Maximum bearish theta posture" : ab1_state ? "AB1 bearish income opportunity" : theta_regime ? "Theta-active cap regime" : "Inactive"
+string conviction = ab2_state ? "Press harder" : ab1_state ? "Entry viable" : theta_regime ? "Keep active" : "No"
 string ab1_viable = ab1_state ? "Entry viable" : theta_regime ? "Keep active" : "No"
-string ab2_viable = ab2_state ? "Entry viable" : ab1_state ? "Developing" : "No"
-string delta_posture = ab2_state ? "Aggressive (~70Δ or lower)" : ab1_state ? "Moderate (~30Δ or lower)" : theta_regime ? "Conservative (~20Δ or lower)" : "None"
-string invalidation = ab2_state or ab1_state ? str.format("Close > ST FTL {0}", str.tostring(st_ftl, "#.##")) : str.format("Reclaim ST FTL {0}", str.tostring(st_ftl, "#.##"))
+string ab2_viable = ab2_state ? "External context" : ab1_state ? "Use stage / TLs" : "No"
+string delta_posture = ab2_state ? "Aggressive theta posture" : ab1_state ? "Moderate (~30Δ or lower)" : theta_regime ? "Conservative (~20Δ or lower)" : "None"
+string invalidation = b_exhaust_state ? "Consider close/reduce short calls" : ab2_state or ab1_state ? str.format("Close > ST FTL {0}", str.tostring(st_ftl, "#.##")) : str.format("Reclaim ST FTL {0}", str.tostring(st_ftl, "#.##"))
 
 bool green_t = theta_regime and not (bar_index > 0 and theta_regime[1])
 bool yellow_t = ab1_state and not (bar_index > 0 and ab1_state[1])
 bool red_t = ab2_state and not (bar_index > 0 and ab2_state[1])
+bool b_exhaust = b_exhaust_state and not (bar_index > 0 and b_exhaust_state[1])
 
 // ═══════════════════════════════════════════════════════════════
 // PLOTS
@@ -166,11 +184,14 @@ plotshape(show_yellow_t and yellow_t, title="Yellow T", text="T", style=shape.la
      color=color.new(color.yellow, 0), textcolor=color.black, size=size.small)
 plotshape(show_red_t and red_t, title="Red T", text="T", style=shape.labeldown, location=location.abovebar,
      color=color.new(color.red, 0), textcolor=color.white, size=size.small)
+plotshape(show_b_exhaust and b_exhaust, title="B Exhaust", text="B", style=shape.labelup, location=location.belowbar,
+     color=color.new(color.aqua, 0), textcolor=color.black, size=size.small)
 
 // Explicit numeric export series for CSV/backtesting fidelity
 plot(green_t ? 1 : 0, title="Green T Export", display=display.none)
 plot(yellow_t ? 1 : 0, title="Yellow T Export", display=display.none)
 plot(red_t ? 1 : 0, title="Red T Export", display=display.none)
+plot(b_exhaust ? 1 : 0, title="B Exhaust Export", display=display.none)
 
 // ═══════════════════════════════════════════════════════════════
 // TABLE
@@ -199,6 +220,7 @@ if barstate.islast and show_table
 // ═══════════════════════════════════════════════════════════════
 // ALERTS
 // ═══════════════════════════════════════════════════════════════
-alertcondition(green_t, title="AB1-2 MSTR — Green T", message="AB1-2 MSTR: keep theta-centric short calls active. Price likely capped under fast trackline (Green T).")
-alertcondition(yellow_t, title="AB1-2 MSTR — Yellow T", message="AB1-2 MSTR: significant-drop risk rising. Stronger / higher-delta call sales become viable (Yellow T).")
-alertcondition(red_t, title="AB1-2 MSTR — Red T", message="AB1-2 MSTR: topping formation mature enough for AB2 directional bearish credibility (Red T).")
+alertcondition(green_t, title="AB1-2 MSTR — Green T", message="AB1-2 MSTR: conservative bearish theta regime active. Keep short calls active (Green T).")
+alertcondition(yellow_t, title="AB1-2 MSTR — Yellow T", message="AB1-2 MSTR: upgraded AB1 bearish income opportunity with room left to monetize (Yellow T).")
+alertcondition(red_t, title="AB1-2 MSTR — Red T", message="AB1-2 MSTR: strongest bearish theta posture this indicator should authorize (Red T).")
+alertcondition(b_exhaust, title="AB1-2 MSTR — B Exhaust", message="AB1-2 MSTR: local bearish move likely exhausted; consider closing or reducing short calls (B).")
