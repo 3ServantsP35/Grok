@@ -143,13 +143,20 @@ bool downside_extension_not_extreme = recent_drop_pct < 9.0 and dist_below_ftl_p
 bool climactic_flush = ((open - close) / close * 100 > 4.5) and ((high - low) / close * 100 > 6.0)
 bool not_too_late = downside_extension_not_extreme and not climactic_flush
 
+// Light stage proxy for Yellow sensitivity tuning
+bool stage4_proxy = close < lt_ftl and lt_ftl < nz(lt_ftl[1]) and lt_sribi < 0
+bool stage2_proxy = close > st_ftl and st_ftl > nz(st_ftl[1]) and st_sribi > 0
+bool stage1_proxy = close < lt_ftl and st_ftl > nz(st_ftl[1])
+bool stage3_proxy = not stage4_proxy and not stage2_proxy and not stage1_proxy
+int yellow_stage_threshold = stage4_proxy ? 2 : stage2_proxy ? 4 : 3
+
 bool early_failed_reclaim = close < st_ftl and high >= st_ftl and close <= open
 bool rejection_at_cap = high >= st_ftl and close < st_ftl and close < open and close >= low + (high - low) * 0.35
 bool weak_bounce_rollover = high >= st_ftl and close < st_ftl and close <= nz(close[1])
 bool early_rejection_cluster = early_failed_reclaim or rejection_at_cap or weak_bounce_rollover
 bool early_rollover = bucket_roc_deterioration or histogram_turn_down or bucket_band_deterioration
-bool early_not_extended = recent_drop_pct < 7.0 and dist_below_ftl_pct < 4.0
-bool ab1_state = theta_regime and early_rejection_cluster and early_rollover and early_not_extended
+bool early_not_extended = stage4_proxy ? (recent_drop_pct < 8.0 and dist_below_ftl_pct < 4.5) : stage2_proxy ? (recent_drop_pct < 5.0 and dist_below_ftl_pct < 2.5) : (recent_drop_pct < 6.5 and dist_below_ftl_pct < 3.5)
+bool ab1_state = theta_regime and early_rejection_cluster and early_rollover and early_not_extended and yellow_score >= yellow_stage_threshold
 
 bool stronger_bearish_pressure = bucket_lt_deterioration or bucket_lt_fast_resistance or (bucket_st_break and bucket_roc_deterioration)
 bool ab2_state = false
