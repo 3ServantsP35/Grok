@@ -144,14 +144,16 @@ bool climactic_flush = ((open - close) / close * 100 > 4.5) and ((high - low) / 
 bool not_too_late = downside_extension_not_extreme and not climactic_flush
 
 bool early_failed_reclaim = close < st_ftl and high >= st_ftl and close <= open
-bool early_break_pressure = close < st_ftl and close < nz(close[1]) and st_ftl <= nz(st_ftl[1])
+bool rejection_at_cap = high >= st_ftl and close < st_ftl and close < open and close >= low + (high - low) * 0.35
+bool weak_bounce_rollover = close > nz(close[1]) and close < high and high >= st_ftl and close < st_ftl
+bool early_rejection_cluster = early_failed_reclaim or rejection_at_cap or weak_bounce_rollover
 bool early_rollover = bucket_roc_deterioration or histogram_turn_down
-bool early_not_extended = recent_drop_pct < 6.5 and dist_below_ftl_pct < 4.0
-bool ab1_state = theta_regime and (early_failed_reclaim or early_break_pressure) and early_rollover and early_not_extended
+bool early_not_extended = recent_drop_pct < 5.0 and dist_below_ftl_pct < 3.0
+bool ab1_state = theta_regime and early_rejection_cluster and early_rollover and early_not_extended
 
-bool stronger_bearish_pressure = bucket_support_vacuum or bucket_lt_deterioration or bucket_lt_fast_resistance
-bool red_not_exhausted = recent_drop_pct < 9.5 and dist_below_ftl_pct < 6.0
-bool ab2_state = ab1_state and stronger_bearish_pressure and red_not_exhausted and red_score >= 2
+bool stronger_bearish_pressure = bucket_lt_deterioration or bucket_lt_fast_resistance or (bucket_st_break and bucket_roc_deterioration)
+bool red_not_exhausted = recent_drop_pct < 7.5 and dist_below_ftl_pct < 4.5
+bool ab2_state = ab1_state and stronger_bearish_pressure and red_not_exhausted
 
 bool exhaustion_extension = recent_drop_pct > 6.5 or dist_below_ftl_pct > 4.5
 bool downside_decelerating = hist > nz(hist[1]) or vlt_roc > nz(vlt_roc[1]) or close > nz(close[1])
