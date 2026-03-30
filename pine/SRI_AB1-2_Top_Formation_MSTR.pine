@@ -167,6 +167,11 @@ plotshape(show_yellow_t and yellow_t, title="Yellow T", text="T", style=shape.la
 plotshape(show_red_t and red_t, title="Red T", text="T", style=shape.labeldown, location=location.abovebar,
      color=color.new(color.red, 0), textcolor=color.white, size=size.small)
 
+// Explicit numeric export series for CSV/backtesting fidelity
+plot(green_t ? 1 : 0, title="Green T Export", display=display.none)
+plot(yellow_t ? 1 : 0, title="Yellow T Export", display=display.none)
+plot(red_t ? 1 : 0, title="Red T Export", display=display.none)
+
 // ═══════════════════════════════════════════════════════════════
 // TABLE
 // ═══════════════════════════════════════════════════════════════
