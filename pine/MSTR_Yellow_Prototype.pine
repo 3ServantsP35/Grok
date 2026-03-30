@@ -1,0 +1,39 @@
+//@version=6
+indicator("MSTR Yellow Prototype", shorttitle="MSTR Y Proto", overlay=true, max_labels_count=200)
+
+int at_period = input.int(14, "Trackline ATR Period")
+float at_coeff = input.float(1.0, "Trackline ATR Coefficient")
+
+f_trackline(int period, float coeff) =>
+    atr = ta.rma(ta.tr(true), period)
+    upT = low - atr * coeff
+    dnT = high + atr * coeff
+    cond = ta.rsi(close, period) >= 50
+    var float track = 0.0
+    track := cond ? math.max(upT, nz(track[1])) : math.min(dnT, nz(track[1]))
+    track
+
+float st_ftl = request.security(syminfo.tickerid, "240", f_trackline(at_period, at_coeff))
+float lt_ftl = request.security(syminfo.tickerid, "240", f_trackline(at_period, at_coeff))
+float lt_stl = request.security(syminfo.tickerid, "W", f_trackline(at_period, at_coeff))
+float lt_sribi = lt_stl != 0 ? (lt_ftl - lt_stl) / lt_stl * 100 : 0
+
+float recent_drop_pct = close != 0 ? math.max(0.0, (ta.highest(high, 5) - close) / close * 100) : 0.0
+bool near_cap = math.abs(close - st_ftl) / math.max(close, syminfo.mintick) * 100 < 2.5 or high >= st_ftl
+bool failed_repair = close < st_ftl and high >= st_ftl and close < open
+bool lower_high = high < nz(high[1]) and nz(high[1]) <= ta.highest(high, 4)[1]
+bool weak_bounce = close <= nz(close[1]) and high >= st_ftl and close < st_ftl
+bool prebreak_cluster = near_cap and (failed_repair or lower_high or weak_bounce)
+
+float lt_sribi_roc = lt_sribi - nz(lt_sribi[3])
+bool early_rollover = lt_sribi_roc < 0 or close < nz(close[1])
+bool not_extended = recent_drop_pct < 5.0
+bool stage4_bias = close < lt_ftl and lt_ftl < nz(lt_ftl[1]) and lt_sribi < 0
+
+bool yellow_setup = prebreak_cluster and early_rollover and not_extended and (stage4_bias or failed_repair)
+bool yellow_t = yellow_setup and not yellow_setup[1]
+
+plot(st_ftl, "Fast Trackline", color=color.new(color.orange, 0), linewidth=2)
+plotshape(yellow_t, title="Yellow T", text="Y", style=shape.labeldown, location=location.abovebar,
+     color=color.new(color.yellow, 0), textcolor=color.black, size=size.small)
+plot(yellow_t ? 1 : 0, title="Yellow Export", display=display.none)

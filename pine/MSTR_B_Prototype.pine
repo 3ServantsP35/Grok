@@ -1,0 +1,32 @@
+//@version=6
+indicator("MSTR B Prototype", shorttitle="MSTR B Proto", overlay=true, max_labels_count=200)
+
+int at_period = input.int(14, "Trackline ATR Period")
+float at_coeff = input.float(1.0, "Trackline ATR Coefficient")
+
+f_trackline(int period, float coeff) =>
+    atr = ta.rma(ta.tr(true), period)
+    upT = low - atr * coeff
+    dnT = high + atr * coeff
+    cond = ta.rsi(close, period) >= 50
+    var float track = 0.0
+    track := cond ? math.max(upT, nz(track[1])) : math.min(dnT, nz(track[1]))
+    track
+
+float st_ftl = request.security(syminfo.tickerid, "240", f_trackline(at_period, at_coeff))
+float recent_drop_pct = close != 0 ? math.max(0.0, (ta.highest(high, 6) - close) / close * 100) : 0.0
+float dist_below_ftl_pct = close != 0 ? math.max(0.0, (st_ftl - close) / close * 100) : 0.0
+
+bool extension_present = recent_drop_pct > 7.0 or dist_below_ftl_pct > 4.5
+bool strong_close_off_lows = ((close - low) / math.max(high - low, syminfo.mintick)) > 0.65 and close >= open
+bool rebound_bar = close > nz(close[1]) and low >= nz(low[1])
+bool failed_new_low = low < nz(low[1]) and close > nz(close[1])
+bool reclaim_attempt = close > nz(close[1]) and close > low + (high - low) * 0.6
+
+bool b_setup = extension_present and ((strong_close_off_lows and rebound_bar) or (failed_new_low and reclaim_attempt))
+bool b_exhaust = b_setup and not b_setup[1]
+
+plot(st_ftl, "Fast Trackline", color=color.new(color.aqua, 0), linewidth=2)
+plotshape(b_exhaust, title="B Exhaust", text="B", style=shape.labelup, location=location.belowbar,
+     color=color.new(color.aqua, 0), textcolor=color.black, size=size.small)
+plot(b_exhaust ? 1 : 0, title="B Export", display=display.none)
