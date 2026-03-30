@@ -173,8 +173,8 @@ string phase = b_exhaust_state ? "B" : ab1_state ? "YELLOW" : theta_regime ? "GR
 string status = b_exhaust_state ? "Local downside likely exhausted" : ab1_state ? "AB1 bearish income opportunity" : theta_regime ? "Theta-active cap regime" : "Inactive"
 string conviction = b_exhaust_state ? "Close/reduce" : ab1_state ? "Press harder" : theta_regime ? "Keep active" : "No"
 string ab1_viable = ab1_state ? "Entry viable" : theta_regime ? "Keep active" : "No"
-string ab2_viable = "External only"
-string delta_posture = ab1_state ? "Moderate (~30Δ or lower)" : theta_regime ? "Conservative (~20Δ or lower)" : "None"
+string ab2_viable = "Use BTC / IBIT context"
+string delta_posture = ab1_state ? "Moderate theta posture" : theta_regime ? "Conservative theta posture" : "None"
 string invalidation = b_exhaust_state ? "Consider close/reduce short calls" : ab1_state ? str.format("Close > ST FTL {0}", str.tostring(st_ftl, "#.##")) : str.format("Reclaim ST FTL {0}", str.tostring(st_ftl, "#.##"))
 
 bool green_t = theta_regime and not (bar_index > 0 and theta_regime[1])

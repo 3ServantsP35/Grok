@@ -20,6 +20,9 @@
 
 //@version=6
 indicator(title="SRI Forecast AB1", shorttitle="SRI AB1", overlay=true, max_labels_count=50)
+// Updated architecture note (2026-03-30): AB1 is the tactical theta / income layer.
+// On MSTR, interpret AB1/topping pressure primarily as premium-sale and call-management context,
+// not as a pure directional oracle.
 
 // ═══════════════════════════════════════════════════════════════
 // INPUTS

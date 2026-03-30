@@ -17,6 +17,9 @@
 
 //@version=6
 indicator(title="SRI Forecast AB2", shorttitle="SRI AB2", overlay=true, max_lines_count=500, max_labels_count=50)
+// Updated architecture note (2026-03-30): AB2 is the directional conviction layer.
+// Prefer BTC / IBIT as the cleaner directional-expression vehicles when signal quality is stronger than on MSTR.
+// Do not assume MSTR is the default direct AB2 vehicle; MSTR is primarily a theta / PMCC / premium-harvest instrument.
 
 // ═══════════════════════════════════════════════════════════════
 // INPUTS
@@ -422,8 +425,8 @@ if barstate.islast and show_table
 
     // IBIT disabled warning / topping bias
     if ibit_override
-        table.cell(t, 0, 13, "⛔ IBIT", text_color=color.purple, text_size=size.tiny)
-        table.cell(t, 1, 13, "AB2 disabled — MIXED ctx unreliable on crypto-adjacent", text_color=color.purple, text_size=size.tiny)
+        table.cell(t, 0, 13, "IBIT Role", text_color=color.purple, text_size=size.tiny)
+        table.cell(t, 1, 13, "Preferred BTC-linked AB2 vehicle when directional signal is clean", text_color=color.purple, text_size=size.tiny)
     else
         table.cell(t, 0, 13, "Top Bias", text_color=color.gray, text_size=size.tiny)
         table.cell(t, 1, 13, top_active ? "Directional bear credibility rising" : "No active topping cluster", text_color=top_clr, text_size=size.tiny)
