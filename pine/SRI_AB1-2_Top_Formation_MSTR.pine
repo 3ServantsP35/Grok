@@ -54,6 +54,15 @@ float vlt_stl   = request.security(syminfo.tickerid, "2W",  f_trackline(at_perio
 float vlt_sribi = vlt_stl != 0 ? (vlt_ftl - vlt_stl) / vlt_stl * 100 : 0
 
 float sribi_avg = (vst_sribi + st_sribi + lt_sribi + vlt_sribi) / 4.0
+float hist = sribi_avg
+
+// LOI-style structural weakness proxy (mirrors existing weighted framework idea)
+float vlt_norm = math.max(-100, math.min(100, vlt_sribi * 2.5))
+float roc_norm = math.max(-100, math.min(100, (vlt_sribi - nz(vlt_sribi[10])) * 5.0))
+float lt_norm  = math.max(-100, math.min(100, lt_sribi * 2.5))
+float conc_raw = (vlt_sribi + lt_sribi) / 2.0
+float conc_norm = math.max(-100, math.min(100, conc_raw * 2.5))
+float loi = (vlt_norm * 40 + roc_norm * 30 + lt_norm * 15 + conc_norm * 15) / 100
 
 // ═══════════════════════════════════════════════════════════════
 // TOPPING BUCKETS
