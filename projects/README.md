@@ -35,7 +35,8 @@
 | P-PINE-V6 | Pine v6 Migration | ✅ All 12 scripts on v6 | CIO |
 | P-DOI | Distribution Signal Layer (Momentum assets) | 🔴 HIGH — Pine v1 live; CRS integration queued | CIO |
 | P-MR-ENTRY | Cross-Asset LEAP Opportunity Framework (all in-scope assets) | 🟡 MED — Phase 1 research complete; calibrations live | CIO |
-| P-MSTR-SUITE | MSTR Chart Suite — force-aware MSTR path dashboard | 🔴 HIGH — Live validated prototype; calibration active | Gavin/CIO |
+| P-MSTR-SUITE | MSTR Chart Suite — force-aware MSTR path dashboard | 🟡 Near-closed — integrated, documented, awaiting next live-path confirmation | Gavin/CIO |
+| P-TVI | TradingView Integration | 🔴 HIGH — brief/backlog/discovery/standards/handoff complete; engineering planning handoff active | Gavin/CIO |
 | P-FF | Force Field / Force Field ROC | 🟡 FF live; FF ROC live; docs + CSV exports updated | CIO |
 
 ---
@@ -612,25 +613,29 @@ P-PINE-GUIDE ──→ Greg + Gary onboarding
 **Owner:** Gavin (methodology), CIO (build)  
 **Initiated:** 2026-03-05  
 **Priority:** HIGH — medium-term MSTR forecasting tool for Greg, Gavin, Gary
+**Current status:** Near-closed — build/integration/documentation complete; awaiting next live-path confirmation
 
-### Updated Direction (2026-03-18)
-P-MSTR-SUITE is being re-scoped from a simple **5-chart weekly confirmation ladder** into a:
+### Current Direction
+P-MSTR-SUITE evolved from a simple **5-chart weekly confirmation ladder** into a:
 
 **Force-aware MSTR path forecasting dashboard**
 
-The suite should now answer:
+The suite is intended to answer:
 1. What force regime is MSTR in?
 2. Is force strengthening or weakening?
 3. What structural trend lines matter most right now?
 4. Does current force have enough energy to break resistance, or is a reset more likely first?
 5. What is the highest-probability 2–8 week path?
 
-**Reason for re-scope:** recent Force Field + Force Field ROC work showed that static chart alignment is not enough. The highest-value distinction is often:
-- aligned and accelerating
-vs
-- aligned but fading
+### Current project conclusion
+The major build work is effectively complete.
 
-Trend line geometry (P10) is now an explicit dependency because the key practical question is whether MSTR has enough force to break the relevant resistance/support structure.
+Recent closeout work established that:
+- the suite engine was already wired into the production path
+- the concrete integration blocker was a method mismatch (`compute_signal()` vs `compute_current_signal()`)
+- that mismatch was fixed in commit `5898a4f`
+- optional scenario/fib/deeper-reset work is already materially represented in `mstr_suite_report.py`
+- the project is now in live verification / operational confirmation posture rather than active build posture
 
 ### Core Dependencies
 | Dependency | Role |
@@ -640,18 +645,26 @@ Trend line geometry (P10) is now an explicit dependency because the key practica
 | Trend Line Engine (P10) | Structural geometry: local/global resistance, support, reset paths |
 | 5-chart suite inputs | Structural corroboration layer |
 
-### Deliverables
+### Deliverables / Status
 | Item | Status |
 |------|--------|
 | Phase 1: Original hypothesis doc | ✅ `briefs/mstr-chart-suite-hypothesis-v1.md` |
 | Phase 1b: Re-scoped spec | ✅ `briefs/mstr-chart-suite-spec-v2.md` |
-| Report script `mstr_suite_report.py` | ✅ Running end-to-end on Mac mini; ongoing calibration around semantics/weighting |
+| Report script `mstr_suite_report.py` | ✅ Running end-to-end; scenario/fib/deeper-reset context present |
 | Force-aware report draft for discretionary use | ✅ Live output running + posting to Discord |
-| Cron: Friday 3:30 PM ET reminder | ⬜ Pending crontab install |
-| Cron: Friday 4:30 PM ET report | ⬜ Pending crontab install |
-| Phase 2: Quant validation of FF + FF ROC contribution | 🔄 Next major phase |
-| Phase 3: Composite score / scenario validation | ⬜ After Phase 2 |
-| Optional: Add BTC SRI LT as Chart 6 | ⬜ Proposed after validation |
+| Suite engine integration in `morning_brief.py` | ✅ Wired |
+| Suite signal persistence in `daily_analysis_cycle.py` | ✅ Wired |
+| Integration method mismatch fix | ✅ `5898a4f` |
+| Cron: Friday 3:30 PM ET reminder | ⬜ Pending/host-runtime dependent |
+| Cron: Friday 4:30 PM ET report | ⬜ Pending/host-runtime dependent |
+| Next live production-path confirmation | 🔄 Remaining closeout item |
+| Additional major build work | ✅ Not required for closeout |
+
+### Remaining closeout item
+One practical item remains before treating the project as fully closed:
+- confirm the next live production path renders the suite block correctly and stores the suite signal correctly
+
+Unless that live pass reveals a new runtime issue, P-MSTR-SUITE should be treated as functionally complete.
 
 ### Required Report Sections
 1. Structural state
@@ -677,6 +690,65 @@ Trend line geometry (P10) is now an explicit dependency because the key practica
 # MSTR Chart Suite — Friday weekly report (4:30 PM ET = 21:30 UTC)
 30 21 * * 5 /usr/bin/python3 /mnt/mstr-scripts/mstr_suite_report.py report >> /mnt/mstr-logs/suite_report.log 2>&1
 ```
+
+---
+
+## P-TVI — TradingView Integration
+
+**Owner:** Gavin (product direction), CIO (documentation / system framing)  
+**Initiated:** 2026-03-31  
+**Priority:** HIGH — foundational workflow/infrastructure integration project
+**Current status:** Active planning / engineering handoff
+
+### Objective
+Upgrade TradingView from a partially manual chart/export surface into a first-class operational component of the MSTR Engine system.
+
+### Must-have goals
+1. Automate the current CSV workflow (download → truncation/integrity checks → availability signaling → ingestion path)
+2. Provide direct chart access for CIO analysis without manual screenshot upload
+3. Support continued Pine script iteration in GitHub-tracked files
+4. Support post-update testing without manual intervention
+5. Source macro/regime data directly from TradingView where useful
+
+### Why this matters
+Current friction points include:
+- manual CSV handoff
+- fragmented validation logic
+- indirect chart visibility
+- slower Pine iteration/testing loop
+- underused TradingView-native macro sourcing
+
+P-TVI aims to reduce handoff friction, improve chart visibility, centralize validation, and create a cleaner chart-state → engine/report workflow.
+
+### Current documentation set
+A dedicated project folder now exists in the repo:
+- `briefs/p-tvi/p-tradingview-integration-brief-v1.md`
+- `briefs/p-tvi/p-tradingview-integration-backlog-v1.md`
+- `briefs/p-tvi/p-tradingview-integration-discovery-v1.md`
+- `briefs/p-tvi/p-tradingview-integration-standards-v1.md`
+- `briefs/p-tvi/p-tradingview-integration-claude-code-handoff-v1.md`
+
+### Current project state
+Completed so far:
+- project brief
+- implementation backlog
+- discovery/current-state audit
+- script tiering + chart-view standards
+- Claude-Code-ready engineering handoff brief
+- repo review folder for all P-TVI briefs
+
+### Current recommendation
+Best current architecture candidate:
+- **hybrid ingestion model**
+  - local/direct ingestion where operationally useful
+  - GitHub-tracked files remain canonical where versioning/reproducibility matter
+  - a shared validator/resolver layer should eventually centralize freshness/schema/family checks
+
+### Next steps
+1. Claude Code to produce engineering plan based on the handoff brief
+2. Review engineering plan in `#mstr-cio`
+3. Decide implementation sequence
+4. Begin execution against the agreed architecture
 
 ---
 
