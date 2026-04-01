@@ -484,7 +484,7 @@ def build_brief():
     try:
         from mstr_suite_engine import MstrSuiteEngine
         _ff_engine = MstrSuiteEngine()
-        _ff_signal = _ff_engine.compute_signal()
+        _ff_signal = _ff_engine.compute_current_signal()
         if _ff_signal:
             sections.append(_ff_engine.format_brief_block(_ff_signal))
         else:

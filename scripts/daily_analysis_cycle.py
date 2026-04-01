@@ -626,7 +626,7 @@ def main():
         sys.path.insert(0, "/mnt/mstr-scripts")
         from mstr_suite_engine import MstrSuiteEngine
         _ff_engine = MstrSuiteEngine()
-        _ff_signal = _ff_engine.compute_signal()
+        _ff_signal = _ff_engine.compute_current_signal()
         if _ff_signal:
             _ff_engine.store_signal(_ff_signal)
             zone = _ff_signal.get("zone", "?")
