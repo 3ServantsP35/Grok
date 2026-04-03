@@ -603,6 +603,23 @@ def get_trend_lines_for_brief(asset: str, csv_path: str,
         return f"📐 Trend line analysis unavailable for {asset}: {e}"
 
 
+def get_trend_lines_for_msr(asset: str, csv_path: str,
+                             start_date: str = "2024-01-01") -> str:
+    """Load CSV, run engine, return formatted MSR string. Never raises."""
+    try:
+        df = pd.read_csv(csv_path)
+        eng = TrendLineEngine()
+        result = eng.analyze(df, asset, start_date)
+        # Optionally persist
+        try:
+            eng.save_to_db(result)
+        except Exception:
+            pass
+        return result.to_msr_str()
+    except Exception as e:
+        return f"### Trend Line Structure ({asset})\n*Unavailable: {e}*"
+
+
 # ─── CLI ──────────────────────────────────────────────────────────────────────
 
 ASSET_PATHS = {

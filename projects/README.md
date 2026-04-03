@@ -92,17 +92,17 @@ Then verify: `sudo -u openclaw crontab -l`
 ---
 
 ### P10: Trend Line Engine
-**Status:** 🟡 Live prototype tested — now actively used in discretionary MSTR resistance/support analysis; not yet wired into pipeline
+**Status:** ✅ Complete — modular engine integrated into brief/report paths
 **Lead:** CIO | **Approver:** Greg + Gavin
 
 Objective: CIO reads key trend lines as linear equations on date/price coordinates — visible in analysis without requiring TradingView.
 
-**2026-03-04 live test:** Ran successfully against MSTR and BTC 4H CSV data. Swing high detection, two-point and multi-point linear regression, and forward projection all working. Key outputs demonstrated:
+**2026-03-04 live test:** Ran successfully against MSTR and BTC 4H/1D CSV data. Swing high detection, two-point and multi-point linear regression, and forward projection all working. Key outputs demonstrated:
 - MSTR post-ATH descending resistance TL (R²=0.968): anchored Jul-16/Aug-11/Oct-6 highs; current projection $203, slope -$4.70/day
 - BTC Jan–Feb descending resistance TL: confirmed breakout today ($5,820 above projected level)
 - Near-term resistance TL anchored on January swing highs
 
-**Next step:** Formalize as a reusable function in `sri_engine.py`; integrate into morning brief and MSR generation.
+**Closeout path used:** P10 was completed as a modular engine in `scripts/trend_line_engine.py` rather than adding a new class to frozen `sri_engine.py`. It is now wired into the morning brief path and exposes reusable report helpers for market-structure/report consumption.
 
 | Milestone | Status |
 |---|---|
@@ -110,9 +110,10 @@ Objective: CIO reads key trend lines as linear equations on date/price coordinat
 | Two-point and multi-point linear regression | ✅ Tested live |
 | Forward projection (N-day) | ✅ Tested live |
 | R² confidence scoring | ✅ Tested live |
-| TrendLine class in sri_engine.py | ⬜ Queued |
-| Integration into morning brief | ⬜ After class build |
-| Integration into MSR generation | ⬜ After class build |
+| Modular trend-line engine (`trend_line_engine.py`) | ✅ Complete |
+| Integration into morning brief | ✅ Complete |
+| Reusable MSR/report helper exposure | ✅ Complete |
+| Project tracker updated to modular closeout path | ✅ Complete |
 
 ---
 
