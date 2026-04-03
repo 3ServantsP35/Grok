@@ -1,0 +1,103 @@
+{
+  "version": 1,
+  "schema_contract_version": "2026-04-03",
+  "timeframe_families": {
+    "240": {
+      "description": "4-hour candles, primary production timeframe",
+      "expected_gap_seconds": 14400,
+      "max_gap_multiple": 5,
+      "assets": {
+        "MSTR": {
+          "exchange": "BATS",
+          "pattern": "BATS_MSTR, 240_*.csv",
+          "min_rows": 500,
+          "staleness_threshold_hours": 24,
+          "required_columns": ["time", "open", "high", "low", "close"]
+        },
+        "IBIT": {
+          "exchange": "BATS",
+          "pattern": "BATS_IBIT, 240_*.csv",
+          "min_rows": 300,
+          "staleness_threshold_hours": 24,
+          "required_columns": ["time", "open", "high", "low", "close"]
+        },
+        "SPY": {
+          "exchange": "BATS",
+          "pattern": "BATS_SPY, 240_*.csv",
+          "min_rows": 300,
+          "staleness_threshold_hours": 48,
+          "required_columns": ["time", "open", "high", "low", "close"]
+        },
+        "QQQ": {
+          "exchange": "BATS",
+          "pattern": "BATS_QQQ, 240_*.csv",
+          "min_rows": 300,
+          "staleness_threshold_hours": 48,
+          "required_columns": ["time", "open", "high", "low", "close"]
+        },
+        "BTCUSD": {
+          "exchange": "INDEX",
+          "pattern": "INDEX_BTCUSD, 240_*.csv",
+          "min_rows": 500,
+          "staleness_threshold_hours": 24,
+          "required_columns": ["time", "open", "high", "low", "close"]
+        },
+        "STABLE.C.D": {
+          "exchange": "CRYPTOCAP",
+          "pattern": "CRYPTOCAP_STABLE.C.D, 240_*.csv",
+          "min_rows": 300,
+          "staleness_threshold_hours": 48,
+          "required_columns": ["time", "open", "high", "low", "close"]
+        },
+        "STRC": {
+          "exchange": "BATS",
+          "pattern": "BATS_STRC, 240_*.csv",
+          "min_rows": 200,
+          "staleness_threshold_hours": 48,
+          "required_columns": ["time", "open", "high", "low", "close"]
+        },
+        "DXY": {
+          "exchange": "TVC",
+          "pattern": "TVC_DXY, 240_*.csv",
+          "min_rows": 300,
+          "staleness_threshold_hours": 48,
+          "required_columns": ["time", "open", "high", "low", "close"]
+        },
+        "VIX": {
+          "exchange": "TVC",
+          "pattern": "TVC_VIX, 240_*.csv",
+          "min_rows": 300,
+          "staleness_threshold_hours": 48,
+          "required_columns": ["time", "open", "high", "low", "close"]
+        },
+        "HYG": {
+          "exchange": "BATS",
+          "pattern": "BATS_HYG, 240_*.csv",
+          "min_rows": 300,
+          "staleness_threshold_hours": 48,
+          "required_columns": ["time", "open", "high", "low", "close"]
+        },
+        "TLT": {
+          "exchange": "BATS",
+          "pattern": "BATS_TLT, 240_*.csv",
+          "min_rows": 300,
+          "staleness_threshold_hours": 48,
+          "required_columns": ["time", "open", "high", "low", "close"]
+        }
+      }
+    },
+    "1D": {
+      "description": "Daily candles, supplementary timeframe",
+      "expected_gap_seconds": 86400,
+      "max_gap_multiple": 5,
+      "assets": {}
+    }
+  },
+  "suite_assets": ["MSTR", "BTCUSD", "STABLE.C.D", "STRC", "MSTR/IBIT"],
+  "rpa_export": {
+    "dwell_seconds": 60,
+    "download_timeout_seconds": 120,
+    "max_windows_per_day": 2,
+    "staging_directory": "/mnt/mstr-data/.staging/"
+  }
+}

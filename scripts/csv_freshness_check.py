@@ -17,6 +17,7 @@ import sys
 import ssl
 import urllib.request
 import urllib.error
+from pathlib import Path
 from datetime import datetime, timezone, timedelta
 
 # ── Config ────────────────────────────────────────────────────────────────────
@@ -29,42 +30,31 @@ SSL_CTX.verify_mode = ssl.CERT_NONE
 
 STALE_THRESHOLD_DEFAULT = timedelta(hours=48)
 STALE_THRESHOLD_MSTR = timedelta(hours=24)
+CONFIG_PATH = Path(__file__).resolve().parents[1] / "config" / "canonical_csvs.json"
 
-CANONICAL_CSVS = {
-    "BATS_MSTR, 240_7b1cc.csv":               "MSTR (4H)",
-    "BATS_IBIT, 240_7654d.csv":               "IBIT (4H)",
-    "BATS_SPY, 240_8f6d8.csv":                "SPY (4H)",
-    "BATS_QQQ, 240_5de53.csv":                "QQQ (4H)",
-    "BATS_GLD, 240_41f2b.csv":                "GLD (4H)",
-    "BATS_IWM, 240_9624e.csv":                "IWM (4H)",
-    "BATS_TSLA, 240_b8831.csv":               "TSLA (4H)",
-    "BATS_PURR, 240_0bdda.csv":               "PURR (4H)",
-    "BATS_XLK, 240_e62e8.csv":                "XLK/Howell (4H)",
-    "BATS_XLY, 240_73218.csv":                "XLY/Howell (4H)",
-    "BATS_XLF, 240_e9161.csv":                "XLF/Howell (4H)",
-    "BATS_XLE, 240_e801d.csv":                "XLE/Howell (4H)",
-    "BATS_XLP, 240_3a323.csv":                "XLP/Howell (4H)",
-    "INDEX_BTCUSD, 240_6739b.csv":            "BTC (4H)",
-    "BATS_MSTR_BATS_IBIT, 240_05486.csv":     "MSTR/IBIT ratio (4H)",
-    "CRYPTOCAP_STABLE.C.D, 240_7a8a0.csv":    "StabDom (4H)",
-    "BATS_STRC, 240_5320c.csv":               "STRC (4H)",
-    "BATS_TLT, 240_f930d.csv":                "TLT (4H)",
-    "TVC_DXY, 240_d7e33.csv":                 "DXY (4H)",
-    "BATS_HYG, 240_03e84.csv":                "HYG (4H)",
-    "TVC_VIX, 240_5ff5f.csv":                 "VIX (4H)",
-    "BATS_VT, 240_05664.csv":                 "VT/Global (4H)",
-    "BATS_DBC, 240_5aa4d.csv":                "DBC/Commodities (4H)",
-    "BATS_LQD, 240_1778d.csv":                "LQD (4H)",
-}
 
-# P-MSTR-SUITE subset (Gavin pushes these Fridays)
-SUITE_CSVS = {
-    "BATS_MSTR, 240_7b1cc.csv":               "MSTR LT",
-    "BATS_STRC, 240_9969c.csv":               "STRC LT",
-    "CRYPTOCAP_STABLE.C.D, 240_7a8a0.csv":    "StabDom",
-    "BATS_STRF_BATS_LQD, 240_40822.csv":      "STRF/LQD",
-    "BATS_MSTR_BATS_IBIT, 240_0ae35.csv":     "MSTR/IBIT",
-}
+def load_canonical_csvs() -> dict:
+    cfg = json.loads(CONFIG_PATH.read_text())
+    assets = cfg["timeframe_families"]["240"]["assets"]
+    out = {}
+    for asset, meta in assets.items():
+        out[meta["pattern"]] = f"{asset} (4H)"
+    return out
+
+
+def load_suite_csvs() -> dict:
+    cfg = json.loads(CONFIG_PATH.read_text())
+    assets = cfg["timeframe_families"]["240"]["assets"]
+    suite_assets = cfg.get("suite_assets", [])
+    out = {}
+    for asset in suite_assets:
+        if asset in assets:
+            out[assets[asset]["pattern"]] = asset
+    return out
+
+
+CANONICAL_CSVS = load_canonical_csvs()
+SUITE_CSVS = load_suite_csvs()
 
 
 def load_github_token() -> str:

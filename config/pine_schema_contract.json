@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "created": "2026-04-03",
+  "purpose": "Initial Pine export schema contract scaffold for P-TVI post-update testing",
+  "core_required_columns": [
+    "time",
+    "open",
+    "high",
+    "low",
+    "close"
+  ],
+  "optional_indicator_columns": [
+    "VST SRI Bias Histogram",
+    "ST SRI Bias Histogram",
+    "LT SRI Bias Histogram",
+    "VLT SRI Bias Histogram",
+    "LOI",
+    "DOI Score",
+    "LT Fast TL",
+    "LT Slow TL"
+  ],
+  "timeframe_min_rows": {
+    "240": 300,
+    "1D": 120
+  },
+  "notes": [
+    "This is a first scaffold, not the final frozen full-schema contract.",
+    "The immediate goal is to catch obviously broken exports after Pine updates.",
+    "A later pass should snapshot the full known-good production header set."
+  ]
+}

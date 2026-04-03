@@ -45,38 +45,20 @@ DATA_DIR   = Path("/mnt/mstr-data")
 LOG_TAG    = "[DAILY-RUN]"
 
 WEBHOOK_ALERTS = os.environ.get("DISCORD_WEBHOOK_ALERTS", "")
+CONFIG_PATH = Path(__file__).resolve().parents[1] / "config" / "canonical_csvs.json"
 
-# ── The 16 canonical CSVs (filename on GitHub → local save name) ─
-CANONICAL_CSVS = {
-    # ── Trading assets (v2 — full bearish indicator set) ─────────
-    "BATS_MSTR, 240_7b1cc.csv":                    "BATS_MSTR, 240_7b1cc.csv",
-    "BATS_IBIT, 240_7654d.csv":                    "BATS_IBIT, 240_7654d.csv",
-    "BATS_SPY, 240_8f6d8.csv":                     "BATS_SPY, 240_8f6d8.csv",
-    "BATS_QQQ, 240_5de53.csv":                     "BATS_QQQ, 240_5de53.csv",
-    "BATS_GLD, 240_41f2b.csv":                     "BATS_GLD, 240_41f2b.csv",
-    "BATS_IWM, 240_9624e.csv":                     "BATS_IWM, 240_9624e.csv",
-    "BATS_TSLA, 240_b8831.csv":                    "BATS_TSLA, 240_b8831.csv",
-    "BATS_PURR, 240_0bdda.csv":                    "BATS_PURR, 240_0bdda.csv",
-    # ── Howell Phase inputs (Layer 0.5 — sector ETF proxies) ────
-    "BATS_XLK, 240_e62e8.csv":                     "BATS_XLK, 240_e62e8.csv",
-    "BATS_XLY, 240_73218.csv":                     "BATS_XLY, 240_73218.csv",
-    "BATS_XLF, 240_e9161.csv":                     "BATS_XLF, 240_e9161.csv",
-    "BATS_XLE, 240_e801d.csv":                     "BATS_XLE, 240_e801d.csv",
-    "BATS_XLP, 240_3a323.csv":                     "BATS_XLP, 240_3a323.csv",
-    # ── Regime inputs ────────────────────────────────────────────
-    "INDEX_BTCUSD, 240_6739b.csv":                 "INDEX_BTCUSD, 240_6739b.csv",     # BTC (INDEX source)
-    "BATS_MSTR_BATS_IBIT, 240_05486.csv":          "BATS_MSTR_BATS_IBIT, 240_05486.csv",
-    "CRYPTOCAP_STABLE.C.D, 240_7a8a0.csv":         "CRYPTOCAP_STABLE.C.D, 240_7a8a0.csv",
-    "BATS_STRC, 240_5320c.csv":                    "BATS_STRC, 240_5320c.csv",
-    "BATS_TLT, 240_f930d.csv":                     "BATS_TLT, 240_f930d.csv",
-    "TVC_DXY, 240_d7e33.csv":                      "TVC_DXY, 240_d7e33.csv",
-    "BATS_HYG, 240_03e84.csv":                     "BATS_HYG, 240_03e84.csv",
-    "TVC_VIX, 240_5ff5f.csv":                      "TVC_VIX, 240_5ff5f.csv",
-    # ── Global / breadth / credit regime ─────────────────────────
-    "BATS_VT, 240_05664.csv":                      "BATS_VT, 240_05664.csv",          # Global equity breadth
-    "BATS_DBC, 240_5aa4d.csv":                     "BATS_DBC, 240_5aa4d.csv",         # NEW: Diversified commodities
-    "BATS_LQD, 240_1778d.csv":                     "BATS_LQD, 240_1778d.csv",         # NEW: Investment-grade bonds
-}
+
+def load_canonical_csvs() -> dict:
+    cfg = json.loads(CONFIG_PATH.read_text())
+    assets = cfg["timeframe_families"]["240"]["assets"]
+    out = {}
+    for _asset, meta in assets.items():
+        pattern = meta["pattern"]
+        out[pattern] = pattern
+    return out
+
+
+CANONICAL_CSVS = load_canonical_csvs()
 
 # ── SSL context ──────────────────────────────────────────────────
 ctx = ssl.create_default_context()
@@ -87,6 +69,12 @@ HEADERS = {
     "Authorization": f"token {GH_TOKEN}",
     "User-Agent":    "mstr-cio/1.0",
 }
+
+try:
+    from tv_csv_validator import TVCSVValidator
+    _CSV_VALIDATOR = TVCSVValidator()
+except Exception:
+    _CSV_VALIDATOR = None
 
 
 def log(msg: str) -> None:
@@ -159,6 +147,19 @@ def pull_csvs() -> tuple[int, int]:
         log(f"  ↓ {local_name[:40]:40s} pulling...")
         ok = gh_download(download_url, local_path)
         if ok:
+            asset_guess = None
+            for _asset, _pattern in CANONICAL_CSVS.items():
+                if _pattern == local_name:
+                    asset_guess = _asset
+                    break
+            if _CSV_VALIDATOR is not None and asset_guess is not None:
+                try:
+                    vr = _CSV_VALIDATOR.validate_file(local_path, asset_guess, "240")
+                    if not vr.ok:
+                        log(f"    validator rejected {local_name}: {vr.errors}")
+                        continue
+                except Exception as e:
+                    log(f"    validator exception for {local_name}: {e}")
             size_kb = local_path.stat().st_size // 1024
             log(f"    saved {size_kb:,} KB")
             updated += 1

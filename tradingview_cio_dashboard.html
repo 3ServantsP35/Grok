@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>P-TVI CIO Chart Dashboard</title>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --panel: #161b22;
+      --border: #30363d;
+      --text: #c9d1d9;
+      --muted: #8b949e;
+      --blue: #58a6ff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    .header {
+      padding: 18px 22px;
+      border-bottom: 1px solid var(--border);
+      background: var(--panel);
+    }
+    .header h1 {
+      margin: 0 0 6px 0;
+      font-size: 22px;
+      color: var(--blue);
+    }
+    .sub {
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.45;
+    }
+    .notice {
+      margin-top: 10px;
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: #11161d;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+      padding: 16px;
+    }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+      min-height: 460px;
+    }
+    .card-header {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+      font-size: 13px;
+      color: var(--muted);
+      background: #11161d;
+    }
+    .tradingview-widget-container {
+      height: 410px;
+      width: 100%;
+    }
+    .links {
+      padding: 16px;
+      border-top: 1px solid var(--border);
+      margin: 0 16px 16px 16px;
+      background: var(--panel);
+      border-left: 3px solid var(--blue);
+      border-right: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      border-radius: 0 0 10px 10px;
+    }
+    .links h2 {
+      margin: 0 0 8px 0;
+      font-size: 15px;
+    }
+    .links ul {
+      margin: 0;
+      padding-left: 18px;
+      color: var(--muted);
+    }
+    .links li { margin: 6px 0; }
+    code { color: #79c0ff; }
+    @media (max-width: 980px) {
+      .grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>P-TVI CIO Chart Dashboard</h1>
+    <div class="sub">
+      Lane 1 chart access for fast CIO review. This page is for quick price structure, standard-indicator, and macro visibility.
+    </div>
+    <div class="notice">
+      <strong>Important:</strong> Lane 1 is operational convenience, not full custom-indicator parity. TradingView widgets do <strong>not</strong> show custom Pine overlays such as SRI/SRIBI/Force/DOI. Use shared TradingView layouts (Lane 2) for custom-indicator truth when needed.
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <div class="card-header">MSTR — 4H</div>
+      <div class="tradingview-widget-container">
+        <div class="tradingview-widget-container__widget"></div>
+        <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js" async>
+        {
+          "autosize": true,
+          "symbol": "NASDAQ:MSTR",
+          "interval": "240",
+          "theme": "dark",
+          "style": "1",
+          "hide_side_toolbar": true,
+          "allow_symbol_change": false,
+          "studies": ["RSI@tv-basicstudies", "MACD@tv-basicstudies"],
+          "locale": "en"
+        }
+        </script>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">MSTR — 1D</div>
+      <div class="tradingview-widget-container">
+        <div class="tradingview-widget-container__widget"></div>
+        <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js" async>
+        {
+          "autosize": true,
+          "symbol": "NASDAQ:MSTR",
+          "interval": "D",
+          "theme": "dark",
+          "style": "1",
+          "hide_side_toolbar": true,
+          "allow_symbol_change": false,
+          "studies": ["RSI@tv-basicstudies", "MASimple@tv-basicstudies"],
+          "locale": "en"
+        }
+        </script>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">BTCUSD — 4H</div>
+      <div class="tradingview-widget-container">
+        <div class="tradingview-widget-container__widget"></div>
+        <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js" async>
+        {
+          "autosize": true,
+          "symbol": "INDEX:BTCUSD",
+          "interval": "240",
+          "theme": "dark",
+          "style": "1",
+          "hide_side_toolbar": true,
+          "allow_symbol_change": false,
+          "studies": ["RSI@tv-basicstudies", "MACD@tv-basicstudies"],
+          "locale": "en"
+        }
+        </script>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">Macro Panel — DXY</div>
+      <div class="tradingview-widget-container">
+        <div class="tradingview-widget-container__widget"></div>
+        <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js" async>
+        {
+          "autosize": true,
+          "symbol": "TVC:DXY",
+          "interval": "D",
+          "theme": "dark",
+          "style": "1",
+          "hide_side_toolbar": true,
+          "allow_symbol_change": false,
+          "studies": ["ROC@tv-basicstudies", "MASimple@tv-basicstudies"],
+          "locale": "en"
+        }
+        </script>
+      </div>
+    </div>
+  </div>
+
+  <div class="links">
+    <h2>Lane 2 follow-through</h2>
+    <ul>
+      <li>Use shared TradingView layouts for custom SRI/SRIBI/Force/DOI overlays.</li>
+      <li>Recommended standard Lane 2 views: <code>MSTR 4H + 1D</code>, <code>BTC/IBIT 4H + 1D</code>, <code>Macro/Regime</code>, <code>Pine Dev/Test</code>.</li>
+      <li>This file is intended as the first concrete P-TVI CIO chart-access deliverable.</li>
+    </ul>
+  </div>
+</body>
+</html>

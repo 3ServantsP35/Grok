@@ -35,18 +35,22 @@ GITHUB_REPO   = "3ServantsP35/Grok"
 GITHUB_BRANCH = "main"
 
 SSL_CTX = ssl.create_default_context()
-SSL_CTX.check_hostname = False
-SSL_CTX.verify_mode    = ssl.CERT_NONE
 
-# ── Suite CSV filenames (confirmed working 2026-03-08) ────────────────────────
-SUITE_CSVS = {
-    "BATS_MSTR, 240_8ee08.csv":              "MSTR",
-    "INDEX_BTCUSD, 240_29008.csv":           "BTC",
-    "CRYPTOCAP_STABLE.C.D, 240_cbdd5.csv":   "STABLE.D",
-    "BATS_STRC, 240_92d2f.csv":              "STRC",
-    "BATS_STRF_BATS_LQD, 240_22e21.csv":    "STRF/LQD",
-    "BATS_MSTR_BATS_IBIT, 240_56652.csv":   "MSTR/IBIT",
-}
+CANONICAL_CONFIG = Path(__file__).resolve().parents[1] / "config" / "canonical_csvs.json"
+
+
+def load_suite_csvs() -> dict:
+    cfg = json.loads(CANONICAL_CONFIG.read_text())
+    assets = cfg["timeframe_families"]["240"]["assets"]
+    suite_assets = cfg.get("suite_assets", [])
+    out = {}
+    for asset in suite_assets:
+        if asset in assets:
+            out[assets[asset]["pattern"]] = asset
+    return out
+
+
+SUITE_CSVS = load_suite_csvs()
 
 # ── Env loader ────────────────────────────────────────────────────────────────
 def load_env() -> dict:
