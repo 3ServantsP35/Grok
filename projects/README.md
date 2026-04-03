@@ -36,7 +36,7 @@
 | P-DOI | Distribution Signal Layer (Momentum assets) | 🔴 HIGH — Pine v1 live; CRS integration queued | CIO |
 | P-MR-ENTRY | Cross-Asset LEAP Opportunity Framework (all in-scope assets) | 🟡 MED — Phase 1 research complete; calibrations live | CIO |
 | P-MSTR-SUITE | MSTR Chart Suite — force-aware MSTR path dashboard | 🟡 Near-closed — integrated, documented, awaiting next live-path confirmation | Gavin/CIO |
-| P-TVI | TradingView Integration | 🔴 HIGH — brief/backlog/discovery/standards/handoff complete; engineering planning handoff active | Gavin/CIO |
+| P-TVI | TradingView Integration | 🔴 HIGH — planning complete; partial implementation now live across chart access, CSV governance, validator, RPA scaffold, and testing scaffold | Gavin/CIO |
 | P-FF | Force Field / Force Field ROC | 🟡 FF live; FF ROC live; docs + CSV exports updated | CIO |
 
 ---
@@ -699,7 +699,7 @@ Unless that live pass reveals a new runtime issue, P-MSTR-SUITE should be treate
 **Owner:** Gavin (product direction), CIO (documentation / system framing)  
 **Initiated:** 2026-03-31  
 **Priority:** HIGH — foundational workflow/infrastructure integration project
-**Current status:** Active planning / engineering handoff
+**Current status:** Active build — planning complete; partial implementation now live
 
 ### Objective
 Upgrade TradingView from a partially manual chart/export surface into a first-class operational component of the MSTR Engine system.
@@ -737,19 +737,38 @@ Completed so far:
 - script tiering + chart-view standards
 - Claude-Code-ready engineering handoff brief
 - repo review folder for all P-TVI briefs
+- final approved engineering plan with bounded RPA export posture
+- Lane 1 CIO chart dashboard artifact (`tradingview_cio_dashboard.html`)
+- canonical CSV config scaffold (`config/canonical_csvs.json`)
+- CSV validator scaffold (`scripts/tv_csv_validator.py`)
+- bounded RPA export scaffold (`scripts/tv_rpa_export.py`)
+- Pine schema contract scaffold (`config/pine_schema_contract.json`)
+- lightweight post-update export checker (`scripts/check_pine_export.py`)
+- consumer migrations begun in:
+  - `scripts/csv_freshness_check.py`
+  - `scripts/suite_upload_alert.py`
+  - `scripts/daily_engine_run.py`
 
 ### Current recommendation
-Best current architecture candidate:
-- **hybrid ingestion model**
-  - local/direct ingestion where operationally useful
+Current architecture direction in active build:
+- **hybrid ingestion model with bounded RPA export layer**
+  - RPA-assisted export allowed under strict two-window / in-scope / 60-second dwell guardrails
   - GitHub-tracked files remain canonical where versioning/reproducibility matter
-  - a shared validator/resolver layer should eventually centralize freshness/schema/family checks
+  - shared validator/resolver architecture is now partially implemented and beginning to touch live consumer paths
+
+### Honest status against the 5 must-haves
+- CSV workflow automation: **partial implementation**
+- Direct chart access: **partial implementation**
+- GitHub-tracked Pine iteration: **mostly satisfied already**
+- Post-update testing: **partial implementation**
+- Macro/regime sourcing: **formalized + partially implemented**
 
 ### Next steps
-1. Claude Code to produce engineering plan based on the handoff brief
-2. Review engineering plan in `#mstr-cio`
-3. Decide implementation sequence
-4. Begin execution against the agreed architecture
+1. Continue converting remaining live paths onto canonical config + validator architecture
+2. Build the real browser-action portion of the bounded RPA export layer
+3. Operationalize Lane 2 shared-layout access
+4. Tighten post-update testing beyond current scaffold level
+5. Continue formal macro/regime rollout under the new policy
 
 ---
 
