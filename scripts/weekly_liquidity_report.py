@@ -18,8 +18,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+import os
 from pathlib import Path
 from typing import Optional
+
+import requests
 
 from liquidity_roc_draft import build_report
 
@@ -106,7 +109,72 @@ def render_discord() -> str:
     return "\n".join(lines)
 
 
+ENV_PATHS = [Path("/mnt/mstr-config/.env"), Path("/Users/vera/mstr-engine/config/.env")]
+MAX_DISCORD_LEN = 1900
+
+
+def _load_env() -> dict[str, str]:
+    env: dict[str, str] = {}
+    for path in ENV_PATHS:
+        if path.exists():
+            for line in path.read_text().splitlines():
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    k, v = line.split("=", 1)
+                    env[k.strip()] = v.strip().strip('"').strip("'")
+            break
+    for key, val in os.environ.items():
+        env.setdefault(key, val)
+    return env
+
+
+def _split_message(text: str) -> list[str]:
+    if len(text) <= MAX_DISCORD_LEN:
+        return [text]
+    chunks: list[str] = []
+    current = ""
+    for line in text.split("\n"):
+        candidate = current + "\n" + line if current else line
+        if len(candidate) > MAX_DISCORD_LEN:
+            if current:
+                chunks.append(current)
+            current = line
+        else:
+            current = candidate
+    if current:
+        chunks.append(current)
+    return chunks
+
+
+def post_discord(webhook_key: str = "DISCORD_WEBHOOK_ALERTS") -> int:
+    env = _load_env()
+    webhook = env.get(webhook_key, "")
+    if not webhook:
+        print(f"[ERROR] {webhook_key} not configured")
+        return 1
+    text = render_discord()
+    for chunk in _split_message(text):
+        r = requests.post(
+            webhook,
+            json={"content": chunk},
+            headers={"User-Agent": "mstr-cio/1.0"},
+            timeout=10,
+        )
+        r.raise_for_status()
+    print(f"[INFO] Posted weekly liquidity report via {webhook_key}")
+    return 0
+
+
 def main() -> int:
+    import argparse
+    parser = argparse.ArgumentParser(description="Generate weekly liquidity report")
+    parser.add_argument("--post", action="store_true", help="Post report to Discord webhook")
+    parser.add_argument("--webhook-key", default="DISCORD_WEBHOOK_ALERTS", help="Webhook env key to use when posting")
+    args = parser.parse_args()
+
+    if args.post:
+        return post_discord(args.webhook_key)
+
     print(render_discord())
     return 0
 
