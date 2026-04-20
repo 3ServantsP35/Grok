@@ -1,50 +1,54 @@
 # SRI Decision Engine — Complete Methodology Tutorial
-**Version 3.0 DRAFT | Date: 2026-04-18 | Author: CIO Engine**
+**Version 3.1 DRAFT | Date: 2026-04-20 | Author: CIO Engine**
 
 ---
 
-## Purpose of v3
+## Purpose of v3.1
 
-Version 3 introduces a major architectural change while preserving the existing macro and regime scaffold.
+Version 3.1 refines the v3 architecture in three important ways:
 
-**What changes in v3:**
-- Layer **0.75** is no longer a single universal Force Field Engine.
-- Layer **0.75** becomes a **Thesis Routing Layer**.
-- The routing layer activates one or more thesis-specific engines based on the portfolio owner's declared thesis allocation.
+1. **Layer 0.75 is clarified as a theme-routing and deployment layer** rather than a single universal thesis engine.
+2. **TSLA is no longer treated as a separate top-level theme.** It is now treated as an optional security or narrative expression within the Visser theme.
+3. **Layer 0.5 (Howell Phase Engine) is upgraded conceptually** from a simple phase label into a more decision-useful macro allocator that should ultimately track:
+   - phase label
+   - factor preference
+   - deployment posture
 
-**What does not materially change in v3:**
+This draft intentionally uses a **placeholder** for the Visser Theme integration work that must be completed collaboratively with Greg. That work is deferred to **v3.2**.
+
+**What remains materially unchanged in v3.1:**
 - **Layer 0** (GLI Engine)
-- **Layer 0.5** (Howell Phase Engine)
-- **Layer 1** (shared regime layer, pending future review)
-- **Layers 2–3** remain structurally similar, though their downstream interpretation widens to support multiple thesis sleeves.
+- core **MSTR Force Field branch**
+- shared **Layer 1** default assumption
+- downstream **Layers 2–3** as the main signal/allocation scaffold
 
-This document is a **methodology + architecture spec hybrid**. It explains both how the system should work conceptually and how it should be implemented.
+This document remains a **methodology + architecture spec hybrid**.
 
 ---
 
 ## Table of Contents
 
-1. Architecture Overview (v3)
+1. Architecture Overview (v3.1)
 2. Key Design Principles
 3. Layer 0 — GLI Engine (unchanged)
-4. Layer 0.5 — Howell Phase Engine (unchanged)
-5. Layer 0.75 — Thesis Routing Layer (new)
-6. Thesis Allocation Framework
-7. MSTR Thesis Engine — Force Field Branch
-8. TSLA Thesis Engine — Proposed v0.1
-9. Visser Thesis Engine — Proposed v0.1
-10. All-Weather Engine — Proposed v0.1
-11. Layer 1 — Shared Regime Engine
-12. Layers 2–3 — Signal and Allocation Continuity
-13. Planned Changes to AB3 and AB4
-14. Personalized Portfolio Report Integration
+4. Layer 0.5 — Howell Phase Engine (refined)
+5. Layer 0.75 — Theme Routing Layer (refined)
+6. Theme Allocation Framework
+7. MSTR Theme Engine — Force Field Branch
+8. Visser Theme — Placeholder for v3.2 integration
+9. All-Weather Engine — Proposed v0.1
+10. Layer 1 — Shared Regime Engine
+11. Layers 2–3 — Signal and Allocation Continuity
+12. AB Bucket Interpretation in v3.1
+13. Personalized Portfolio Report Integration
+14. Human Technical Overlay
 15. Open Questions and Next Iteration Targets
 
 ---
 
-## 1. Architecture Overview (v3)
+## 1. Architecture Overview (v3.1)
 
-The engine is now organized around a shared macro scaffold followed by thesis-specific routing.
+The engine is now organized around a shared macro scaffold followed by theme-specific routing.
 
 ```text
 ┌──────────────────────────────────────────────────────────────┐
@@ -56,17 +60,17 @@ The engine is now organized around a shared macro scaffold followed by thesis-sp
                                │
 ┌──────────────────────────────▼───────────────────────────────┐
 │ LAYER 0.5: HOWELL PHASE ENGINE                              │
-│ Sector / macro phase classification                         │
-│ Output: phase, confidence, seasonal “in-season” context     │
+│ Phase + factor preference + deployment posture              │
+│ Output: phase, cyc/def pref, growth/value pref, posture     │
 │ Function: gate zero, macro phase conditioning               │
 └──────────────────────────────┬───────────────────────────────┘
                                │
 ┌──────────────────────────────▼───────────────────────────────┐
-│ LAYER 0.75: THESIS ROUTING LAYER                            │
-│ Portfolio-owner thesis allocation activates route branches  │
-│ Branches: MSTR | TSLA | Visser | All-Weather                │
-│ Output: thesis-specific guidance + deployment intensity     │
-│ Function: thesis selection + sleeve activation              │
+│ LAYER 0.75: THEME ROUTING LAYER                             │
+│ Portfolio-owner allocation activates route branches         │
+│ Branches: MSTR | Visser | All-Weather                       │
+│ Output: theme guidance + deployment intensity               │
+│ Function: route activation + sleeve deployment              │
 └──────────────────────────────┬───────────────────────────────┘
                                │
 ┌──────────────────────────────▼───────────────────────────────┐
@@ -78,7 +82,7 @@ The engine is now organized around a shared macro scaffold followed by thesis-sp
                                │
 ┌──────────────────────────────▼───────────────────────────────┐
 │ LAYER 2: SIGNAL LAYER                                       │
-│ AB1 / AB2 / AB3 signal logic inside active thesis sleeves   │
+│ AB1 / AB2 / AB3 logic inside active theme sleeves           │
 │ Output: entry / hold / trim / income / accumulation states  │
 └──────────────────────────────┬───────────────────────────────┘
                                │
@@ -89,46 +93,56 @@ The engine is now organized around a shared macro scaffold followed by thesis-sp
 └──────────────────────────────────────────────────────────────┘
 ```
 
-### Core v3 idea
+### Core v3.1 idea
 The system no longer assumes one universal directional engine for all investment ideas.
 
 Instead:
 - **MSTR** uses a thesis engine built around **Strategy / BTC demand mechanics**.
-- **TSLA** uses a thesis engine built around **Tesla-specific value drivers**.
-- **Visser** uses a thesis engine built around **AI / macro / innovation-cycle logic**.
+- **Visser** is reserved as a top-level theme, but its detailed integration is deferred to **v3.2**.
 - **All-Weather** uses a thesis engine built around **risk-balanced multi-asset allocation**.
+
+### Important v3.1 simplification
+**TSLA is not a separate top-level route.**
+It should instead be treated as an optional security, sub-narrative, or expression **inside the Visser theme**.
 
 ---
 
 ## 2. Key Design Principles
 
-### 2.1 Shared macro, thesis-specific drivers
+### 2.1 Shared macro, theme-specific drivers
 The top of the stack remains shared.
-The thesis-specific differentiation begins at **Layer 0.75**.
+Theme-specific differentiation begins at **Layer 0.75**.
 
-### 2.2 Multiple thesis sleeves can coexist
-A portfolio owner can allocate capital to one, several, or all four theses simultaneously.
+### 2.2 Multiple theme sleeves can coexist
+A portfolio owner can allocate capital to one, several, or all active top-level themes simultaneously.
 
-### 2.3 Engines are mutually exclusive by thesis
+### 2.3 Engines are mutually exclusive by top-level theme
 The engines themselves are not interchangeable.
 
 Examples:
 - Force Field is relevant to **MSTR**.
-- Force Field is **not** relevant to **TSLA**.
-- A TSLA engine should model **TSLA’s real drivers**, not borrow MSTR logic.
+- All-Weather logic is relevant to **All-Weather**.
+- TSLA-specific expression belongs **inside Visser**, not as a standalone top-level route in v3.1.
 
 ### 2.4 Portfolio-owner allocation activates the route
-A thesis engine is only active if the portfolio owner has assigned capital to that thesis.
+A theme engine is only active if the portfolio owner has assigned capital to that theme.
 
 ### 2.5 Global AB4 remains global
-AB4 is still a **global portfolio reserve / defensive sleeve**.
-It is not split separately inside each thesis sleeve.
+AB4 remains a **global portfolio reserve / ballast sleeve**.
+It is not independently duplicated inside each theme sleeve.
+
+### 2.6 Theme-first, AB-second
+In v3.1, the intended portfolio logic is:
+1. assign capital at the **theme** level
+2. use AB1 / AB2 / AB3 / AB4 as the **execution and posture framework** around those themes
+
+This means top-level portfolio construction should be thought of as **theme-led**, while AB buckets describe how capital is deployed, defended, or harvested.
 
 ---
 
 ## 3. Layer 0 — GLI Engine (unchanged)
 
-No methodological change in v3.
+No methodological change in v3.1.
 
 Layer 0 continues to provide:
 - global liquidity context
@@ -136,120 +150,156 @@ Layer 0 continues to provide:
 - broad probability adjustment
 - top-down backdrop for all downstream logic
 
-### Role in v3
+### Role in v3.1
 Layer 0 still conditions:
 - whether macro is broadly supportive or restrictive
-- whether a thesis should be interpreted in a risk-on or risk-off environment
+- whether a theme should be interpreted in a risk-on or risk-off environment
 - how aggressively downstream sleeves should deploy
 
-**Important:** Layer 0 does **not** choose the thesis. It conditions the thesis.
+**Important:** Layer 0 does **not** choose the theme. It conditions the theme.
 
 ---
 
-## 4. Layer 0.5 — Howell Phase Engine (unchanged)
+## 4. Layer 0.5 — Howell Phase Engine (refined)
 
-No methodological change in v3.
+Version 3.1 preserves the Layer 0.5 location in the stack but **upgrades its conceptual role**.
 
-Layer 0.5 continues to provide:
-- phase classification
-- “in-season” vs “out-of-season” structure
-- macro cycle context between GLI and per-thesis deployment
+### 4.1 Prior framing
+In earlier drafts, Layer 0.5 was treated mainly as:
+- a phase classifier
+- an “in-season / out-of-season” gate
+- a macro cycle conditioner
 
-### Role in v3
-Layer 0.5 should remain a shared phase conditioner that helps determine:
-- whether a thesis sleeve should be defensive, opportunistic, or aggressive
-- whether macro context supports trend continuation, rebound, speculation, or turbulence
+### 4.2 v3.1 framing
+Layer 0.5 should ultimately provide **three outputs**:
 
-**Important:** Layer 0.5 does **not** choose the thesis. It conditions the thesis.
+1. **Phase Label**
+   - Rebound
+   - Calm
+   - Speculation
+   - Turbulence
+
+2. **Factor Preference**
+   - cyclical vs defensive
+   - growth vs value
+
+3. **Deployment Posture**
+   - offensive
+   - selective
+   - defensive
+   - ballast-building
+
+### 4.3 Key Howell refinement
+The Howell framework implies that:
+- **liquidity level vs average** is most useful for determining **cyclical vs defensive** preference
+- **liquidity direction / first difference** is most useful for determining **growth vs value** preference
+
+This is a meaningful refinement and should be preserved for implementation.
+
+### 4.4 Current strategic interpretation
+Based on the latest Howell work, the current macro interpretation is best framed as:
+
+> **late-cycle Speculation, not Turbulence yet**
+
+This implies:
+- narrower leadership
+- more respect for value / scarcity / cyclicals
+- less complacency toward broad passive growth exposure
+- preparation for eventual Turbulence rather than immediate full risk-off positioning
+
+### 4.5 Role in v3.1
+Layer 0.5 should influence:
+- sleeve activation intensity
+- factor tilt inside sleeves
+- whether posture should be offensive, selective, or defensive
+- how much ballast emphasis the portfolio should carry
+
+**Important:** Layer 0.5 still does **not** choose the theme. It conditions the theme and the form of deployment.
 
 ---
 
-## 5. Layer 0.75 — Thesis Routing Layer (new)
+## 5. Layer 0.75 — Theme Routing Layer (refined)
 
-This is the central architectural change in v3.
+This remains the central architectural change introduced in v3, but v3.1 clarifies it.
 
 ### 5.1 Purpose
 Layer 0.75 now has two jobs:
 
 1. **Routing**
-   - determine which thesis engines are active for a given portfolio owner
-   - based on the owner's declared thesis allocation percentages
+   - determine which top-level theme engines are active for a given portfolio owner
+   - based on the owner’s declared allocation percentages
 
 2. **Deployment Intensity**
-   - determine how aggressively each active thesis sleeve should be deployed
-   - based on macro context plus the thesis engine’s own state
+   - determine how aggressively each active theme sleeve should be deployed
+   - based on macro context plus the theme engine’s own state
 
 ### 5.2 Inputs
-- portfolio owner thesis allocation
+- portfolio owner theme allocation
 - Layer 0 output
 - Layer 0.5 output
-- thesis-specific driver data
+- theme-specific driver data
+- optional human technical overlay when chart structure matters
 
 ### 5.3 Outputs
-For each active thesis sleeve:
-- thesis state
-- thesis confidence
+For each active theme sleeve:
+- theme state
+- theme confidence
 - deployment intensity
-- preferred exposure style (shares, options, or defensive hold)
+- preferred exposure style
 - route-specific warnings / invalidations
 
 ### 5.4 Routing rule
-If portfolio owner allocation to a thesis is:
-- **0%** → thesis engine is moot
-- **> 0%** → thesis engine is active
+If portfolio owner allocation to a theme is:
+- **0%** → theme engine is moot
+- **> 0%** → theme engine is active
 
-### 5.5 Default thesis allocation
-Default portfolio template:
-- **25% MSTR**
-- **25% TSLA**
-- **25% Visser**
-- **25% All-Weather**
+### 5.5 Default top-level theme allocation
+Default portfolio template for v3.1:
+- **34% MSTR**
+- **33% Visser**
+- **33% All-Weather**
 
 Portfolio owners may adjust from that baseline.
 
-### 5.6 Deployment intensity
-Each thesis engine should output both:
-- **thesis-specific guidance**
-- **capital deployment intensity**
-
-Example:
-- TSLA thesis active at 25% strategic sleeve
-- TSLA thesis engine currently says “deploy 40% of sleeve”
-- therefore only part of that 25% sleeve is actively deployed into AB1/2/3, while remaining capital stays in the global reserve framework
+### 5.6 Important v3.1 note on Visser
+Visser remains a top-level route for allocation purposes, but the detailed engine integration work is deferred to **v3.2**. In v3.1, Visser should remain a placeholder sleeve in the architecture.
 
 ---
 
-## 6. Thesis Allocation Framework
+## 6. Theme Allocation Framework
 
-### 6.1 Strategic thesis allocation
+### 6.1 Strategic theme allocation
 The portfolio owner determines strategic sleeve weights.
 
 This is a **mandate-level decision**, not a market-timing decision.
 
 Examples:
-- Greg may choose a higher TSLA sleeve
-- Gavin may prefer a higher MSTR sleeve
-- Kathryn may prefer higher All-Weather and lower thematic concentration
+- one owner may prefer a higher **MSTR** concentration
+- another may prefer a larger **Visser** sleeve
+- another may prefer heavier **All-Weather** ballast and lower thematic concentration
 
 ### 6.2 Tactical deployment within sleeve
-Once a sleeve exists, the thesis engine decides:
+Once a sleeve exists, the theme engine decides:
 - whether to deploy now
 - how much of the sleeve to deploy
 - whether to prefer shares or options
 - when to slow, pause, or increase deployment
 
-### 6.3 Thesis allocation rubric (planned)
+### 6.3 Theme allocation rubric (planned)
 A later iteration should create a simple user-facing rubric that helps portfolio owners answer:
-- how much of their capital should be dedicated to each thesis
+- how much capital should be dedicated to each top-level theme
 - how concentrated or diversified they want to be
 - whether they prefer offensive, balanced, or defensive deployment
 
+### 6.4 Future design question
+A later iteration may allow a portfolio engine to recommend allocations **across themes**, but in v3.1 this remains a portfolio-owner decision.
+
 ---
 
-## 7. MSTR Thesis Engine — Force Field Branch
+## 7. MSTR Theme Engine — Force Field Branch
 
 ### 7.1 Status
-This is the only fully developed thesis engine at present.
+This is the most fully developed theme engine in the current architecture.
 
 ### 7.2 Thesis premise
 MSTR is not just “BTC beta.”
@@ -268,166 +318,71 @@ Primary current inputs include:
 - STRF/LQD
 - MSTR/IBIT
 - STRC
-- Stablecoin dominance
+- stablecoin dominance
 - MSTR self-state
 
 ### 7.4 Output role
-The MSTR thesis engine should continue to output:
+The MSTR theme engine should continue to output:
 - directional force
 - bounce exhaustion / continuation risk
 - deployment intensity for MSTR sleeve
-- guidance for whether AB1/AB2/AB3 should be active
+- guidance for whether AB1 / AB2 / AB3 should be active
 
-### 7.5 v3 interpretation
+### 7.5 v3.1 interpretation
 No major conceptual change except this:
 - Force Field is now **one route**, not the universal thesis engine for the entire architecture
 
 ---
 
-## 8. TSLA Thesis Engine — Proposed v0.1
+## 8. Visser Theme — Placeholder for v3.2 integration
 
 ### 8.1 Status
-This is a proposed engine, not settled doctrine.
-It should be treated as a review framework for Greg.
+This section is intentionally a **placeholder** in v3.1.
 
-### 8.2 Thesis premise
-TSLA should be modeled through the primary drivers of its value and price action, using a blend of leading and lagging indicators.
+The detailed Visser Theme architecture and its collaborative integration work with Greg will be incorporated in **v3.2**.
 
-The engine should answer:
-- is TSLA acting like a high-beta momentum vehicle?
-- is it in a narrative re-rating regime?
-- is it being supported by macro/liquidity?
-- are core company-specific drivers strengthening or weakening?
+### 8.2 What is locked in already
+Even though the full integration is deferred, the following should be treated as agreed:
+- Visser remains a **top-level theme** in the allocation architecture
+- TSLA is **not** a separate top-level theme in v3.1
+- TSLA may appear inside Visser as an optional security, sub-theme, or narrative expression
+- v3.2 must define the actual Visser engine contract, drivers, and interaction with Layer 0.75
 
-### 8.3 Proposed TSLA driver families
+### 8.3 What v3.1 should assume operationally
+Until v3.2 is completed, the Visser sleeve should be treated as:
+- allocation-aware
+- present in PPRs and portfolio construction
+- descriptively acknowledged in architecture
+- not yet fully systematized in this document
 
-#### A. Structural price / trend state
-- SRI stage state across ST / LT / VLT
-- trackline posture
-- reversal support / resistance geometry
-- LOI / SRIBI progression
-
-#### B. Growth / innovation premium state
-Possible proxies:
-- QQQ relative behavior
-- TSLA / QQQ ratio
-- TSLA / SPY ratio
-- AI / growth cohort relative strength
-
-#### C. Consumer / cyclicality state
-Possible proxies:
-- XLY
-- IWM
-- consumer discretionary breadth
-- rates sensitivity via TLT / DXY context
-
-#### D. Company-specific thesis state
-Proposed qualitative or semi-quantitative buckets:
-- autonomy / FSD optimism regime
-- energy / storage narrative support
-- margin / delivery narrative stress
-- execution confidence regime
-
-These may initially need manual or semi-manual interpretation before becoming fully systematic.
-
-### 8.4 Proposed TSLA engine output
-The TSLA thesis engine should produce:
-- **Thesis State:** weak / mixed / strong
-- **Narrative State:** de-rating / neutral / re-rating
-- **Structure State:** Stage 2 continuation / Stage 3 risk / Stage 4 reset / Stage 4→1 rebound
-- **Deployment Intensity:** 0–100% of TSLA sleeve
-- **Preferred Expression:** shares / calls / LEAPs / low deployment
-
-### 8.5 First-pass deployment logic
-Example conceptual outputs:
-- **Strong thesis + strong structure + favorable macro:** deploy heavily
-- **Strong structure but weak narrative / macro:** partial deployment only
-- **Narrative strong but structure broken:** watch / defer
-- **Stage 3 risk or failed breakout:** reduce deployment intensity
-
-### 8.6 Immediate next step
-The next iteration should propose a **Greg review table**:
-- candidate TSLA drivers
-- why they matter
-- whether they are leading / coincident / lagging
-- whether they are measurable from available datasets
+### 8.4 v3.2 target
+The next version should formalize:
+- the Visser engine integration approach
+- required inputs and outputs
+- sub-theme handling
+- tension resolution between thematic thesis and technical structure
 
 ---
 
-## 9. Visser Thesis Engine — Proposed v0.1
+## 9. All-Weather Engine — Proposed v0.1
 
-### 9.1 Status
-This is also a proposal, not settled doctrine.
-
-### 9.2 Thesis premise
-The Visser route should represent an **AI Macro Nexis** framework, where the core investment thesis is based on innovation-cycle leadership, macro regime, and thematic capital concentration.
-
-### 9.3 Proposed driver families
-
-#### A. Innovation leadership breadth
-Potential proxies:
-- QQQ
-- XLK
-- NVDA
-- MSFT
-- AMZN
-- PLTR
-- semis / AI leadership basket behavior
-
-#### B. Macro liquidity support
-Shared top-down inputs:
-- GLI
-- Howell phase
-- DXY
-- VIX
-- TLT
-
-#### C. Narrative concentration / speculation state
-Potential proxies:
-- relative performance of AI leaders vs broad market
-- extreme breadth narrowing vs broad participation
-- gold/BTC / risk comparison as speculative regime tell
-
-#### D. Risk appetite / duration preference
-Potential proxies:
-- QQQ / IWM
-- growth / value spread
-- TLT and real-rate sensitivity
-
-### 9.4 Proposed Visser engine output
-The engine should produce:
-- **Innovation Cycle State:** early / broadening / concentrated / exhausted
-- **Macro Support State:** supportive / mixed / restrictive
-- **Speculation State:** healthy / frothy / exhausted
-- **Deployment Intensity:** 0–100% of Visser sleeve
-- **Preferred Expression:** leaders / baskets / options / lower-risk posture
-
-### 9.5 Immediate next step
-Create a first review memo mapping:
-- Jordy Visser conceptual pillars
-- candidate measurable inputs
-- what can be automated now vs what stays interpretive
-
----
-
-## 10. All-Weather Engine — Proposed v0.1
-
-### 10.1 Thesis premise
+### 9.1 Thesis premise
 This route represents a **Ray Dalio-style risk-balanced allocation model**, not a thematic directional sleeve.
 
-### 10.2 Function
-This is both:
-- a strategic thesis sleeve in its own right
-- and the conceptual anchor for a broadened global AB4 posture
+### 9.2 Function
+In v3.1, All-Weather should be understood as potentially serving three roles:
+- a strategic theme sleeve in its own right
+- a portfolio benchmark / comparator
+- a major contributor to Global AB4 ballast posture
 
-### 10.3 Proposed asset families
+### 9.3 Proposed asset families
 Initial candidates:
-- equities (broad beta, e.g. VT / SPY)
+- equities (broad beta)
 - duration (TLT or equivalent)
-- inflation / real assets (GLD, DBC)
+- inflation / real assets (GLD, commodities)
 - cash / preferred reserve instruments where appropriate
 
-### 10.4 Proposed engine outputs
+### 9.4 Proposed engine outputs
 - **Growth State**
 - **Inflation State**
 - **Rate State**
@@ -435,149 +390,192 @@ Initial candidates:
 - **Deployment Intensity** within all-weather sleeve
 - **Preferred tilt** toward growth, duration, real assets, or reserve
 
-### 10.5 Role relative to AB4
-Important distinction:
-- the **All-Weather thesis** is a route
-- **Global AB4** is the portfolio reserve bucket
+### 9.5 TLT note for strategic context
+Human technical analysis currently suggests:
+- **TLT is deep in Stage 1**
+- a likely **Stage 2 breakout may emerge in 2H26**
 
-The two are related but not identical.
-
-A portfolio owner may:
-- allocate capital strategically to the All-Weather thesis
-- and still maintain a separate global AB4 reserve posture
+This should not be hard-coded as a system output yet, but it is an example of how human chart insight can refine timing around the All-Weather / duration sleeve.
 
 ---
 
-## 11. Layer 1 — Shared Regime Engine
+## 10. Layer 1 — Shared Regime Engine
 
-### 11.1 Current decision
-Layer 1 remains shared across all theses.
+### 10.1 Current decision
+Layer 1 remains shared across all top-level themes.
 
-### 11.2 Why keep it shared for now
+### 10.2 Why keep it shared for now
 The shared regime layer still provides portfolio-wide context such as:
 - broad risk-on / risk-off state
 - market stress / calm condition
 - common structural context
 
-### 11.3 Warning
-This assumption should be revisited during iteration.
-It may eventually prove that some routes need route-specific regime interpretation overlays.
+### 10.3 Warning
+This assumption should be revisited during later iteration.
+It may eventually prove that some routes need route-specific regime overlays.
 
-For now:
+For v3.1:
 - **shared Layer 1 remains the default**
 
 ---
 
-## 12. Layers 2–3 — Signal and Allocation Continuity
+## 11. Layers 2–3 — Signal and Allocation Continuity
 
-### 12.1 Layer 2 still governs AB1 / AB2 / AB3
+### 11.1 Layer 2 still governs AB1 / AB2 / AB3
 The tactical and strategic signal layer remains intact conceptually.
 
-### 12.2 Layer 3 still governs bucket accounting
-The allocation engine remains intact conceptually, but its downstream semantics widen because multiple thesis sleeves now exist.
+### 11.2 Layer 3 still governs bucket accounting
+The allocation engine remains intact conceptually, but its semantics widen because multiple theme sleeves can now exist.
 
-### 12.3 New interpretation in v3
-- **AB1 / AB2 / AB3** should now operate inside an active thesis sleeve
+### 11.3 New interpretation in v3.1
+- **AB1 / AB2 / AB3** operate inside active theme sleeves
 - **AB4** remains global
 
-### 12.4 Practical meaning
-If TSLA thesis sleeve is active:
-- AB1 / AB2 / AB3 may be used inside TSLA sleeve according to that thesis engine
-
+### 11.4 Practical meaning
 If MSTR sleeve is active:
-- AB1 / AB2 / AB3 may be used inside MSTR sleeve according to Force Field + shared layer logic
+- AB1 / AB2 / AB3 may be used inside the MSTR sleeve according to Force Field + shared layer logic
+
+If Visser sleeve is active:
+- v3.1 architecture acknowledges the sleeve, but the detailed engine and signal mapping are deferred to v3.2
 
 If All-Weather sleeve is active:
 - deployment may look more allocation-oriented and less options-centric
 
 ---
 
-## 13. Planned Changes to AB3 and AB4
+## 12. AB Bucket Interpretation in v3.1
 
-These are intentional changes already identified for later incorporation.
+### 12.1 Theme-first allocation logic
+The intended top-down sequence is:
+1. set theme allocations
+2. let Layer 0 / 0.5 condition risk posture
+3. use AB buckets as the execution and posture framework
 
-### 13.1 AB3 widening
-Current / old framing:
-- AB3 primarily treated as **call LEAP accumulation**
+### 12.2 AB1
+AB1 is a short-duration income / theta sleeve.
+It is likely to remain relatively small and personalized.
 
-Planned v3 adjustment:
-- AB3 should allow **shares or call LEAPs**
-- instrument choice should depend on thesis, volatility, and deployment logic
+### 12.3 AB2
+AB2 is a higher-risk / reward directional sleeve for short- to medium-term delta-oriented positioning.
+It should remain opportunistic rather than dominant.
 
-### 13.2 AB4 widening
-Current / old framing:
-- AB4 primarily associated with cash / STRC reserve logic
+### 12.4 AB3
+AB3 should be treated as the core appreciation sleeve.
+It may include:
+- shares
+- LEAPs
+- long-duration thesis holdings
 
-Planned v3 adjustment:
-- AB4 remains global
-- but its scope widens to include **all-weather reserve / allocation options**, not only cash and STRC
+It is not “set and forget,” but neither is it intended as the most tactical trading sleeve.
+
+### 12.5 AB4
+AB4 remains the global ballast / reserve / income sleeve.
+Its widening scope may include:
+- cash
+- preferreds
+- duration
+- all-weather style reserve posture
+
+### 12.6 Practical sizing implication
+AB1 + AB2 combined should generally be thought of as relatively modest in total portfolio weight, while AB3 and AB4 carry the more durable capital structure.
 
 ---
 
-## 14. Personalized Portfolio Report Integration
+## 13. Personalized Portfolio Report Integration
 
-### 14.1 PPR must become thesis-aware
-Each PPR should reflect the portfolio owner’s declared thesis allocation.
+### 13.1 PPR must become theme-aware
+Each PPR should reflect the portfolio owner’s declared theme allocation.
 
-### 14.2 Proposed PPR logic
+### 13.2 Proposed PPR logic
 For each owner:
-1. read thesis allocation percentages
-2. activate only the relevant thesis engines
+1. read theme allocation percentages
+2. activate only the relevant theme engines
 3. report sleeve-level state
 4. report deployment intensity for each active sleeve
 5. summarize portfolio-level AB posture
+6. highlight major macro conditioning from Layers 0 and 0.5
 
-### 14.3 Example
-If Greg allocates:
-- 40% MSTR
-- 20% TSLA
+### 13.3 Example
+If an owner allocates:
+- 50% MSTR
 - 20% Visser
-- 20% All-Weather
+- 30% All-Weather
 
-Then PPR should include:
+Then the PPR should include:
 - MSTR sleeve state and deployment intensity
-- TSLA sleeve state and deployment intensity
-- Visser sleeve state and deployment intensity
+- Visser sleeve placeholder state in v3.1
 - All-Weather sleeve state and deployment intensity
 - one unified Global AB4 posture
 
 ---
 
+## 14. Human Technical Overlay
+
+### 14.1 Why this section exists
+The current system is strong in macro and structured inference, but human chart-reading can still add important edge, especially around:
+- stage transitions
+- breakout timing
+- structural invalidations
+- multi-timeframe nuance not yet fully systematized
+
+### 14.2 Workflow rule
+When technical structure materially affects the quality of the analysis, the workflow should explicitly request chart-based input from the portfolio owner or analyst.
+
+### 14.3 Practical examples
+The system should proactively request chart views for cases like:
+- TLT setup confirmation
+- suspected Stage 1 to Stage 2 transitions
+- conflicting macro and technical signals
+- high-conviction deployment timing decisions
+
+### 14.4 Role in the architecture
+This is not a replacement for the engine.
+It is a **human technical overlay** that can improve decisions while the charting layer continues to mature.
+
+---
+
 ## 15. Open Questions and Next Iteration Targets
 
-### 15.1 Need to define TSLA engine drivers with Greg
-Immediate next step:
-- propose TSLA driver table for Greg review
+### 15.1 v3.2 must complete Visser integration
+Immediate next version should define:
+- Visser engine structure
+- its Layer 0.75 contract
+- sub-theme handling
+- internal treatment of TSLA and related expressions
 
-### 15.2 Need to define Visser engine drivers more precisely
-Immediate next step:
-- propose AI Macro Nexis driver table for review
+### 15.2 Need a formal theme allocation rubric
+The system still needs a simple rubric that helps owners choose theme allocations.
 
-### 15.3 Need thesis allocation rubric
-The system still needs a simple rubric that helps owners choose thesis allocations.
-
-### 15.4 Need to pressure-test shared Layer 1 assumption
+### 15.3 Need to pressure-test shared Layer 1 assumption
 Keep current assumption, but revisit often.
 
-### 15.5 Need formal route-to-bucket rules
+### 15.4 Need formal route-to-bucket rules
 Later iteration should define exactly:
 - when shares are preferred vs options
 - how sleeve deployment maps into AB1 / AB2 / AB3
 - how global AB4 reserve interacts with active sleeve deployment
 
+### 15.5 Need to operationalize Layer 0.5 outputs
+The refined Howell logic should eventually be made explicit in system outputs:
+- phase label
+- factor preference
+- deployment posture
+
 ---
 
-## v3 Draft Summary
+## v3.1 Draft Summary
 
-Version 3 changes the architecture from a **single-thesis directional engine with universal Force Field logic** into a **multi-thesis routing framework**.
+Version 3.1 keeps the multi-theme architecture introduced in v3, but makes it materially more coherent.
 
-The defining characteristics of v3 are:
+The defining characteristics of v3.1 are:
 - shared macro scaffold
-- thesis-specific routing at Layer 0.75
-- portfolio-owner allocation activation
-- multiple active thesis sleeves in one portfolio
-- mutually exclusive thesis engines by sleeve
+- refined Howell Phase logic at Layer 0.5
+- theme routing at Layer 0.75
+- TSLA removed as a standalone top-level theme
+- Visser preserved as a top-level placeholder for v3.2
+- multiple active sleeves in one portfolio
 - global AB4 reserve retained
-- widened AB3 and AB4 design goals
+- stronger theme-first / AB-second framing
+- explicit human technical overlay in the workflow
 
-This draft should be treated as the new base document for review before implementation.
+This draft should be treated as the v3.1 review base before implementation and before the fuller Visser collaboration work is incorporated in v3.2.
