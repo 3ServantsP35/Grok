@@ -1,11 +1,11 @@
 # SRI Decision Engine — Complete Methodology Tutorial
-**Version 3.1 DRAFT | Date: 2026-04-20 | Author: CIO Engine**
+**Version 3.1.1 DRAFT | Date: 2026-04-20 | Author: CIO Engine**
 
 ---
 
-## Purpose of v3.1
+## Purpose of v3.1.1
 
-Version 3.1 refines the v3 architecture in three important ways:
+Version 3.1.1 refines the v3 architecture in three important ways:
 
 1. **Layer 0.75 is clarified as a theme-routing and deployment layer** rather than a single universal thesis engine.
 2. **TSLA is no longer treated as a separate top-level theme.** It is now treated as an optional security or narrative expression within the Visser theme.
@@ -16,7 +16,7 @@ Version 3.1 refines the v3 architecture in three important ways:
 
 This draft intentionally uses a **placeholder** for the Visser Theme integration work that must be completed collaboratively with Greg. That work is deferred to **v3.2**.
 
-**What remains materially unchanged in v3.1:**
+**What remains materially unchanged in v3.1.1:**
 - **Layer 0** (GLI Engine)
 - core **MSTR Force Field branch**
 - shared **Layer 1** default assumption
@@ -28,7 +28,7 @@ This document remains a **methodology + architecture spec hybrid**.
 
 ## Table of Contents
 
-1. Architecture Overview (v3.1)
+1. Architecture Overview (v3.1.1)
 2. Key Design Principles
 3. Layer 0 — GLI Engine (unchanged)
 4. Layer 0.5 — Howell Phase Engine (refined)
@@ -46,7 +46,7 @@ This document remains a **methodology + architecture spec hybrid**.
 
 ---
 
-## 1. Architecture Overview (v3.1)
+## 1. Architecture Overview (v3.1.1)
 
 The engine is now organized around a shared macro scaffold followed by theme-specific routing.
 
@@ -55,14 +55,19 @@ The engine is now organized around a shared macro scaffold followed by theme-spe
 │ LAYER 0: GLI ENGINE                                         │
 │ Macro liquidity / growth regime                             │
 │ Output: GLI Z-score, GEGI, paradigm label                   │
-│ Function: probability and macro weighting                   │
+│ Function: This layer measures the global liquidity backdrop │
+│ and establishes the top-down macro conditions that shape    │
+│ risk appetite for every downstream decision.                │
 └──────────────────────────────┬───────────────────────────────┘
                                │
 ┌──────────────────────────────▼───────────────────────────────┐
 │ LAYER 0.5: HOWELL PHASE ENGINE                              │
 │ Phase + factor preference + deployment posture              │
 │ Output: phase, cyc/def pref, growth/value pref, posture     │
-│ Function: gate zero, macro phase conditioning               │
+│ Function: This layer translates liquidity structure into a  │
+│ usable market phase, factor preference, and deployment      │
+│ posture so the system can anticipate transitions instead of │
+│ reacting to them too late.                                  │
 └──────────────────────────────┬───────────────────────────────┘
                                │
 ┌──────────────────────────────▼───────────────────────────────┐
@@ -70,30 +75,41 @@ The engine is now organized around a shared macro scaffold followed by theme-spe
 │ Portfolio-owner allocation activates route branches         │
 │ Branches: MSTR | Visser | All-Weather                       │
 │ Output: theme guidance + deployment intensity               │
-│ Function: route activation + sleeve deployment              │
+│ Function: This layer activates the relevant top-level theme │
+│ sleeves, combines macro context with route-specific logic,  │
+│ and decides how much capital each active sleeve should      │
+│ deploy.                                                     │
 └──────────────────────────────┬───────────────────────────────┘
                                │
 ┌──────────────────────────────▼───────────────────────────────┐
 │ LAYER 1: SHARED REGIME ENGINE                               │
 │ Common structural / regime interpretation                   │
 │ Output: regime state, risk posture, shared context          │
-│ Function: common downstream conditioning                    │
+│ Function: This layer converts broad market structure into a │
+│ shared risk framework that all active sleeves can use for   │
+│ consistent downstream signal interpretation.                │
 └──────────────────────────────┬───────────────────────────────┘
                                │
 ┌──────────────────────────────▼───────────────────────────────┐
 │ LAYER 2: SIGNAL LAYER                                       │
 │ AB1 / AB2 / AB3 logic inside active theme sleeves           │
 │ Output: entry / hold / trim / income / accumulation states  │
+│ Function: This layer converts theme and regime context into │
+│ actionable trade and position-management signals for the    │
+│ active sleeves.                                             │
 └──────────────────────────────┬───────────────────────────────┘
                                │
 ┌──────────────────────────────▼───────────────────────────────┐
 │ LAYER 3: ALLOCATION ENGINE                                  │
 │ Bucket accounting + sleeve deployment + Global AB4          │
 │ Output: portfolio-aware capital posture                     │
+│ Function: This layer turns the active signals into actual   │
+│ portfolio deployment, sizing, reserve posture, and bucket   │
+│ accounting across the full portfolio.                       │
 └──────────────────────────────────────────────────────────────┘
 ```
 
-### Core v3.1 idea
+### Core v3.1.1 idea
 The system no longer assumes one universal directional engine for all investment ideas.
 
 Instead:
@@ -101,7 +117,7 @@ Instead:
 - **Visser** is reserved as a top-level theme, but its detailed integration is deferred to **v3.2**.
 - **All-Weather** uses a thesis engine built around **risk-balanced multi-asset allocation**.
 
-### Important v3.1 simplification
+### Important v3.1.1 simplification
 **TSLA is not a separate top-level route.**
 It should instead be treated as an optional security, sub-narrative, or expression **inside the Visser theme**.
 
@@ -196,18 +212,15 @@ The Howell framework implies that:
 
 This is a meaningful refinement and should be preserved for implementation.
 
-### 4.4 Current strategic interpretation
-Based on the latest Howell work, the current macro interpretation is best framed as:
+### 4.4 Intended use of the framework
+The purpose of this layer is not to hard-code the market’s current state into the architecture document.
 
-> **late-cycle Speculation, not Turbulence yet**
+Instead, it should provide a durable framework for identifying:
+- where the market is within the liquidity cycle
+- which factor preferences are favored in that phase
+- what kind of deployment posture is appropriate as transitions begin to form
 
-This implies:
-- narrower leadership
-- more respect for value / scarcity / cyclicals
-- less complacency toward broad passive growth exposure
-- preparation for eventual Turbulence rather than immediate full risk-off positioning
-
-### 4.5 Role in v3.1
+### 4.5 Role in v3.1.1
 Layer 0.5 should influence:
 - sleeve activation intensity
 - factor tilt inside sleeves
@@ -220,7 +233,7 @@ Layer 0.5 should influence:
 
 ## 5. Layer 0.75 — Theme Routing Layer (refined)
 
-This remains the central architectural change introduced in v3, but v3.1 clarifies it.
+This remains the central architectural change introduced in v3, but v3.1.1 clarifies it.
 
 ### 5.1 Purpose
 Layer 0.75 now has two jobs:
@@ -238,7 +251,7 @@ Layer 0.75 now has two jobs:
 - Layer 0 output
 - Layer 0.5 output
 - theme-specific driver data
-- optional human technical overlay when chart structure matters
+- optional human technical overlay when chart structure matters or when the system lacks sufficient confidence in structural interpretation
 
 ### 5.3 Outputs
 For each active theme sleeve:
@@ -254,15 +267,24 @@ If portfolio owner allocation to a theme is:
 - **> 0%** → theme engine is active
 
 ### 5.5 Default top-level theme allocation
-Default portfolio template for v3.1:
+Default portfolio template for v3.1.1:
 - **34% MSTR**
 - **33% Visser**
 - **33% All-Weather**
 
 Portfolio owners may adjust from that baseline.
 
-### 5.6 Important v3.1 note on Visser
-Visser remains a top-level route for allocation purposes, but the detailed engine integration work is deferred to **v3.2**. In v3.1, Visser should remain a placeholder sleeve in the architecture.
+### 5.6 Human intervention at Layer 0.75
+Human chart analysis can intervene at Layer 0.75 when route activation or deployment intensity depends on structure that is not yet reliably inferable from the current systematic stack alone.
+
+This intervention should work as follows:
+- the engine produces its best route-level read from Layers 0, 0.5, and route inputs
+- if deployment timing depends on unresolved chart structure, the workflow explicitly requests a human chart view
+- the human input is then treated as an overlay on deployment timing, exposure style, or caution flags, not as a replacement for the entire engine
+- the final route output should distinguish between **systematic view** and **human-adjusted deployment guidance** when both are present
+
+### 5.7 Important v3.1.1 note on Visser
+Visser remains a top-level route for allocation purposes, but the detailed engine integration work is deferred to **v3.2**. In v3.1.1, Visser should remain a placeholder sleeve in the architecture.
 
 ---
 
@@ -370,7 +392,7 @@ The next version should formalize:
 This route represents a **Ray Dalio-style risk-balanced allocation model**, not a thematic directional sleeve.
 
 ### 9.2 Function
-In v3.1, All-Weather should be understood as potentially serving three roles:
+In v3.1.1, All-Weather should be understood as potentially serving three roles:
 - a strategic theme sleeve in its own right
 - a portfolio benchmark / comparator
 - a major contributor to Global AB4 ballast posture
@@ -390,12 +412,14 @@ Initial candidates:
 - **Deployment Intensity** within all-weather sleeve
 - **Preferred tilt** toward growth, duration, real assets, or reserve
 
-### 9.5 TLT note for strategic context
-Human technical analysis currently suggests:
-- **TLT is deep in Stage 1**
-- a likely **Stage 2 breakout may emerge in 2H26**
+### 9.5 Technical overlay relevance
+Duration-heavy decisions inside the All-Weather sleeve may sometimes require human chart confirmation when stage structure or breakout timing matters more than macro allocation logic alone.
 
-This should not be hard-coded as a system output yet, but it is an example of how human chart insight can refine timing around the All-Weather / duration sleeve.
+That human input should refine:
+- timing of adds
+- preferred instrument choice
+- caution around false breakouts
+- confidence in Stage 1 to Stage 2 transitions
 
 ---
 
@@ -414,7 +438,7 @@ The shared regime layer still provides portfolio-wide context such as:
 This assumption should be revisited during later iteration.
 It may eventually prove that some routes need route-specific regime overlays.
 
-For v3.1:
+For v3.1.1:
 - **shared Layer 1 remains the default**
 
 ---
@@ -436,7 +460,7 @@ If MSTR sleeve is active:
 - AB1 / AB2 / AB3 may be used inside the MSTR sleeve according to Force Field + shared layer logic
 
 If Visser sleeve is active:
-- v3.1 architecture acknowledges the sleeve, but the detailed engine and signal mapping are deferred to v3.2
+- v3.1.1 architecture acknowledges the sleeve, but the detailed engine and signal mapping are deferred to v3.2
 
 If All-Weather sleeve is active:
 - deployment may look more allocation-oriented and less options-centric
@@ -517,20 +541,32 @@ The current system is strong in macro and structured inference, but human chart-
 - breakout timing
 - structural invalidations
 - multi-timeframe nuance not yet fully systematized
+- conflicts between macro posture and chart structure
 
 ### 14.2 Workflow rule
-When technical structure materially affects the quality of the analysis, the workflow should explicitly request chart-based input from the portfolio owner or analyst.
+When technical structure materially affects the quality of the analysis, the workflow should explicitly request chart-based input from the portfolio owner or analyst rather than silently assuming the systematic read is sufficient.
 
-### 14.3 Practical examples
-The system should proactively request chart views for cases like:
-- TLT setup confirmation
-- suspected Stage 1 to Stage 2 transitions
-- conflicting macro and technical signals
-- high-conviction deployment timing decisions
+### 14.3 Trigger conditions for requesting human chart input
+The system should proactively request chart views when one or more of the following are true:
+- stage designation materially changes deployment timing
+- breakout or breakdown timing is central to the decision
+- macro and technical signals appear to conflict
+- a high-conviction add, trim, or risk reduction depends on chart structure
+- the system has low confidence in its own structural read
 
-### 14.4 Role in the architecture
+### 14.4 How the intervention should work
+The human technical overlay should function as a structured workflow, not an ad hoc override.
+
+Recommended sequence:
+1. the engine forms its systematic view
+2. the engine identifies what chart uncertainty remains unresolved
+3. the workflow asks the human for the specific chart view needed
+4. the human provides a structure read, stage read, or transition view
+5. the final output records whether deployment guidance was adjusted by human chart input
+
+### 14.5 Role in the architecture
 This is not a replacement for the engine.
-It is a **human technical overlay** that can improve decisions while the charting layer continues to mature.
+It is a **human technical overlay** that can refine deployment timing, confidence, and exposure style while the charting layer continues to mature.
 
 ---
 
@@ -563,11 +599,11 @@ The refined Howell logic should eventually be made explicit in system outputs:
 
 ---
 
-## v3.1 Draft Summary
+## v3.1.1 Draft Summary
 
-Version 3.1 keeps the multi-theme architecture introduced in v3, but makes it materially more coherent.
+Version 3.1.1 keeps the multi-theme architecture introduced in v3, but makes it materially more coherent.
 
-The defining characteristics of v3.1 are:
+The defining characteristics of v3.1.1 are:
 - shared macro scaffold
 - refined Howell Phase logic at Layer 0.5
 - theme routing at Layer 0.75
@@ -576,6 +612,7 @@ The defining characteristics of v3.1 are:
 - multiple active sleeves in one portfolio
 - global AB4 reserve retained
 - stronger theme-first / AB-second framing
-- explicit human technical overlay in the workflow
+- explicit human technical overlay in the workflow and at Layer 0.75
+- no time-specific Phase Engine state embedded in the architecture document
 
-This draft should be treated as the v3.1 review base before implementation and before the fuller Visser collaboration work is incorporated in v3.2.
+This draft should be treated as the v3.1.1 review base before implementation and before the fuller Visser collaboration work is incorporated in v3.2.
