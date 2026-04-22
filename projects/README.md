@@ -16,8 +16,10 @@
 | P-ONBOARD-ARCH | Gavin Onboarding to Technical Architecture | 🟡 Active | Gavin/CIO |
 | P-AB4-STRAT | Define the AB4 Strategy | 🔴 HIGH | Gavin/CIO |
 | P-AB3-RULESET | Define the AB3 Ruleset | 🔴 HIGH | Gavin/CIO |
+| P-SOUNDBOARD | Soundboarding Template / PPR Decision Workflow | 🟡 Active | Gavin/CIO |
+| P-REPORTING | Portfolio and Layer Reporting Framework | 🟡 Active | Gavin/CIO |
 | P-AB1AB2-AUTO | Automating AB1 and AB2 Trading | 🟡 Active | Greg/Gavin/CIO |
-| P-MCP-CSV | Automating CSV Uploads with MCP | 🟡 Active | Greg/Gavin/CIO |
+| P-MCP-CSV | Automating CSV Uploads with MCP | 🔴 HIGH | Greg/Gavin/CIO |
 
 ---
 
@@ -192,6 +194,49 @@ Purpose: define the AB3 ruleset for leverage through LEAPs and for share-based o
 | Tie AB3 rules into PPR and branch-specific deployment logic | ⬜ Planned |
 
 ---
+### P-SOUNDBOARD: Soundboarding Template / PPR Decision Workflow
+**Status:** 🟡 Active  
+**Lead:** Gavin/CIO
+
+Purpose: define the soundboarding template and decision workflow used inside PPR channels so benchmark posture, deviation proposals, rationale, and final classifications are handled consistently.
+
+**Current scope:**
+- benchmark recommendation presentation
+- deviation proposal workflow
+- rationale capture and tradeoff discussion
+- final posture classification and next-action framing
+
+**Initial milestones:**
+| Milestone | Status |
+|---|---|
+| Define standard soundboarding template | ⬜ Planned |
+| Define benchmark-aligned / acceptable deviation / owner override workflow | ⬜ Planned |
+| Integrate template into PPR channel process | ⬜ Planned |
+| Define what gets recorded vs what stays conversational | ⬜ Planned |
+
+---
+
+### P-REPORTING: Portfolio and Layer Reporting Framework
+**Status:** 🟡 Active  
+**Lead:** Gavin/CIO
+
+Purpose: define how the system reports on portfolios and layers so users can see benchmark posture, active deviations, branch state, and layer-by-layer reasoning in a coherent format.
+
+**Current scope:**
+- portfolio-level reporting
+- layer-by-layer reporting
+- benchmark vs actual posture visibility
+- branch-aware and owner-aware reporting outputs
+
+**Initial milestones:**
+| Milestone | Status |
+|---|---|
+| Define reporting audiences and report types | ⬜ Planned |
+| Define layer-by-layer reporting schema | ⬜ Planned |
+| Define benchmark vs actual posture reporting | ⬜ Planned |
+| Define how reporting consumes soundboarding outputs | ⬜ Planned |
+
+---
 
 ### P-AB1AB2-AUTO: Automating AB1 and AB2 Trading
 **Status:** 🟡 Active  
@@ -275,3 +320,33 @@ The following projects are archived as part of the 2026-04-22 tracker reset. The
 - This reset reflects the current re-architecture effort rather than a judgment that the archived work was valueless.
 - Several archived projects have been absorbed conceptually into the new architecture-driven roadmap.
 - The active tracker now emphasizes durable doctrine, branch-aware portfolio design, automation pathways, and onboarding into technical architecture.
+
+## Recommended Sequencing and Dependency Map
+
+### Recommended order
+1. **P-MCP-CSV**
+2. **P-AB4-STRAT**
+3. **P-AB3-RULESET**
+4. **P-SOUNDBOARD**
+5. **P-REPORTING**
+6. **P-AB1AB2-AUTO**
+
+### Parallel tracks
+- **P-LAYER-ARCH** continues in parallel because architecture hardening affects almost every downstream project.
+- **P-ONBOARD-ARCH** continues in parallel because Gavin’s skill development should happen alongside the real project work, not after it.
+- Existing active market-intelligence projects (**P-DOI**, **P-MR-ENTRY**, **P-MSTR-SUITE**, **P-FF**) continue as standing workstreams.
+
+### Dependency logic
+- **P-MCP-CSV → P-AB4-STRAT**
+  - MCP/CSV automation is now treated as an enabling project because AB4 strategy work needs reliable, repeatable backtesting inputs.
+- **P-AB4-STRAT → P-AB3-RULESET**
+  - AB3 rules depend on a clear benchmark posture to define what counts as overexposure or justified deviation.
+- **P-AB4-STRAT + P-AB3-RULESET → P-SOUNDBOARD**
+  - the soundboarding workflow must know what the benchmark is and what deviation rules exist before it can guide users coherently.
+- **P-SOUNDBOARD → P-REPORTING**
+  - reporting should reuse the same benchmark/deviation vocabulary and classifications defined in the decision workflow.
+- **P-REPORTING + settled doctrine → P-AB1AB2-AUTO**
+  - automation should come after the system has stable benchmark language, deviation rules, and visible reporting outputs.
+
+### Interpretation
+The architecture work has made doctrine the bottleneck, but the user-directed reprioritization means **data plumbing now becomes the first enabling step** because AB4 strategy needs backtesting support.
