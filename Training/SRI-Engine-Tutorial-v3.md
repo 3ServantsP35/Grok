@@ -1,19 +1,19 @@
 # SRI Decision Engine — Complete Methodology Tutorial
-**Version 3.2.1 DRAFT | Date: 2026-04-22 | Author: CIO Engine**
+**Version 3.2.2 DRAFT | Date: 2026-04-22 | Author: CIO Engine**
 
 ---
 
-## Purpose of v3.2.1
+## Purpose of v3.2.2
 
-Version 3.2.1 preserves the v3.2 branch architecture while materially upgrading the Howell Phase Engine design.
+Version 3.2.2 preserves the v3.2.1 Phase Engine upgrades while clarifying how Howell outputs should govern AB4 benchmark posture and how PPR should handle owner deviations from those benchmarks.
 
-The most important changes in v3.2.1 are:
+The most important changes in v3.2.2 are:
 
-1. **Layer 0.5 is upgraded** from a phase labeler into a fuller transition framework modeled more explicitly on how SRI handles stage transitions.
-2. **Liquidity Destination / Absorption State** is added so the engine can distinguish between liquidity supporting financial assets and liquidity being absorbed by the real economy.
-3. **A Howell evidence stack** is formalized to support phase designation with a more disciplined and auditable input set.
-4. **Phase Transition Percentage** is introduced so the framework can represent transition formation with a style that is consistent with the existing stage framework.
-5. **The cascade from Layer 0.5 into downstream layers is clarified** so phase outputs more directly influence deployment intensity, timing, and allocation posture.
+1. **AB4 is clarified as both base capital and benchmark capital posture**, not merely a passive holding bucket.
+2. **Howell Phase outputs are explicitly tied to AB4 benchmark construction**, including risk appetite, trend-calling, deployment posture, and reserve bias.
+3. **PPR is clarified as the owner-specific deviation layer** that allows a user to move away from benchmark with explicit guidance, classification, and rationale.
+4. **Benchmark vs override language is made explicit** so the system distinguishes between recommended posture and owner-directed departures.
+5. **The architecture more clearly separates macro benchmark setting from personalized implementation.**
 
 This document remains a **methodology + architecture spec hybrid**.
 
@@ -21,7 +21,7 @@ This document remains a **methodology + architecture spec hybrid**.
 
 ## Table of Contents
 
-1. Architecture Overview (v3.2.1)
+1. Architecture Overview (v3.2.2)
 2. Key Design Principles
 3. Layer 0 — GLI Engine
 4. Layer 0.5 — Howell Phase Engine
@@ -40,7 +40,7 @@ This document remains a **methodology + architecture spec hybrid**.
 
 ---
 
-## 1. Architecture Overview (v3.2.1)
+## 1. Architecture Overview (v3.2.2)
 
 The engine is now organized around a shared macro scaffold, a theme routing and ingest layer, and a portfolio execution framework.
 
@@ -104,7 +104,7 @@ The engine is now organized around a shared macro scaffold, a theme routing and 
 └──────────────────────────────────────────────────────────────┘
 ```
 
-### Core v3.2.1 idea
+### Core v3.2.2 idea
 The system no longer assumes that every theme must be internally created the same way.
 
 Instead:
@@ -624,18 +624,53 @@ The document should treat them separately so the engine does not confuse interna
 
 ---
 
-## 13. AB Bucket Framework in v3.2
+## 13. AB Bucket Framework in v3.2.2
 
 The call made it clear that the older framing of AB buckets was too blunt.
 
 ### 13.1 AB4
-AB4 should be understood as the **base capital layer**.
+AB4 should be understood as the **base capital layer** and the home of the portfolio’s **benchmark capital posture**.
 It may include:
 - core long-duration holdings
 - cash
 - preferreds
 - all-weather allocations
 - baseline branch allocations intended to be durable rather than highly tactical
+
+### 13.1a AB4 benchmark doctrine
+AB4 should become the primary place where the architecture expresses the portfolio’s default benchmark posture.
+
+That benchmark should be driven first by shared macro outputs, especially from Layer 0.5, rather than by ad hoc owner preference in the moment.
+
+In practical terms, Howell Phase outputs should help determine:
+- how offensive or defensive the benchmark should be
+- how much ballast or reserve posture is appropriate
+- how much trend-following vs caution should be embedded in the base allocation
+- whether baseline capital should lean toward deployment or patience
+- whether the benchmark should tolerate concentration or prefer diversification
+
+### 13.1b Relationship between Howell and AB4 benchmarks
+The Howell Phase Engine should be the primary macro engine behind AB4 benchmark construction.
+
+Specifically, Layer 0.5 should feed AB4 through:
+- phase label
+- factor preference
+- deployment posture
+- liquidity destination / absorption state
+- phase transition percentage
+
+These outputs should shape the prescriptive benchmark posture for AB4.
+They should not be treated as abstract commentary detached from actual portfolio construction.
+
+### 13.1c Benchmark is anchor, not prison
+The benchmark posture inside AB4 should be treated as the system’s default recommendation, not as an irreversible mandate.
+
+That means:
+- AB4 benchmark = recommended default posture
+- user deviation = allowed with explicit discussion
+- override = clearly labeled when user chooses to depart from recommendation
+
+This preserves both discipline and flexibility.
 
 ### 13.2 AB3
 AB3 should be understood as **positioning deviation / oversized conviction / leverage relative to baseline**.
@@ -681,8 +716,24 @@ For each owner:
 4. report sleeve-level state
 5. report deployment intensity for each active sleeve
 6. summarize portfolio-level AB posture
-7. highlight major macro conditioning from Layers 0 and 0.5
-8. explicitly surface conflicts between strategic thesis and timing when present
+7. define the current **AB4 benchmark posture** from Layers 0 and 0.5
+8. highlight major macro conditioning from Layers 0 and 0.5
+9. explicitly surface conflicts between strategic thesis and timing when present
+10. distinguish between benchmark recommendation and owner-specific deviation
+
+### 14.2a PPR as deviation and soundboarding layer
+PPR should be the mechanism through which a portfolio owner can deviate from the AB4 benchmark posture.
+
+That process should include:
+- explicit statement of the benchmark recommendation
+- explicit statement of the proposed owner deviation
+- discussion of what is gained and what is risked by deviating
+- classification of the final posture as:
+  - benchmark-aligned
+  - acceptable deviation
+  - owner override
+
+This makes PPR the personalized implementation layer rather than the place where benchmark discipline disappears.
 
 ### 14.3 Visser-specific PPR requirement
 When Visser is active, the PPR should distinguish:
@@ -753,11 +804,11 @@ That remains an open but likely future path.
 
 ---
 
-## v3.2.1 Draft Summary
+## v3.2.2 Draft Summary
 
-Version 3.2.1 keeps the v3.2 branch architecture but materially strengthens the Phase Engine.
+Version 3.2.2 keeps the v3.2.1 Phase Engine upgrades while clarifying AB4 benchmark doctrine and the role of PPR in owner-specific deviation.
 
-The defining characteristics of v3.2.1 are:
+The defining characteristics of v3.2.2 are:
 - shared macro scaffold
 - refined Howell logic at Layer 0.5
 - Theme Routing and Ingest at Layer 0.75
@@ -772,5 +823,7 @@ The defining characteristics of v3.2.1 are:
 - Howell evidence stack for phase designation
 - Phase Transition Percentage modeled in the spirit of the stage framework
 - explicit downstream cascade from the Phase Engine
+- AB4 benchmark doctrine tied directly to Howell outputs
+- PPR defined as the soundboarding and deviation layer around benchmark posture
 
-This draft should be treated as the v3.2.1 review base before implementation.
+This draft should be treated as the v3.2.2 review base before implementation.
