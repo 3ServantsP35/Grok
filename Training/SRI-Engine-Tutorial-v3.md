@@ -1,22 +1,19 @@
 # SRI Decision Engine — Complete Methodology Tutorial
-**Version 3.2 DRAFT | Date: 2026-04-21 | Author: CIO Engine**
+**Version 3.2.1 DRAFT | Date: 2026-04-22 | Author: CIO Engine**
 
 ---
 
-## Purpose of v3.2
+## Purpose of v3.2.1
 
-Version 3.2 converts the v3.1.x architecture from a placeholder model into a real multi-branch portfolio workflow.
+Version 3.2.1 preserves the v3.2 branch architecture while materially upgrading the Howell Phase Engine design.
 
-The most important changes in v3.2 are:
+The most important changes in v3.2.1 are:
 
-1. **Visser is no longer a placeholder.** It is now defined as an external strategy engine, referred to operationally as **APE**, that feeds into the SRI portfolio workflow.
-2. **Layer 0.75 is upgraded** from a simple routing layer into a **Theme Routing and Ingest Layer**.
-3. **Visser eras are introduced as first-class architectural inputs**, distinct from but interacting with the Howell Phase framework.
-4. **AB buckets are reinterpreted** around base capital, tactical overlays, and conviction deviations rather than around a simplistic “core vs non-core” framing.
-5. **Layer 3 is clarified** to include three distinct decision types:
-   - security selection
-   - rebalancing
-   - theme rotation
+1. **Layer 0.5 is upgraded** from a phase labeler into a fuller transition framework modeled more explicitly on how SRI handles stage transitions.
+2. **Liquidity Destination / Absorption State** is added so the engine can distinguish between liquidity supporting financial assets and liquidity being absorbed by the real economy.
+3. **A Howell evidence stack** is formalized to support phase designation with a more disciplined and auditable input set.
+4. **Phase Transition Percentage** is introduced so the framework can represent transition formation with a style that is consistent with the existing stage framework.
+5. **The cascade from Layer 0.5 into downstream layers is clarified** so phase outputs more directly influence deployment intensity, timing, and allocation posture.
 
 This document remains a **methodology + architecture spec hybrid**.
 
@@ -24,7 +21,7 @@ This document remains a **methodology + architecture spec hybrid**.
 
 ## Table of Contents
 
-1. Architecture Overview (v3.2)
+1. Architecture Overview (v3.2.1)
 2. Key Design Principles
 3. Layer 0 — GLI Engine
 4. Layer 0.5 — Howell Phase Engine
@@ -43,7 +40,7 @@ This document remains a **methodology + architecture spec hybrid**.
 
 ---
 
-## 1. Architecture Overview (v3.2)
+## 1. Architecture Overview (v3.2.1)
 
 The engine is now organized around a shared macro scaffold, a theme routing and ingest layer, and a portfolio execution framework.
 
@@ -107,7 +104,7 @@ The engine is now organized around a shared macro scaffold, a theme routing and 
 └──────────────────────────────────────────────────────────────┘
 ```
 
-### Core v3.2 idea
+### Core v3.2.1 idea
 The system no longer assumes that every theme must be internally created the same way.
 
 Instead:
@@ -180,10 +177,20 @@ Layer 0 still conditions:
 
 ## 4. Layer 0.5 — Howell Phase Engine
 
-Layer 0.5 remains the macro transition engine.
+Layer 0.5 remains the macro transition engine, but v3.2.1 makes it much more structurally similar to the way SRI handles stage designation and stage transitions.
 
-### 4.1 Outputs
-Layer 0.5 should provide three durable outputs:
+### 4.1 Design goal
+The Howell framework should not merely say, “we are in Rebound, Calm, Speculation, or Turbulence.”
+
+It should do the equivalent of the SRI stage framework by:
+- identifying the current phase
+- identifying whether the phase is strengthening or weakening
+- defining recognizable transition markers
+- estimating how close the system is to the next phase
+- cascading those outputs into deployment and allocation decisions downstream
+
+### 4.2 Core outputs
+Layer 0.5 should now provide five durable outputs:
 
 1. **Phase Label**
    - Rebound
@@ -201,23 +208,97 @@ Layer 0.5 should provide three durable outputs:
    - defensive
    - ballast-building
 
-### 4.2 Key Howell refinement
+4. **Liquidity Destination / Absorption State**
+   - financial-market supportive
+   - mixed / contested
+   - real-economy absorptive
+
+5. **Phase Transition Percentage**
+   - an estimate of how far the system has progressed from the current phase toward the next one
+   - intended to mirror the style of the existing stage framework more than a generic “risk score”
+
+### 4.3 Key Howell refinements
 The Howell framework implies that:
 - **liquidity level vs average** is most useful for determining **cyclical vs defensive** preference
 - **liquidity direction / first difference** is most useful for determining **growth vs value** preference
+- strong real-economy conditions can coincide with weakening support for financial assets
+- late-cycle strength can therefore be dangerous for risk assets rather than automatically bullish
 
-### 4.3 Intended use of the framework
+### 4.4 Liquidity destination state
+This is a critical new output.
+
+The Phase Engine should distinguish between:
+- liquidity that is still available to support asset prices, refinancing capacity, and financial-market balance sheets
+- liquidity that is increasingly being absorbed by the real economy through working capital, capex, inventory, or other non-asset-price-inducing uses
+
+This matters because risk assets can weaken even when the economy still appears robust.
+
+### 4.5 Howell phase transition framework
+The architecture should formalize Howell phases in a way that is analogous to SRI stage handling.
+
+That means defining:
+- phase continuation markers
+- phase transition markers
+- confirmation thresholds
+- invalidation criteria
+- a transition percentage that rises as evidence for the next phase accumulates
+
+The system should therefore become capable of saying things like:
+- current phase remains intact
+- transition pressure is building
+- transition is likely but not confirmed
+- new phase is confirmed
+
+### 4.6 Evidence stack for phase designation
+The following evidence stack should be treated as a formal input set into phase designation:
+- cyclicals vs defensives
+- growth vs value leadership
+- yield-curve direction and inflection behavior
+- commodity leadership and late-cycle resource behavior
+- market internals / risk appetite measures
+- survey-vs-market divergence where observable
+- liquidity destination / absorption behavior
+
+This evidence stack is valuable because it helps identify not just whether there is “strength,” but what kind of strength it is and what part of the liquidity cycle it most resembles.
+
+### 4.7 Lead-lag principle
+The architecture should explicitly assume that:
+- liquidity cycle leads
+- business cycle lags
+- risk appetite and market internals often turn before surveys confirm the transition
+
+This means Layer 0.5 should be optimized for identifying **transition formation**, not merely **transition confirmation**.
+
+### 4.8 Intended use of the framework
 The purpose of this layer is not to hard-code the market’s current state into the architecture document.
 
 Instead, it should provide a durable framework for identifying:
 - where the market is within the liquidity cycle
 - which factor preferences are favored in that phase
+- whether liquidity is supporting financial assets or being absorbed elsewhere
 - what kind of deployment posture is appropriate as transitions begin to form
+- how close the system likely is to the next phase
 
-### 4.4 Relationship to branch-native frameworks
+### 4.9 Relationship to branch-native frameworks
 Howell Phase is a **macro capital-flow framework**.
 It may align or conflict with branch-native strategic frameworks, especially Visser eras.
 That tension is expected and should be handled explicitly rather than treated as a bug.
+
+### 4.10 Cascade into downstream layers
+Layer 0.5 outputs should not remain descriptive only.
+They should cascade downstream as follows:
+- **Layer 0.75**: branch deployment intensity and caution flags
+- **Layer 1**: common risk posture and regime interpretation
+- **Layer 2**: aggressiveness of timing signals and preferred structure selection
+- **Layer 3**: sizing, reserve posture, security selection pacing, and theme rotation
+
+### 4.11 Strong economy, weak risk-asset liquidity rule
+The architecture should explicitly support the possibility that:
+- the business cycle appears strong
+- but financial-market liquidity support is deteriorating
+
+When that happens, the system should not interpret strong macro by itself as a broad risk-on green light.
+Instead, it should treat the combination as potentially late-cycle and increasingly hostile to indiscriminate risk deployment.
 
 ---
 
@@ -654,6 +735,9 @@ The branch contract for Visser should be made more concrete in implementation te
 ### 16.2 Era-to-phase monitoring
 Later versions should formalize how Visser eras are monitored against Howell phase shifts without forcing a false one-to-one mapping.
 
+### 16.2a Howell transition markers
+Later versions should define explicit transition markers, confirmation rules, and invalidation rules for each Howell phase so the system can mirror the discipline of the existing stage framework more closely.
+
 ### 16.3 Shared vs branch-specific regime overlays
 Keep shared Layer 1 for now, but revisit whether some branches need more bespoke regime handling.
 
@@ -669,11 +753,11 @@ That remains an open but likely future path.
 
 ---
 
-## v3.2 Draft Summary
+## v3.2.1 Draft Summary
 
-Version 3.2 turns the prior placeholder architecture into a real portfolio integration framework.
+Version 3.2.1 keeps the v3.2 branch architecture but materially strengthens the Phase Engine.
 
-The defining characteristics of v3.2 are:
+The defining characteristics of v3.2.1 are:
 - shared macro scaffold
 - refined Howell logic at Layer 0.5
 - Theme Routing and Ingest at Layer 0.75
@@ -684,5 +768,9 @@ The defining characteristics of v3.2 are:
 - AB4 treated as base capital and AB3 as conviction deviation / leverage layer
 - explicit conflict handling between strategic thesis, macro context, and timing
 - structured human technical overlay
+- Liquidity Destination / Absorption State in Layer 0.5
+- Howell evidence stack for phase designation
+- Phase Transition Percentage modeled in the spirit of the stage framework
+- explicit downstream cascade from the Phase Engine
 
-This draft should be treated as the v3.2 review base before implementation.
+This draft should be treated as the v3.2.1 review base before implementation.
