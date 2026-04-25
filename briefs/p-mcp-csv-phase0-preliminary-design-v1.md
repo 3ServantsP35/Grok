@@ -2,7 +2,7 @@
 **Project:** P-MCP-CSV  
 **Date:** 2026-04-25  
 **Author:** Archie  
-**Status:** Ready for implementation
+**Status:** Revised preliminary design with TradingView access automation
 
 ---
 
@@ -12,15 +12,14 @@ This document translates the approved Phase 0 standardization spec into a prelim
 
 The design goal is straightforward:
 
-- standardize one deterministic TradingView export workflow for **MSTR 4H** on the **Mac Studio**
-- validate it strictly
+- automate acquisition of one deterministic TradingView export workflow for **MSTR 4H** on the **Mac Studio**
+- enforce **4H** as a hard chart and indicator calibration rule
+- validate the acquired export strictly
 - publish a normalized repo copy as `MSTR_4H.csv`
 - fail closed on any invalid or incomplete run
 - preserve the current downstream MSTR Suite workflow
 
-This is intentionally **not** a full automation design for the entire export suite.
-
-It is a controlled Phase 0 design for one golden path that can later be expanded safely.
+This is still intentionally limited to one golden path, but it now includes the missing acquisition layer: how the system gets the TradingView export in the first place.
 
 ---
 
@@ -28,13 +27,16 @@ It is a controlled Phase 0 design for one golden path that can later be expanded
 
 Implement a local Phase 0 workflow on the Mac Studio that:
 
-1. receives a raw TradingView CSV download for the canonical MSTR 4H chart
-2. validates file identity, schema, historical depth, and freshness
-3. writes a manifest and validation log
-4. copies the validated file into the `Grok` repo root as `MSTR_4H.csv`
-5. commits and pushes the result
-6. confirms downstream compatibility via smoke test
-7. reports success or failure to local logs and Discord
+1. accesses TradingView through a persistent authenticated browser session
+2. opens the canonical MSTR 4H chart
+3. verifies **4H** timeframe state before export
+4. triggers the TradingView CSV download
+5. validates file identity, schema, historical depth, and freshness
+6. writes a manifest and validation log
+7. copies the validated file into the `Grok` repo root as `MSTR_4H.csv`
+8. commits and pushes the result
+9. confirms downstream compatibility via smoke test
+10. reports success or failure to local logs and Discord
 
 ---
 
@@ -51,11 +53,18 @@ If the export is missing, stale, malformed, or incompatible, the run must stop b
 ### 2.3 Preserve raw artifacts
 The original TradingView download remains intact for traceability and recovery.
 
-### 2.4 Normalize only at publish boundary
+### 2.4 4H is a hard rule
+The chart timeframe must be **4H**.
+
+This is not just a data preference. It is part of the calibrated indicator environment and therefore part of the export contract.
+
+Any non-4H chart state is an automatic failure.
+
+### 2.5 Normalize only at publish boundary
 The raw file may vary in suffix, but the published repo copy must always be:
 - `MSTR_4H.csv`
 
-### 2.5 Downstream compatibility over elegance
+### 2.6 Downstream compatibility over elegance
 The system should preserve the current downstream model, including duplicate columns and TradingView-specific quirks.
 
 ---
@@ -64,28 +73,35 @@ The system should preserve the current downstream model, including duplicate col
 
 ### 3.1 In scope
 - one-symbol, one-timeframe Phase 0 flow for **MSTR 4H**
+- Mac Studio local browser-based TradingView access and export automation
 - Mac Studio local intake, staging, validation, publish, and reporting flow
-- manual export initiation from TradingView
 - manifest/logging support
 - GitHub publish support
 - downstream smoke-test gate
 
 ### 3.2 Out of scope
-- browser automation of TradingView export
 - support for the full MSTR Suite export set
 - redesign of downstream analytics
 - replacement market data source
 - database-backed orchestration
 - weekly timeframe support
+- broad multi-chart orchestration beyond the single MSTR 4H golden path
 
 ---
 
-## 4. Proposed System Boundary
+## 4. Revised System Boundary
 
-### 4.1 Human-operated boundary
-Phase 0 assumes the operator performs the TradingView download manually from the canonical saved chart on the Mac Studio.
+### 4.1 Access layer
+The system is responsible for obtaining the export from TradingView.
 
-### 4.2 Machine-operated boundary
+That means the automated boundary now begins before file intake and includes:
+- opening the TradingView session on the Mac Studio
+- navigating to the canonical saved MSTR chart
+- verifying the chart is in **4H**
+- triggering the CSV export
+- waiting for the download artifact to appear in intake
+
+### 4.2 Processing layer
 Once the raw file lands in the intake location, the system handles:
 - discovery
 - validation
@@ -96,11 +112,16 @@ Once the raw file lands in the intake location, the system handles:
 - smoke test
 - reporting
 
-### 4.3 Automation boundary recommendation
-The right boundary for later automation remains:
+### 4.3 Boundary recommendation
+The right boundary remains:
 - **one chart = one export contract = one validation path**
 
-That keeps drift detection and failure diagnosis tractable.
+The difference is that the export action itself is now inside the automated system boundary.
+
+### 4.4 Why this boundary is correct
+This preserves TradingView as the source of truth while still allowing the system to acquire the data directly.
+
+It also keeps the calibrated chart state, including **4H**, inside the controlled contract instead of treating it as a human prerequisite.
 
 ---
 
@@ -156,29 +177,89 @@ Supported Phase 0 run types:
 - `manual-test`
 
 ### 6.2 Sequence
-1. operator downloads the canonical MSTR 4H CSV from TradingView
-2. raw file lands in `~/Downloads/tradingview-intake/`
-3. runner identifies the candidate file for the requested run type
-4. runner copies raw file into run staging
-5. validator checks identity, header contract, historical depth, freshness, and file integrity
-6. validator computes schema fingerprint and writes validation result
-7. runner writes manifest
-8. if validation passes, runner copies file into repo root as `MSTR_4H.csv`
-9. runner commits and pushes
-10. runner executes downstream smoke test
-11. runner reports success or failure
+1. runner launches or attaches to the dedicated authenticated TradingView browser session on the Mac Studio
+2. runner opens the canonical saved MSTR chart
+3. runner verifies symbol and **4H** timeframe state
+4. runner triggers the TradingView CSV export
+5. raw file lands in `~/Downloads/tradingview-intake/`
+6. runner identifies the candidate file for the requested run type
+7. runner copies raw file into run staging
+8. validator checks identity, header contract, historical depth, freshness, and file integrity
+9. validator computes schema fingerprint and writes validation result
+10. runner writes manifest
+11. if validation passes, runner copies file into repo root as `MSTR_4H.csv`
+12. runner commits and pushes
+13. runner executes downstream smoke test
+14. runner reports success or failure
 
-### 6.3 Publish gate
-No publish step occurs unless all validation gates pass.
+### 6.3 Acquisition gate
+No validation begins until the system has confirmed that a fresh download was successfully triggered and observed.
 
-### 6.4 Smoke-test gate
+### 6.4 Publish gate
+No publish step occurs unless all access and validation gates pass.
+
+### 6.5 Smoke-test gate
 A run is not fully successful until the downstream smoke test passes.
 
 ---
 
-## 7. Data Contract Handling
+## 7. TradingView Access Design
 
-### 7.1 Canonical input contract
+### 7.1 Access model
+The preferred acquisition path is **browser-driven TradingView export automation** on the Mac Studio.
+
+This means the system should use a persistent browser session that is already authenticated to TradingView and capable of opening the canonical saved chart.
+
+### 7.2 Why browser-driven export is the right Phase 0 path
+This is the right initial path because it:
+- preserves TradingView as source of truth
+- preserves the exact chart-state contract
+- preserves indicator fidelity
+- avoids premature reconstruction of TradingView outputs from alternative data sources
+
+### 7.3 Session model
+Recommended model:
+- dedicated browser profile for TradingView automation
+- persistent authenticated session maintained on the Mac Studio
+- fail closed if the session is logged out or requires unexpected human re-authentication
+
+### 7.4 Chart navigation model
+The system should navigate to one canonical saved chart for MSTR.
+
+That chart must be treated as a configuration object, not just a visual destination.
+
+### 7.5 4H timeframe standardization policy
+**4H is mandatory.**
+
+The automation must verify that the active TradingView chart is set to **4H** before any export action is attempted.
+
+A chart discovered in any other timeframe must fail immediately.
+
+This rule exists because the MSTR indicators are tuned and calibrated to 4H, and future indicators are expected to follow the same standard unless explicitly overridden.
+
+### 7.6 Export trigger model
+The automation must invoke the normal TradingView CSV export path, not a substitute data retrieval method, during this phase.
+
+### 7.7 Download detection model
+After export is triggered, the system should watch the intake directory for the new file associated with the current run.
+
+Failure to observe a fresh file inside the configured wait window is a hard failure.
+
+### 7.8 Access-layer failure cases
+Hard fail if:
+- TradingView session is not authenticated
+- canonical chart cannot be opened
+- symbol does not match the target chart
+- timeframe is not **4H**
+- export action cannot be triggered
+- download artifact does not appear in the intake path
+- TradingView UI drift prevents reliable export
+
+---
+
+## 8. Data Contract Handling
+
+### 8.1 Canonical input contract
 The canonical source object is:
 - `BATS_MSTR, 240_57f94.csv`
 
@@ -188,18 +269,18 @@ It defines:
 - duplicate header behavior
 - minimum historical window
 
-### 7.2 Canonical published artifact
+### 8.2 Canonical published artifact
 The repo-facing published artifact must always be:
 - `MSTR_4H.csv`
 
-### 7.3 Raw file retention
+### 8.3 Raw file retention
 The original TradingView filename must be retained in intake/staging and referenced in the manifest.
 
 ---
 
-## 8. Validation Design
+## 9. Validation Design
 
-### 8.1 Validation stages
+### 9.1 Validation stages
 Validation should run in this order:
 
 1. file presence check
@@ -211,20 +292,20 @@ Validation should run in this order:
 7. publish-precondition check
 8. downstream smoke-test gate after publish
 
-### 8.2 File presence check
+### 9.2 File presence check
 Confirm exactly one intended candidate file has been selected for the run.
 
 Fail if:
 - no candidate file is found
 - candidate selection is ambiguous
 
-### 8.3 Parseability check
+### 9.3 Parseability check
 Confirm the file can be parsed as CSV without mutating duplicate headers.
 
 Implementation requirement:
 - parser must preserve duplicate column names exactly as ordered
 
-### 8.4 File identity check
+### 9.4 File identity check
 Phase 0 should verify the file is the intended MSTR 4H export artifact.
 
 Recommended rule set:
@@ -232,8 +313,9 @@ Recommended rule set:
 - raw filename contains the TradingView 4H interval marker equivalent to `240`
 - file is created or copied within the active run window
 - file path corresponds to the intake location or staging copy of that intake artifact
+- the access layer recorded a successful export event for this run before the file appeared
 
-### 8.5 Schema validation
+### 9.5 Schema validation
 Validation must confirm:
 - exact column count
 - exact column order
@@ -242,7 +324,7 @@ Validation must confirm:
 
 No normalization, deduplication, or header cleanup is allowed.
 
-### 8.6 Canonical header fingerprint
+### 9.6 Canonical header fingerprint
 Implementation:
 - take the ordered header row exactly as exported
 - serialize as comma-joined UTF-8 string, no trailing newline
@@ -260,7 +342,7 @@ sha256: c37c5b63111674f556e086c2f1ce2eb936362791350e4446360958e2ebc70a53
 
 Derived from the exact ordered header of `BATS_MSTR, 240_57f94.csv`. This value is the schema contract. It must be stored in config, not hardcoded in the validator.
 
-### 8.7 Historical depth validation
+### 9.7 Historical depth validation
 Validation must confirm:
 - at least three years of history are present
 - oldest and newest timestamps are recorded in the manifest
@@ -268,7 +350,7 @@ Validation must confirm:
 Open item:
 - numeric row-count floor still to be calibrated with Cyler
 
-### 8.8 Freshness validation
+### 9.8 Freshness validation
 The system does not require real-time data.
 
 **Two-gate freshness check:**
@@ -298,9 +380,9 @@ These tolerances are defaults. The implementation may tighten the mtime window d
 
 ---
 
-## 9. Manifest Design
+## 10. Manifest Design
 
-### 9.1 Required manifest fields
+### 10.1 Required manifest fields
 Recommended manifest schema:
 
 ```yaml
@@ -326,7 +408,7 @@ downstream_smoke_test_status:
 report_status:
 ```
 
-### 9.2 Manifest format
+### 10.2 Manifest format
 Recommended format:
 - YAML or JSON
 
@@ -334,19 +416,19 @@ My recommendation:
 - **JSON** for machine processing
 - optional human-readable summary log alongside it
 
-### 9.3 Manifest retention
+### 10.3 Manifest retention
 Keep manifests for all runs, including failures.
 
 ---
 
-## 10. Logging Design
+## 11. Logging Design
 
-### 10.1 Local logs
+### 11.1 Local logs
 Each run should produce:
 - a machine-readable manifest
 - a human-readable validation log
 
-### 10.2 Logging content
+### 11.2 Logging content
 Minimum logging content:
 - run id
 - run type
@@ -357,12 +439,12 @@ Minimum logging content:
 - commit SHA if published
 - smoke-test result
 
-### 10.3 Reporting destinations
+### 11.3 Reporting destinations
 Phase 0 reporting destinations:
 - local log on Mac Studio
 - Discord
 
-### 10.4 Discord reporting recommendation
+### 11.4 Discord reporting recommendation
 Recommended message format:
 - run type
 - status
@@ -372,15 +454,15 @@ Recommended message format:
 
 ---
 
-## 11. Publish Design
+## 12. Publish Design
 
-### 11.1 Publish action
+### 12.1 Publish action
 Publish is a **copy** action from validated staging artifact into the repo root.
 
-### 11.2 Publish target
+### 12.2 Publish target
 - `<grok_repo>/MSTR_4H.csv`
 
-### 11.3 Git flow
+### 12.3 Git flow
 Recommended Phase 0 git sequence:
 1. ensure repo is available
 2. copy validated file into repo root
@@ -388,14 +470,14 @@ Recommended Phase 0 git sequence:
 4. commit with deterministic message
 5. push
 
-### 11.4 Commit message recommendation
+### 12.4 Commit message recommendation
 Example:
 
 ```text
 data: publish MSTR_4H.csv for 2026-04-25 midday run
 ```
 
-### 11.5 Publish safety
+### 12.5 Publish safety
 Fail before commit if:
 - validation failed
 - repo path unavailable
@@ -403,18 +485,18 @@ Fail before commit if:
 
 ---
 
-## 12. Downstream Smoke Test Design
+## 13. Downstream Smoke Test Design
 
-### 12.1 Purpose
+### 13.1 Purpose
 The smoke test confirms that the existing MSTR Suite reporting flow can still consume the published file.
 
-### 12.2 Minimum requirement
+### 13.2 Minimum requirement
 The smoke test should verify that:
 - the downstream process loads the published CSV successfully
 - no schema compatibility failure occurs
 - expected report-generation entry point still runs
 
-### 12.3 Preliminary implementation approach
+### 13.3 Preliminary implementation approach
 The exact smoke-test command is still open.
 
 Recommended Phase 0 pattern:
@@ -423,10 +505,14 @@ Recommended Phase 0 pattern:
 
 ---
 
-## 13. Failure and Recovery Model
+## 14. Failure and Recovery Model
 
-### 13.1 Hard-fail conditions
+### 14.1 Hard-fail conditions
 Hard fail if any of the following occurs:
+- TradingView session unavailable or unauthenticated
+- canonical chart cannot be opened
+- chart timeframe is not **4H**
+- export action fails
 - no candidate file found
 - ambiguous candidate file selection
 - CSV parse failure
@@ -438,12 +524,12 @@ Hard fail if any of the following occurs:
 - git commit or push failure
 - downstream smoke test failure
 
-### 13.2 Retry model
+### 14.2 Retry model
 For automated runs:
 - retry once
 - if retry fails, report and stop
 
-### 13.3 Recovery support
+### 14.3 Recovery support
 Failed runs should leave behind:
 - raw staged artifact
 - validation log
@@ -454,13 +540,17 @@ This is enough for manual rerun or diagnosis.
 
 ---
 
-## 14. Proposed Implementation Shape
+## 15. Proposed Implementation Shape
 
-### 14.1 Primary runner
+### 15.1 Primary runner
 A single local runner script is sufficient for Phase 0.
 
 Responsibilities:
 - identify run type
+- attach to or launch TradingView browser session
+- open canonical chart
+- verify **4H** timeframe state
+- trigger export and detect fresh download
 - select candidate file
 - orchestrate validation
 - write manifest/logs
@@ -469,10 +559,18 @@ Responsibilities:
 - invoke smoke test
 - report result
 
-### 14.2 Validator module
-Validation should be implemented as explicit independent checks, not one opaque pass/fail block.
+### 15.2 Access and validator modules
+The acquisition layer and validation layer should be implemented as explicit independent checks, not one opaque pass/fail block.
 
-Recommended checks:
+Recommended access checks:
+- `check_session()`
+- `open_chart()`
+- `check_symbol()`
+- `check_timeframe_4h()`
+- `trigger_export()`
+- `wait_for_download()`
+
+Recommended validation checks:
 - `check_presence()`
 - `check_identity()`
 - `check_schema()`
@@ -481,13 +579,17 @@ Recommended checks:
 - `check_freshness()`
 - `check_publish_ready()`
 
-### 14.3 Config inputs
+### 15.3 Config inputs
 Recommended configuration values:
 - repo path
 - intake path
 - staging path
 - manifest path
 - log path
+- TradingView chart URL or saved-chart locator
+- dedicated browser profile/session locator
+- expected symbol
+- enforced timeframe (`4H`)
 - expected published filename
 - expected schema fingerprint
 - freshness window definitions
@@ -496,71 +598,85 @@ Recommended configuration values:
 
 ---
 
-## 15. Operational Procedure for Phase 0
+## 16. Operational Procedure for Phase 0
 
-### 15.1 Midday or close run
-1. open canonical MSTR 4H chart on Mac Studio
-2. confirm chart state
-3. download CSV from TradingView
-4. run Phase 0 runner with intended run type
-5. inspect success/failure output
-6. confirm GitHub publish if successful
+### 16.1 Midday or close run
+1. invoke the Phase 0 runner with intended run type
+2. runner opens the canonical TradingView chart on Mac Studio
+3. runner verifies symbol and **4H** state
+4. runner triggers CSV download from TradingView
+5. runner validates the resulting artifact
+6. inspect success/failure output
+7. confirm GitHub publish if successful
 
-### 15.2 Manual test run
+### 16.2 Manual test run
 For testing, operator may use `manual-test` mode.
 
 This should still:
+- use the same TradingView access path when possible
 - validate strictly
 - write manifests/logs
 - avoid weakening production checks
 
 ---
 
-## 16. Open Decisions
+## 17. Open Decisions
 
 These do not block implementation start, but must be resolved before Phase 0 acceptance testing is finalized.
 
-### 16.1 Row-count floor
+### 17.1 Row-count floor
 Status: **open — pending Cyler calibration**
 
 Three-year window rule is locked. Cyler to confirm whether a hard numeric row-count minimum (e.g., 2,000 rows) should be enforced in addition. Working assumption: no hard floor until Cyler specifies one.
 
-### 16.2 Freshness tolerances
-Status: **resolved — defaults locked in Section 8.8**
+### 17.2 Freshness tolerances
+Status: **resolved — defaults locked in Section 9.8**
 
 Defaults may be tightened during implementation calibration but not widened.
 
-### 16.3 Smoke-test command
+### 17.3 Smoke-test command
 Status: **open — pending identification of the downstream MSTR Suite entry point**
 
 The smoke test should use the lightest existing invocation that proves the published CSV loads and passes schema checks in the downstream reporting flow. Exact command to be confirmed during implementation.
 
-### 16.4 Discord reporting destination
+### 17.4 Discord reporting destination
 Status: **open — pending routing decision**
 
 Recommended destination: MSTR `alerts` webhook. Confirm with Gavin before implementation.
 
+### 17.5 TradingView session maintenance
+Status: **open — pending operational decision**
+
+Need to decide how the dedicated browser session is maintained on the Mac Studio and how re-authentication is handled when TradingView expires the session.
+
+### 17.6 Browser control method
+Status: **open — pending implementation choice**
+
+Need to decide the concrete browser automation/control method used to drive TradingView export on the Mac Studio.
+
 ---
 
-## 17. Recommendation
+## 18. Recommendation
 
-Proceed with implementation of Phase 0 using this design.
+Proceed with implementation of Phase 0 using this revised design.
 
-The design is intentionally modest and correct:
-- manual TradingView export
+The design is intentionally narrow but now complete enough at the system boundary:
+- browser-driven TradingView export acquisition
+- strict **4H** enforcement
 - strict validator
 - deterministic publish artifact
 - explicit manifest and logs
 - fail-closed behavior
 - smoke-tested downstream compatibility
 
-That is the right foundation before broader suite expansion or browser automation.
+That is the right foundation before broader suite expansion.
 
 ---
 
-## 18. Next Step
+## 19. Next Step
 
 The next document should be an **implementation plan** that converts this preliminary design into:
+- concrete browser/session control method
 - concrete file locations
 - exact fingerprint algorithm specification
 - exact freshness windows
@@ -572,8 +688,12 @@ The next document should be an **implementation plan** that converts this prelim
 
 ## Bottom Line
 
-Yes, the revised spec was sufficient.
+Yes, the revised spec was sufficient, but only after clarifying that the system itself must acquire the TradingView export.
 
-This preliminary design gives the team a workable Phase 0 architecture for standardizing the **MSTR 4H** TradingView export on the **Mac Studio** without disturbing the current downstream reporting model.
+This revised preliminary design gives the team a workable Phase 0 architecture for:
+- directly accessing TradingView on the **Mac Studio**
+- enforcing **4H** as a hard chart-state rule
+- acquiring the export automatically
+- validating and publishing it without disturbing the current downstream reporting model
 
-It is ready to use as the basis for the next implementation-planning step.
+It is now ready to use as the basis for the next implementation-planning step.
