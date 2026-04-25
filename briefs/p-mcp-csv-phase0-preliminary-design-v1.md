@@ -2,7 +2,7 @@
 **Project:** P-MCP-CSV  
 **Date:** 2026-04-25  
 **Author:** Archie  
-**Status:** Preliminary design draft
+**Status:** Ready for implementation
 
 ---
 
@@ -12,7 +12,7 @@ This document translates the approved Phase 0 standardization spec into a prelim
 
 The design goal is straightforward:
 
-- standardize one deterministic TradingView export workflow for **MSTR 4H** on the **Mac mini**
+- standardize one deterministic TradingView export workflow for **MSTR 4H** on the **Mac Studio**
 - validate it strictly
 - publish a normalized repo copy as `MSTR_4H.csv`
 - fail closed on any invalid or incomplete run
@@ -26,7 +26,7 @@ It is a controlled Phase 0 design for one golden path that can later be expanded
 
 ## 1. Design Objective
 
-Implement a local Phase 0 workflow on the Mac mini that:
+Implement a local Phase 0 workflow on the Mac Studio that:
 
 1. receives a raw TradingView CSV download for the canonical MSTR 4H chart
 2. validates file identity, schema, historical depth, and freshness
@@ -64,7 +64,7 @@ The system should preserve the current downstream model, including duplicate col
 
 ### 3.1 In scope
 - one-symbol, one-timeframe Phase 0 flow for **MSTR 4H**
-- Mac mini local intake, staging, validation, publish, and reporting flow
+- Mac Studio local intake, staging, validation, publish, and reporting flow
 - manual export initiation from TradingView
 - manifest/logging support
 - GitHub publish support
@@ -83,7 +83,7 @@ The system should preserve the current downstream model, including duplicate col
 ## 4. Proposed System Boundary
 
 ### 4.1 Human-operated boundary
-Phase 0 assumes the operator performs the TradingView download manually from the canonical saved chart on the Mac mini.
+Phase 0 assumes the operator performs the TradingView download manually from the canonical saved chart on the Mac Studio.
 
 ### 4.2 Machine-operated boundary
 Once the raw file lands in the intake location, the system handles:
@@ -107,7 +107,7 @@ That keeps drift detection and failure diagnosis tractable.
 ## 5. Proposed Local Architecture
 
 ### 5.1 Directories
-Recommended paths on the Mac mini:
+Recommended paths on the Mac Studio:
 
 - `~/Downloads/tradingview-intake/`
   - raw TradingView downloads
@@ -243,15 +243,22 @@ Validation must confirm:
 No normalization, deduplication, or header cleanup is allowed.
 
 ### 8.6 Canonical header fingerprint
-Recommended implementation:
+Implementation:
 - take the ordered header row exactly as exported
-- serialize it in canonical raw form
-- compute **SHA-256** over that ordered header representation
+- serialize as comma-joined UTF-8 string, no trailing newline
+- compute **SHA-256** over that representation
 
-Proposed fingerprint rule:
+Fingerprint rule:
 - one canonical stored fingerprint for the approved MSTR 4H sample
 - each run computes its own fingerprint
 - mismatch = hard fail
+
+**Canonical MSTR 4H fingerprint (113 columns):**
+```
+sha256: c37c5b63111674f556e086c2f1ce2eb936362791350e4446360958e2ebc70a53
+```
+
+Derived from the exact ordered header of `BATS_MSTR, 240_57f94.csv`. This value is the schema contract. It must be stored in config, not hardcoded in the validator.
 
 ### 8.7 Historical depth validation
 Validation must confirm:
@@ -264,23 +271,30 @@ Open item:
 ### 8.8 Freshness validation
 The system does not require real-time data.
 
-Recommended implementation:
+**Two-gate freshness check:**
 
-**Midday run**
-- validate that the file is suitable for the **11:30am CT** workflow
-- file must be produced during the current intended midday execution cycle
+Gate 1 — file age (mtime-based):
+- file mtime must fall within the configured execution window
+- a file from a prior run window is stale and must fail
 
-**Close run**
-- validate that the file is suitable for the **3:00pm CT** workflow
-- file must be produced during the current intended close execution cycle
+Gate 2 — data age (newest-row timestamp):
+- computed as the maximum unix timestamp in the `time` column
+- compared against a per-run-type floor
 
-Recommended preliminary logic:
-- file modification time must fall inside a configured run window
-- newest row timestamp must not indicate an obviously stale export
-- stale leftover files from prior windows must fail
+**Midday run** (11:30am CT / 12:30pm ET trigger):
+- mtime window: 10:00–13:00 CT today
+- newest row floor: market open of the **current or prior** trading session (≥ T-1 09:30 ET)
+- rationale: 4H bars make same-day intraday rows unlikely before noon; prior-session close is valid
 
-Open item:
-- exact allowable window tolerances should be locked during implementation
+**Close run** (3:00pm CT / 4:00pm ET trigger):
+- mtime window: 14:30–18:00 CT today
+- newest row floor: today at 13:30 ET (ensures at least one same-day 4H bar is present)
+- rationale: first full same-day 4H bar closes at 13:30 ET; anything older is a stale re-use
+
+**Stale leftover rule:**
+- if a file passes schema/depth but its mtime predates the current run window, reject it — do not silently republish yesterday's export
+
+These tolerances are defaults. The implementation may tighten the mtime window during calibration, but should not widen it.
 
 ---
 
@@ -345,7 +359,7 @@ Minimum logging content:
 
 ### 10.3 Reporting destinations
 Phase 0 reporting destinations:
-- local log on Mac mini
+- local log on Mac Studio
 - Discord
 
 ### 10.4 Discord reporting recommendation
@@ -485,7 +499,7 @@ Recommended configuration values:
 ## 15. Operational Procedure for Phase 0
 
 ### 15.1 Midday or close run
-1. open canonical MSTR 4H chart on Mac mini
+1. open canonical MSTR 4H chart on Mac Studio
 2. confirm chart state
 3. download CSV from TradingView
 4. run Phase 0 runner with intended run type
@@ -504,22 +518,27 @@ This should still:
 
 ## 16. Open Decisions
 
-These do not block a preliminary design, but should be finalized before implementation completion.
+These do not block implementation start, but must be resolved before Phase 0 acceptance testing is finalized.
 
 ### 16.1 Row-count floor
-Cyler to calibrate whether a minimum numeric row-count threshold should be enforced in addition to the three-year window.
+Status: **open — pending Cyler calibration**
+
+Three-year window rule is locked. Cyler to confirm whether a hard numeric row-count minimum (e.g., 2,000 rows) should be enforced in addition. Working assumption: no hard floor until Cyler specifies one.
 
 ### 16.2 Freshness tolerances
-Need exact implementation windows for:
-- valid midday file age
-- valid close file age
-- stale leftover rejection
+Status: **resolved — defaults locked in Section 8.8**
+
+Defaults may be tightened during implementation calibration but not widened.
 
 ### 16.3 Smoke-test command
-Need the exact downstream invocation used as the compatibility gate.
+Status: **open — pending identification of the downstream MSTR Suite entry point**
 
-### 16.4 Discord message format
-Need the preferred final alert format and destination details.
+The smoke test should use the lightest existing invocation that proves the published CSV loads and passes schema checks in the downstream reporting flow. Exact command to be confirmed during implementation.
+
+### 16.4 Discord reporting destination
+Status: **open — pending routing decision**
+
+Recommended destination: MSTR `alerts` webhook. Confirm with Gavin before implementation.
 
 ---
 
@@ -555,6 +574,6 @@ The next document should be an **implementation plan** that converts this prelim
 
 Yes, the revised spec was sufficient.
 
-This preliminary design gives the team a workable Phase 0 architecture for standardizing the **MSTR 4H** TradingView export on the **Mac mini** without disturbing the current downstream reporting model.
+This preliminary design gives the team a workable Phase 0 architecture for standardizing the **MSTR 4H** TradingView export on the **Mac Studio** without disturbing the current downstream reporting model.
 
 It is ready to use as the basis for the next implementation-planning step.
