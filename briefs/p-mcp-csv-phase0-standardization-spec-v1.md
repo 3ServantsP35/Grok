@@ -1,8 +1,8 @@
 # P-MCP-CSV Phase 0 Standardization Spec — MSTR 4H Golden Path
 **Project:** P-MCP-CSV  
 **Date:** 2026-04-25  
-**Author:** Cyler (CIO)  
-**Status:** Draft for Archie review
+**Author:** Cyler (CIO), revised with Archie review  
+**Status:** Draft revised after Archie review
 
 ---
 
@@ -21,6 +21,13 @@ Phase 0 is successful only if:
 2. one end-to-end **manual golden-path run** is proven for MSTR 4H using that standard.
 
 This project deliberately preserves the current downstream analysis model. The goal is to eliminate manual CSV handoff over time, not redesign the MSTR Suite workflow during Phase 0.
+
+The revised Phase 0 contract now also locks in:
+- a **normalized published filename** for the repo copy
+- a **canonical header fingerprint** for exact schema validation
+- a **run manifest** for traceability and recovery
+- explicit **mid-day** and **close-of-day** freshness windows
+- explicit acceptance criteria for validation, publish, and downstream smoke testing
 
 ---
 
@@ -70,6 +77,13 @@ The long-term target is:
 - scheduled runs at **11:30am CT** and **3:00pm CT**
 - on-demand reruns for testing and production use
 
+### 2.7 Freshness target
+The business requirement is **not real-time data**.
+
+The required freshness target is limited to:
+- a valid **mid-day** export for the **11:30am CT** workflow, and
+- a valid **close-of-day** export for the **3:00pm CT** workflow.
+
 ---
 
 ## 3. Why Phase 0 Exists
@@ -94,6 +108,9 @@ Phase 0 solves that problem by defining the export contract first.
 - standardize the export on the Mac mini
 - define local intake, staging, and publish paths
 - define validation and failure behavior
+- define the canonical published filename
+- define the canonical schema fingerprint rule
+- define the run manifest structure
 - manually prove one end-to-end MSTR 4H golden-path run
 
 ### 4.2 Out of scope
@@ -134,33 +151,51 @@ The canonical sample for the golden path is:
 - `BATS_MSTR, 240_57f94.csv`
 
 This file is the reference object for:
-- filename style
+- raw export structure
 - schema fidelity
 - minimum historical depth
 - downstream compatibility expectations
+- canonical header fingerprint source material
 
 ### 6.2 Filename policy
-The system should preserve the **TradingView-native filename style**.
+Phase 0 will use **two filename forms**:
 
-No normalized publish name is required in Phase 0.
+1. **Raw TradingView download name**
+   - preserved unchanged in intake/staging for traceability
+2. **Canonical published repo filename**
+   - normalized to: `MSTR_4H.csv`
+
+This removes dependency on TradingView suffix behavior while preserving the original download artifact.
 
 ### 6.3 Repo destination
 The published file belongs in the repo **main/root folder**, consistent with current policy.
 
-### 6.4 Schema rule
+### 6.4 Publish method
+The validated file must be **copied**, not moved, into the repo working tree root.
+
+The raw TradingView file must remain available in intake/staging for audit and recovery.
+
+### 6.5 Schema rule
 The valid MSTR 4H export must preserve:
 - **every column** present in the canonical sample
+- **the exact canonical column order**
+- **all duplicate column names exactly as exported**
 - **at least three years of data**
 
-### 6.5 Historical depth requirement
+### 6.6 Historical depth requirement
 The canonical sample currently contains:
 - **2,189 rows**
 - first timestamp: `1638210600`
 - last timestamp: `1776432600`
 
-Phase 0 does not require the row count to remain frozen at 2,189, but it does require the file to preserve the same schema and maintain at least a three-year historical window.
+Phase 0 does not require the row count to remain frozen at 2,189.
 
-### 6.6 Acceptance rule for duplicates
+Phase 0 does require:
+- the same schema contract
+- at least a three-year historical window
+- a later row-count floor decision calibrated with Cyler before final automation acceptance language is locked
+
+### 6.7 Acceptance rule for duplicates
 The canonical sample contains repeated column labels, including examples such as:
 - `LT Fast TL`
 - `LT Slow TL`
@@ -308,6 +343,18 @@ For Phase 0, a valid export means:
 - same column names, including duplicates
 - no dropped fields
 - no renamed fields
+- canonical header fingerprint match
+
+### 7.3 Canonical header fingerprint rule
+The validation contract must include a **canonical header fingerprint** derived from the exact ordered header row of the canonical sample.
+
+That fingerprint must be generated from:
+- the full ordered header list
+- original spelling
+- original order
+- duplicate labels preserved exactly
+
+A Phase 0 export is schema-valid only if its derived header fingerprint matches the canonical fingerprint.
 
 ---
 
@@ -331,7 +378,13 @@ This preserves:
 - lower risk of publishing bad files directly into the repo
 
 ### 8.3 Path rule
-No file should move into the repo working tree until it passes validation.
+No file should enter the repo working tree until it passes validation.
+
+### 8.4 Publish-name rule
+The repo working tree should receive the normalized canonical file:
+- `MSTR_4H.csv`
+
+The raw TradingView download filename should remain preserved outside the repo publish destination.
 
 ---
 
@@ -343,10 +396,11 @@ The manual Phase 0 golden-path run should follow this sequence:
 2. confirm the chart is the canonical export chart
 3. perform the normal TradingView CSV download
 4. ensure the raw file lands in the canonical intake location
-5. validate filename shape, schema, and history depth
-6. move/copy the validated file into the local repo working tree root
-7. commit and push the file to GitHub
-8. confirm the published file is usable by the existing MSTR Suite reporting workflow
+5. validate filename identity, schema, history depth, and freshness window
+6. write the run manifest and validation log
+7. copy the validated file into the local repo working tree root as `MSTR_4H.csv`
+8. commit and push the file to GitHub
+9. confirm the published file is usable by the existing MSTR Suite reporting workflow
 
 ---
 
@@ -362,91 +416,147 @@ This chart is not merely a visual reference. It is the configuration object that
 
 If the chart state drifts, the exported file contract may drift with it.
 
+One-chart-per-export is the intended automation boundary for Phase 0 and the next expansion phase.
+
 ---
 
 ## 11. Validation Rules
 
 A valid Phase 0 golden-path MSTR 4H file must satisfy all of the following:
 
-### 11.1 Filename validation
-- file follows TradingView-native naming style
-- file is identifiable as the MSTR 4H export
+### 11.1 File identity validation
+- raw file is traceable to the current MSTR 4H export run
+- file is identifiable as the MSTR 4H export source artifact
+- normalized published filename is `MSTR_4H.csv`
 
 ### 11.2 Schema validation
 - header count matches the canonical sample
 - header order matches the canonical sample
 - duplicate columns remain intact
+- canonical header fingerprint matches
 
 ### 11.3 Historical depth validation
 - file contains at least three years of data
+- row-count floor remains pending final calibration with Cyler
 
 ### 11.4 Freshness validation
-- the newest row must reflect a current export and not a stale leftover file
+A valid file does not need to be real-time.
+
+A valid file must satisfy the intended run window:
+- **mid-day run**: file is current enough for the scheduled **11:30am CT** workflow
+- **close-of-day run**: file is current enough for the scheduled **3:00pm CT** workflow
+
+Validation should confirm that:
+- the newest row is appropriate for the intended run window, and
+- the file is not a stale leftover from a prior run
 
 ### 11.5 Publish validation
-- validated file reaches the repo root successfully
-- commit/push succeeds
+- validated file is copied into the repo root successfully as `MSTR_4H.csv`
+- commit succeeds
+- push succeeds
 
-### 11.6 Downstream compatibility validation
+### 11.6 Manifest and logging validation
+- every run writes a local validation log
+- every run writes a run manifest, whether the run passes or fails
+
+### 11.7 Downstream compatibility validation
 - existing MSTR Suite report generation still works from the published file
+- downstream smoke test passes before the run is considered fully successful
 
 ---
 
-## 12. Failure Policy
+## 12. Run Manifest Template
 
-### 12.1 Fail-closed rule
+Each run should produce a manifest object with at least the following fields:
+
+```yaml
+run_id:
+run_type:            # midday | close | manual-test
+started_at:
+completed_at:
+source_download_filename:
+source_download_path:
+published_filename:  # MSTR_4H.csv
+schema_fingerprint:
+row_count:
+oldest_timestamp:
+newest_timestamp:
+validation_status:
+validation_errors:
+commit_sha:
+push_status:
+downstream_smoke_test_status:
+```
+
+### 12.1 Manifest purpose
+The run manifest exists to provide:
+- traceability
+- recovery support
+- auditability
+- easier debugging during Phase 0 and Phase 1
+
+---
+
+## 13. Failure Policy
+
+### 13.1 Fail-closed rule
 Any missing or invalid required file blocks the run.
 
 No partial-success publication should occur.
 
-### 12.2 Retry policy
+### 13.2 Retry policy
 For automated runs, the policy should be:
 - **retry once**
 - if still failing, alert and stop
 
-### 12.3 Reporting policy
+### 13.3 Reporting policy
 Success/failure should be reported to:
 - **Discord**
 - **local log** on the Mac mini
 
-### 12.4 Recovery expectation
-A failed run should leave enough evidence in the local log and staging flow to support manual rerun and diagnosis.
+### 13.4 Recovery expectation
+A failed run should leave enough evidence in the local log, manifest, and staging flow to support manual rerun and diagnosis.
 
 ---
 
-## 13. Phase 0 Acceptance Test
+## 14. Phase 0 Acceptance Test
 
 Phase 0 is accepted when all of the following are true for the **MSTR 4H golden path**:
 
 1. MSTR 4H is exported on the Mac mini from the canonical TradingView chart
 2. the exported file preserves the canonical schema contract
-3. the file contains at least three years of data
-4. the file lands in the local canonical path structure
-5. the validated file publishes to the canonical GitHub location (repo root)
-6. downstream MSTR Suite reporting still works
+3. the file passes the canonical header fingerprint check
+4. the file contains at least three years of data
+5. the file satisfies the intended freshness window for the run
+6. the file lands in the local canonical path structure
+7. the validated file is copied to the canonical GitHub repo location as `MSTR_4H.csv`
+8. the run writes a local validation log and run manifest
+9. downstream MSTR Suite reporting still works
+10. the downstream smoke test passes
 
 ---
 
-## 14. Recommended Next Milestones
+## 15. Recommended Next Milestones
 
 ### Milestone 1 — MSTR 4H chart contract
 - create/confirm the canonical saved MSTR 4H chart on the Mac mini
-- verify the export produces the expected TradingView-native filename style
-- verify the export matches the canonical schema contract
+- verify the export produces the expected schema contract
+- generate and lock the canonical header fingerprint
 
 ### Milestone 2 — Local path and validation contract
 - create the intake/staging path structure
 - define the validation script requirements
-- define the logging and retry behavior
+- define the logging, manifest, and retry behavior
+- define exact run-window freshness checks
 
 ### Milestone 3 — Manual golden-path proof
 - run one documented end-to-end MSTR 4H export from the Mac mini
-- validate and publish it to GitHub
+- validate and publish it to GitHub as `MSTR_4H.csv`
 - confirm downstream report compatibility
 
-### Milestone 4 — Archie review
-- have Archie review the contract and path architecture
-- confirm the best design for later automation boundaries
+### Milestone 4 — Archie review closure
+- confirm the revised contract and path architecture
+- confirm the automation boundary and acceptance logic
 
 ### Milestone 5 — Expansion planning
 - extend the same standardization pattern to the rest of the MSTR Suite export set
@@ -454,7 +564,7 @@ Phase 0 is accepted when all of the following are true for the **MSTR 4H golden 
 
 ---
 
-## 15. Phase 1 Preview
+## 16. Phase 1 Preview
 
 Once Phase 0 is accepted, Phase 1 should automate around this standardized contract in the following order:
 
@@ -469,7 +579,7 @@ Only after that should the system automate the TradingView export action itself.
 
 ---
 
-## 16. Questions for Archie Review
+## 17. Questions for Archie Review
 
 The intended Archie review should focus on:
 - whether the Mac mini path architecture is the right one
@@ -477,6 +587,13 @@ The intended Archie review should focus on:
 - whether the validation rules are strict enough
 - whether the retry/failure model is appropriate
 - whether the golden-path MSTR 4H proof is the right MVP before expanding to the full suite
+
+Those questions are now substantially answered in favor of:
+- the proposed Mac mini path architecture
+- one-chart-per-export as the preferred boundary
+- stricter machine-testable validation rules
+- copy-into-repo publish behavior
+- golden-path-first scope before broader automation
 
 ---
 
@@ -487,11 +604,15 @@ P-MCP-CSV should begin by making **one TradingView export deterministic** before
 The approved Phase 0 golden path is:
 - **MSTR**
 - **4H**
-- **TradingView-native filename style**
-- **repo root publish**
+- **normalized repo publish filename: `MSTR_4H.csv`**
+- **raw TradingView filename preserved outside repo publish path**
+- **repo root publish by copy**
 - **full schema preservation**
+- **canonical header fingerprint enforcement**
 - **three-year minimum history**
+- **mid-day and close-of-day freshness windows only**
 - **fail-closed run behavior**
 - **Discord + local log visibility**
+- **run manifest + downstream smoke test requirements**
 
-That is the correct contract to hand to Archie for architecture feedback.
+That is the correct revised contract for the next implementation step.
