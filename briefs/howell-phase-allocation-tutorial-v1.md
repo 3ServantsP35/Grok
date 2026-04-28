@@ -896,6 +896,21 @@ PPR should conceptually classify holdings as:
 - **AB3 positioning adjustment / overage**
 - **owner override**
 
+### 15.7A Default AB4 tolerance-band idea
+A clean first-pass tolerance doctrine is:
+- **standard diversified sleeves** use wider bands than special sleeves
+- **special sleeves** such as BTC proxy ETFs, MSTR preferreds, and MSTR common use tighter bands
+- **0% benchmark sleeves** should be treated most strictly
+
+Recommended default bands:
+- benchmark **0%** → up to **+2%** residual for standard sleeves, **+1%** for special sleeves
+- benchmark **>0% to 5%** → **±2%** standard, **±1.5%** special
+- benchmark **>5% to 10%** → **±3%** standard, **±2%** special
+- benchmark **>10% to 20%** → **±4%** standard, **±3%** special
+- benchmark **>20%** → **±5%** standard, **±4%** special
+
+The main purpose is to stop every small implementation drift from being mislabeled as AB3 while still catching real conviction overweights.
+
 ### 15.8 Recommended PPR conversational workflow
 The conceptual flow should be:
 1. identify the Howell phase

@@ -228,7 +228,127 @@ So under All-Weather:
 
 ---
 
-## 9. AB3 Deviation Tiers
+## 9. AB4 Tolerance Band Framework
+
+Before a position is classified as AB3, the system should first ask whether it is still inside a reasonable **AB4 tolerance band**.
+
+The purpose of the tolerance band is to separate:
+- normal implementation drift,
+- intentional but still benchmark-adjacent positioning,
+- and true AB3 overexposure.
+
+### 9.1 Core principle
+A position should only be called AB3 once it is **meaningfully outside** the allowed AB4 tolerance band for that sleeve.
+
+That means the classification sequence is:
+1. benchmark-aligned
+2. within AB4 tolerance band
+3. AB3 deviation
+4. owner override
+
+### 9.2 Sleeve classes for tolerance purposes
+Use two sleeve classes:
+
+#### Standard diversified sleeves
+- cash / equivalents
+- short Treasuries
+- long Treasuries
+- investment-grade credit
+- broad US equities
+- defensive equities
+- cyclical equities
+- small caps
+- commodities broad basket
+- gold
+- international equities
+- energy equities
+- financials
+
+#### Special sleeves
+- BTC proxy ETFs
+- MSTR preferreds
+- MSTR common
+
+Special sleeves get tighter tolerance because they are more concentrated, more regime-sensitive, and more likely to turn quiet drift into hidden conviction risk.
+
+### 9.3 Default AB4 tolerance bands
+These are default absolute percentage-point bands around benchmark weight.
+
+| Benchmark sleeve weight | Standard diversified sleeve | Special sleeve |
+|---|---:|---:|
+| 0% | +2% max residual | +1% max residual |
+| >0% to 5% | ±2% | ±1.5% |
+| >5% to 10% | ±3% | ±2% |
+| >10% to 20% | ±4% | ±3% |
+| >20% | ±5% | ±4% |
+
+### 9.4 Zero-weight rule
+A sleeve with a **0% benchmark weight** should be treated more strictly than an active benchmark sleeve.
+
+That means:
+- a standard diversified sleeve may still carry a small residual position up to **2%** and remain AB4-adjacent
+- a special sleeve may carry at most **1%** residual and remain AB4-adjacent
+- above those levels, the position is no longer just implementation drift and should be classified as AB3 or owner override
+
+This matters most in Turbulence and in transition periods where benchmark posture intentionally turns certain sleeves off.
+
+### 9.5 Profile modifier
+Tolerance should be slightly conditioned by the chosen AB4 profile.
+
+#### Rotational benchmark anchor
+- use the default tolerance table as written
+- benchmark is already active and phase-expressive
+- extra drift should be treated more skeptically
+
+#### All-Weather benchmark anchor
+- tolerance may be interpreted slightly more generously in discussion
+- but the default table should still remain the formal base rule
+- the real difference should usually be handled through benchmark choice itself, not by making tolerance excessively loose
+
+In other words: profile choice is the main driver, not wide tolerance inflation.
+
+### 9.6 Phase modifier
+Tolerance interpretation should tighten when the phase is more defensive.
+
+#### Rebound
+- most tolerant of benchmark-adjacent offensive drift
+
+#### Calm
+- still reasonably tolerant, but less permissive than Rebound
+
+#### Speculation
+- tolerance should be interpreted more narrowly for broad risk and special-sleeve overweights
+
+#### Turbulence
+- tightest interpretation
+- drift above benchmark should be reviewed aggressively, especially for risk sleeves at or near zero benchmark weight
+
+### 9.7 Practical classification examples
+
+#### Example A: benchmark weight 10%, actual 12%
+If the sleeve is standard diversified, that is still within the **±3%** tolerance band.
+Result: **within AB4 tolerance**, not AB3.
+
+#### Example B: benchmark weight 10%, actual 14%
+If the sleeve is standard diversified, this is outside the **±3%** tolerance band.
+Result: likely **AB3 deviation**.
+
+#### Example C: benchmark weight 5%, actual 6%
+If the sleeve is a special sleeve, this is still inside the **±1.5%** tolerance band.
+Result: still **AB4-adjacent**.
+
+#### Example D: benchmark weight 0%, actual 3% in MSTR common
+Special sleeve, zero benchmark, residual limit is **1%**.
+Result: this is clearly **AB3 or owner override**, not simple tolerance drift.
+
+### 9.8 Why the tolerance layer matters
+Without tolerance bands, every small deviation becomes noisy and every meaningful deviation becomes hard to classify cleanly.
+
+The tolerance layer keeps AB4 usable as a benchmark while preserving AB3 as a real category rather than a catch-all label.
+
+---
+
+## 10. AB3 Deviation Tiers
 
 PPR should classify AB3 deviations in tiers.
 
@@ -259,15 +379,15 @@ Characteristics:
 
 ---
 
-## 10. Conceptual Size Constraints
+## 11. Conceptual Size Constraints
 
 Exact percentages can be finalized later, but the ruleset should already define the shape of the constraints.
 
-### 10.1 Benchmark-first principle
+### 11.1 Benchmark-first principle
 AB4 benchmark weight is the starting point.
 AB3 size is measured as **incremental exposure beyond benchmark**, not in isolation.
 
-### 10.2 Special-sleeve caution
+### 11.2 Special-sleeve caution
 For special sleeves such as:
 - BTC proxy ETFs
 - MSTR preferreds
@@ -275,7 +395,7 @@ For special sleeves such as:
 
 AB3 overweights should be treated more carefully than broad diversified sleeves.
 
-### 10.3 Concentration doctrine
+### 11.3 Concentration doctrine
 AB3 can create concentration, but should not create **unexamined concentration**.
 
 Any AB3 position should be judged by:
@@ -284,7 +404,7 @@ Any AB3 position should be judged by:
 - macro phase compatibility
 - whether the benchmark already carries the same theme
 
-### 10.4 Phase-dependent tolerance
+### 11.4 Phase-dependent tolerance
 Tolerance for AB3 overexposure should be:
 - highest in **Rebound**
 - still meaningful in **Calm**
@@ -293,7 +413,7 @@ Tolerance for AB3 overexposure should be:
 
 ---
 
-## 11. PPR Workflow for AB3
+## 12. PPR Workflow for AB3
 
 AB3 should be handled through a repeatable PPR sequence.
 
@@ -336,7 +456,7 @@ PPR should output:
 
 ---
 
-## 12. AB3 Review and Exit Logic
+## 13. AB3 Review and Exit Logic
 
 AB3 positions should not be immortal just because they were once justified.
 
@@ -357,7 +477,7 @@ AB3 should usually be reduced when:
 
 ---
 
-## 13. Working Examples
+## 14. Working Examples
 
 ### Example A: All-Weather user, wants more MSTR upside in Rebound
 - benchmark MSTR common weight under All-Weather is moderate
@@ -378,7 +498,7 @@ AB3 should usually be reduced when:
 
 ---
 
-## 14. Immediate Implications for Related Projects
+## 15. Immediate Implications for Related Projects
 
 ### For P-SOUNDBOARD
 Need a consistent template that shows:
@@ -400,7 +520,7 @@ If AB2 remains a PMCC income overlay on AB3 LEAPs, then AB2 eligibility depends 
 
 ---
 
-## 15. Open Items for v2
+## 16. Open Items for v2
 
 Still to formalize:
 - exact AB4 tolerance bands before AB3 classification begins
