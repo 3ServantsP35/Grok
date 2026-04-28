@@ -26,10 +26,11 @@ AB3 exists to pursue **outsized appreciation** when:
 - the specific opportunity is strong enough,
 - and the benchmark alone is too conservative to fully express the opportunity.
 
-In practical terms, AB3 allows two broad forms of deviation:
+In practical terms, AB3 allows three broad forms of deviation:
 
-1. **Leverage through LEAPs**
+1. **Bullish leverage through LEAPs**
 2. **Share-based overweights relative to AB4 benchmark weight**
+3. **Bearish asymmetry through long-dated puts or equivalent bearish structures**
 
 AB3 should always be understood as a **deviation layer on top of AB4**, not a replacement for AB4.
 
@@ -80,6 +81,7 @@ A position should be classified as AB3 when it does any of the following:
 ### 4.1 LEAP-based exposure
 - long-dated calls used to create leveraged upside exposure
 - PMCC base LEAPs when held as strategic appreciation exposure
+- long-dated puts used to create asymmetric bearish exposure
 - other long-duration option structures explicitly intended to amplify participation
 
 ### 4.2 Share-based overexposure
@@ -99,6 +101,7 @@ A position may begin as benchmark-aligned but become AB3 if:
 
 ### Allowed core AB3 instruments
 - long-dated calls / LEAPs
+- long-dated puts / put LEAPs
 - common shares
 - in some cases, preferred shares when used as deliberate overweight rather than benchmark ballast
 
@@ -109,7 +112,8 @@ A position may begin as benchmark-aligned but become AB3 if:
 
 Default bias:
 - **shares first when the thesis is strong but leverage is not required**
-- **LEAPs when asymmetry and time horizon justify leverage**
+- **call LEAPs when bullish asymmetry and time horizon justify leverage**
+- **put LEAPs when downside asymmetry matters and a clean bearish expression is needed**
 
 ---
 
@@ -124,12 +128,19 @@ This is the core AB3 implementation choice.
 - the thesis is strong, but the timing window is wide and not especially convex
 - the asset is better expressed as a persistent holding than as a leveraged timing bet
 
-### Use LEAPs when
+### Use bullish call LEAPs when
 - the thesis is high-conviction and upside convexity matters
 - the setup is time-sensitive enough that leverage meaningfully improves expected outcome
 - the owner explicitly wants capped premium risk rather than larger share notional
-- the phase backdrop and technical timing are aligned enough to support leveraged expression
+- the phase backdrop and technical timing are aligned enough to support leveraged bullish expression
 - the opportunity is strong, but the owner does not want to commit full share capital
+
+### Use bearish put LEAPs when
+- the owner has a strong downside thesis that is not adequately expressed by the benchmark alone
+- the expected move is asymmetric to the downside and time horizon matters
+- the owner wants defined premium at risk rather than shorting shares or making a large gross hedge elsewhere
+- the phase backdrop is deteriorating enough that a bearish expression is plausibly phase-consistent
+- the position is being used as a deliberate AB3 deviation rather than as routine benchmark ballast
 
 ### Prefer shares over LEAPs when
 - the Howell phase is hostile or unstable for new leveraged exposure
@@ -137,10 +148,23 @@ This is the core AB3 implementation choice.
 - option pricing is too expensive relative to expected edge
 - the thesis depends more on long persistence than on fast convex payoff
 
-### Prefer LEAPs over shares when
+### Prefer bullish call LEAPs over shares when
 - the entry window is unusually attractive
-- the benchmark is underexpressing a highly asymmetric setup
+- the benchmark is underexpressing a highly asymmetric upside setup
 - the owner wants upside participation with predefined premium at risk
+
+### Prefer bearish put LEAPs over short exposure or crude underweights when
+- simple underweighting is not enough to express the downside thesis
+- the owner wants explicit convex downside participation
+- the goal is a defined-risk bearish AB3 posture rather than a vague reduction in risk appetite
+
+### Important doctrine for bearish AB3
+Bearish AB3 should usually be treated as a **high-scrutiny exception**, not a routine default.
+
+Why:
+- AB4 already expresses defense through cash, Treasuries, gold, and risk reduction
+- many bearish views are better handled by moving back toward or below benchmark risk, rather than adding separate short convexity
+- put LEAPs should therefore be reserved for cases where the owner wants an explicit bearish thesis beyond what AB4 already does
 
 ---
 
@@ -186,19 +210,22 @@ AB3 in Speculation should favor:
 - narrower, high-conviction positions
 - tighter explanation requirements
 - lower tolerance for casual overexposure
+- selective bearish AB3 only when the downside thesis is explicit and stronger than simple de-risking
 
 ### 7.4 Turbulence
-**AB3 posture:** highly restricted
+**AB3 posture:** highly restricted on the bullish side, more open to carefully justified bearish asymmetry
 
 Why:
 - capital preservation dominates
 - benchmark is intentionally defensive
-- new leveraged overexposure is hardest to justify here
+- new leveraged bullish overexposure is hardest to justify here
+- but explicit bearish convexity may sometimes be justified if the owner wants more than passive defense
 
 AB3 in Turbulence should generally:
-- block most new LEAP entries
+- block most new bullish LEAP entries
 - sharply reduce tolerance for new share overweights
-- allow only exceptional residual conviction or early transition setups
+- allow only exceptional residual bullish conviction or early transition setups
+- allow selective bearish put LEAPs when the owner wants defined-risk downside expression beyond standard AB4 defense
 
 ---
 
@@ -579,10 +606,11 @@ For each sleeve or security, determine whether the actual position is:
 ### Step 3. Evaluate AB3 justification
 If the position is AB3, ask:
 - what is the thesis?
+- is it bullish or bearish?
 - why is benchmark weight insufficient?
-- why shares vs LEAPs?
+- why shares vs call LEAPs vs put LEAPs?
 - is the phase supportive enough?
-- is the concentration acceptable?
+- is the concentration or hedge sizing acceptable?
 
 ### Step 4. Classify AB3 intensity
 Classify as:
@@ -642,6 +670,12 @@ AB3 should usually be reduced when:
 - this is likely not acceptable AB3
 - if retained anyway, it should likely be classified as owner override
 
+### Example D: Turbulence user wants bearish put LEAP exposure
+- benchmark is already defensive, so first ask whether simple AB4 alignment already expresses enough caution
+- if the owner wants explicit downside convexity beyond that, put LEAPs may qualify as AB3
+- this should be treated as a deliberate bearish deviation, not as routine benchmark behavior
+- sizing and thesis scrutiny should remain high
+
 ---
 
 ## 16. Immediate Implications for Related Projects
@@ -662,7 +696,9 @@ Reports should distinguish:
 - owner overrides
 
 ### For AB2 logic
-If AB2 remains a PMCC income overlay on AB3 LEAPs, then AB2 eligibility depends on an already-approved AB3 base position. That means AB3 approval logic must come first.
+If AB2 remains a PMCC income overlay on bullish AB3 LEAPs, then AB2 eligibility depends on an already-approved AB3 base position. That means AB3 approval logic must come first.
+
+Bearish AB3 put LEAPs are conceptually separate and should not be folded into the PMCC logic.
 
 ---
 
@@ -673,6 +709,7 @@ Still to formalize:
 - exact AB3 tier thresholds by percentage and by sleeve type
 - technical timing requirements for LEAP approval
 - whether preferred-share overweights should always count as AB3 or sometimes remain benchmark-adjacent
+- whether bearish AB3 should later get its own branch-specific doctrine by asset class
 - whether to expand branch-specific doctrine beyond the MSTR / BTC complex into diversified sleeves
 
 ---
