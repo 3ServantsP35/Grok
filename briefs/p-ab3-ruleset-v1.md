@@ -413,7 +413,153 @@ Tolerance for AB3 overexposure should be:
 
 ---
 
-## 12. PPR Workflow for AB3
+## 12. Branch-Specific AB3 Rules
+
+This section defines branch-specific AB3 logic for the sleeves most likely to generate meaningful benchmark deviation.
+
+The first pass should focus on:
+- **MSTR common**
+- **MSTR preferreds**
+- **BTC proxy ETFs**
+
+These are the sleeves where AB3 is most likely to matter in practice.
+
+### 12.1 MSTR common
+
+#### Why it is special
+MSTR common is not just equity exposure.
+It is a:
+- BTC-linked equity expression,
+- corporate flywheel expression,
+- volatility-amplified special sleeve,
+- and often the fastest way for the portfolio to become unintentionally concentrated.
+
+That means MSTR common AB3 should be treated as one of the highest-scrutiny forms of deviation.
+
+#### When AB3 in MSTR common is most justified
+Most justified when:
+- the Howell phase is **Rebound** or constructive **Calm**
+- benchmark profile is **All-Weather** and the owner wants stronger upside expression
+- the benchmark weight is too small to express a high-conviction recovery or asymmetry thesis
+- the owner prefers direct share participation without option decay
+- the early **Turbulence to Rebound** setup is forming for BTC-adjacent assets
+
+#### When MSTR common AB3 should face a higher bar
+Higher bar when:
+- the benchmark profile is already **Rotational**
+- the Howell phase is **Speculation** and benchmark MSTR weight is already elevated
+- the Howell phase is **Turbulence** and the position would be a fresh aggressive add rather than a residual hold
+- the owner already has correlated BTC proxy or MSTR preferred overweights elsewhere in the portfolio
+
+#### Shares vs LEAPs for MSTR common expression
+Prefer **shares** when:
+- the owner wants durable overweight exposure
+- the thesis is strong but not tightly time-dependent
+- current benchmark MSTR weight is already meaningful and AB3 is an incremental add
+
+Prefer **LEAPs** when:
+- the entry window is unusually asymmetric
+- the owner wants convexity without committing full share notional
+- the setup is an early recovery / transition expression where upside acceleration matters
+
+#### MSTR common red lines
+Treat with greatest caution when:
+- benchmark weight is **0%** and the actual position is still material
+- the phase is **Turbulence** and no early recovery justification exists
+- the combined look-through exposure to BTC proxy plus MSTR common becomes the dominant portfolio driver
+
+### 12.2 MSTR preferreds
+
+#### Why they are special
+MSTR preferreds sit between benchmark ballast and conviction expression.
+They are not the same as pure common-stock risk, but they are also not generic defensive carry.
+
+They may serve as:
+- yield-bearing benchmark exposure,
+- capital-structure-upgrade exposure relative to MSTR common,
+- or a moderated way to express continued conviction in the MSTR complex.
+
+#### Default treatment
+The default assumption should be:
+- benchmark-sized MSTR preferred exposure usually remains **AB4**, not AB3
+- modest overweight may still be closer to benchmark-adjacent than true AB3 if the role is primarily income / structure quality
+- larger deliberate overweight should be classified as **AB3**
+
+#### When MSTR preferred AB3 is most justified
+Most justified when:
+- the owner wants continued MSTR-complex exposure but with less aggressiveness than common
+- the phase is **Speculation** or **Turbulence** and common exposure looks too aggressive
+- the benchmark profile is **All-Weather** and the owner wants to add conviction without fully stepping into common-stock volatility
+- the thesis is partly yield / structure-driven rather than pure upside chasing
+
+#### When MSTR preferred AB3 should face a higher bar
+Higher bar when:
+- the preferred overweight is so large that it effectively becomes concentrated single-issuer exposure
+- the owner is using preferreds to hide what is really a large thematic MSTR bet while claiming defensiveness
+- the portfolio already carries meaningful MSTR common AB3 and BTC proxy AB3 exposure
+
+#### Practical doctrine
+MSTR preferred overweights should generally be treated as:
+- easier to justify than equivalent MSTR common overweights
+- but still subject to concentration review because issuer concentration remains real
+
+### 12.3 BTC proxy ETFs
+
+#### Why they are special
+BTC proxy sleeves are direct macro-risk expressions.
+They are simpler than MSTR common, but they still carry:
+- high volatility,
+- strong macro sensitivity,
+- and heavy correlation with MSTR complex exposure.
+
+#### When BTC proxy AB3 is most justified
+Most justified when:
+- the Howell phase is **Rebound**
+- the owner wants cleaner BTC beta than MSTR common provides
+- the benchmark profile is **All-Weather** and the owner wants to reintroduce more upside torque
+- the thesis is BTC-specific rather than corporate-flywheel-specific
+
+#### When BTC proxy AB3 should face a higher bar
+Higher bar when:
+- the Howell phase is **Speculation** and the benchmark already carries meaningful BTC proxy or MSTR-related exposure
+- the Howell phase is **Turbulence** without a credible early recovery transition setup
+- the owner already holds substantial MSTR common AB3, making the BTC proxy overweight mostly duplicative
+
+#### Shares vs LEAPs for BTC proxy expression
+Prefer **shares / ETF units** when:
+- the goal is cleaner benchmark-plus BTC participation
+- the owner wants to avoid extra option-structure complexity
+- the thesis is strong but not dependent on near-term convexity
+
+Prefer **LEAPs** only when:
+- the transition setup is unusually strong
+- the owner explicitly wants convex exposure with defined premium at risk
+- the added leverage is clearly better than simply increasing share weight
+
+### 12.4 Correlation doctrine across the three sleeves
+MSTR common, MSTR preferreds, and BTC proxy ETFs should never be judged in isolation.
+
+PPR should evaluate them as a **correlated cluster**.
+
+Questions to ask:
+- Is the owner overweight just one sleeve, or the whole BTC / MSTR complex?
+- Is the preferred exposure actually moderating risk, or merely adding to the same theme?
+- Is the benchmark already expressing this cluster strongly?
+- Is the portfolio becoming dominated by one macro thesis through multiple wrappers?
+
+A position that looks acceptable sleeve-by-sleeve may still be excessive at the cluster level.
+
+### 12.5 Branch-specific summary doctrine
+- **MSTR common** = highest upside, highest scrutiny, easiest path to unintended concentration
+- **MSTR preferreds** = benchmark-friendly and often easier to justify, but not exempt from issuer concentration review
+- **BTC proxy ETFs** = cleaner macro beta than MSTR common, but still highly correlated and phase-sensitive
+
+The main goal is not to ban concentration.
+The goal is to ensure concentration is **intentional, legible, and phase-aware**.
+
+---
+
+## 13. PPR Workflow for AB3
 
 AB3 should be handled through a repeatable PPR sequence.
 
@@ -456,7 +602,7 @@ PPR should output:
 
 ---
 
-## 13. AB3 Review and Exit Logic
+## 14. AB3 Review and Exit Logic
 
 AB3 positions should not be immortal just because they were once justified.
 
@@ -477,7 +623,7 @@ AB3 should usually be reduced when:
 
 ---
 
-## 14. Working Examples
+## 15. Working Examples
 
 ### Example A: All-Weather user, wants more MSTR upside in Rebound
 - benchmark MSTR common weight under All-Weather is moderate
@@ -498,7 +644,7 @@ AB3 should usually be reduced when:
 
 ---
 
-## 15. Immediate Implications for Related Projects
+## 16. Immediate Implications for Related Projects
 
 ### For P-SOUNDBOARD
 Need a consistent template that shows:
@@ -520,14 +666,14 @@ If AB2 remains a PMCC income overlay on AB3 LEAPs, then AB2 eligibility depends 
 
 ---
 
-## 16. Open Items for v2
+## 17. Open Items for v2
 
 Still to formalize:
 - exact AB4 tolerance bands before AB3 classification begins
 - exact AB3 tier thresholds by percentage and by sleeve type
 - technical timing requirements for LEAP approval
-- branch-specific AB3 rules for MSTR, BTC proxy, and other sleeves
 - whether preferred-share overweights should always count as AB3 or sometimes remain benchmark-adjacent
+- whether to expand branch-specific doctrine beyond the MSTR / BTC complex into diversified sleeves
 
 ---
 
