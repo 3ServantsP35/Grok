@@ -10,6 +10,12 @@
 
 This document explains how AB4 should allocate capital across the full Howell phase cycle **absent technical analysis**.
 
+## Reference Graphic
+
+![Howell phase cycle reference graphic](assets/howell-phase-cycle-graphic-2026-04-27.png)
+
+*Reference graphic added for phase-cycle orientation and discussion context.*
+
 That means this tutorial answers the question:
 
 > **If we only knew the current Howell macro phase and its transition direction, how should we expect AB4 allocations to change?**
