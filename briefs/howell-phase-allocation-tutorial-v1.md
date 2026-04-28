@@ -152,6 +152,49 @@ Each phase should eventually produce:
 
 In this tutorial, the focus is on the **target benchmark allocations** and their macro rationale.
 
+## 5.5 Neutral/Core AB4 Baseline
+
+The **All-Weather profile** is defined by compressing the full Rotational phase tilt back toward a neutral/core AB4 baseline.
+
+### Neutral/core baseline
+- cash / equivalents: **10%**
+- short Treasuries: **10%**
+- long Treasuries: **5%**
+- investment-grade credit: **5%**
+- broad US equities: **10%**
+- defensive equities: **5%**
+- cyclical equities: **5%**
+- small caps: **5%**
+- commodities broad basket: **5%**
+- gold: **5%**
+- BTC proxy ETFs: **5%**
+- international equities: **5%**
+- energy equities: **5%**
+- financials: **5%**
+- MSTR preferreds: **10%**
+- MSTR common: **5%**
+
+### Profile definitions
+- **AB4 Rotational Profile** = full Howell phase tilt
+- **AB4 All-Weather Profile** = 50% tilt compression toward the neutral/core baseline
+
+### Compression formula
+For any sleeve:
+
+> **All-Weather = Neutral/Core + 0.5 × (Rotational − Neutral/Core)**
+
+Equivalent form:
+
+> **All-Weather = (Neutral/Core + Rotational) / 2**
+
+This means both profiles share:
+- the same phase timing
+- the same sleeve universe
+- the same migration direction
+
+The difference is the **amplitude of change**, not the timing or the asset choices.
+
+
 ---
 
 ## 6. Rebound Phase
@@ -203,6 +246,25 @@ Capture early-cycle appreciation while still retaining some reserve posture.
 - BTC proxy and MSTR common can be attractive because rebound often restores risk appetite quickly
 - low gold and duration because deep defense becomes less necessary
 - some credit and financials because refinancing conditions and balance-sheet relief often improve
+
+### Rebound All-Weather profile (50% tilt compression)
+
+- cash / equivalents: **7.5%**
+- short Treasuries: **7.5%**
+- long Treasuries: **2.5%**
+- investment-grade credit: **5%**
+- broad US equities: **12.5%**
+- defensive equities: **2.5%**
+- cyclical equities: **10%**
+- small caps: **7.5%**
+- commodities broad basket: **5%**
+- gold: **2.5%**
+- BTC proxy ETFs: **7.5%**
+- international equities: **5%**
+- energy equities: **2.5%**
+- financials: **7.5%**
+- MSTR preferreds: **7.5%**
+- MSTR common: **7.5%**
 
 ### Rebound risks
 - false rebound
@@ -258,6 +320,25 @@ Own the broadest high-quality set of constructive risk assets without overcompli
 - risk sleeves remain alive, but concentration is less necessary than in Rebound or selective Speculation
 - moderate gold and commodities keep some inflation and macro diversification without dominating the book
 - special sleeves such as MSTR common and BTC proxy remain present, but not oversized
+
+### Calm All-Weather profile (50% tilt compression)
+
+- cash / equivalents: **7.5%**
+- short Treasuries: **7.5%**
+- long Treasuries: **2.5%**
+- investment-grade credit: **7.5%**
+- broad US equities: **12.5%**
+- defensive equities: **5%**
+- cyclical equities: **7.5%**
+- small caps: **5%**
+- commodities broad basket: **5%**
+- gold: **5%**
+- BTC proxy ETFs: **5%**
+- international equities: **5%**
+- energy equities: **5%**
+- financials: **7.5%**
+- MSTR preferreds: **7.5%**
+- MSTR common: **5%**
 
 ### Calm risks
 - getting too passive and institution-like
@@ -317,6 +398,25 @@ Preserve upside participation while migrating away from indiscriminate broad bet
 - BTC proxy and MSTR common remain viable, but now as selective high-conviction expressions rather than default growth beta
 - MSTR preferreds become especially useful because they preserve yield and capital-structure quality inside a still-risky regime
 
+### Speculation All-Weather profile (50% tilt compression)
+
+- cash / equivalents: **10%**
+- short Treasuries: **7.5%**
+- long Treasuries: **2.5%**
+- investment-grade credit: **2.5%**
+- broad US equities: **10%**
+- defensive equities: **5%**
+- cyclical equities: **5%**
+- small caps: **2.5%**
+- commodities broad basket: **10%**
+- gold: **7.5%**
+- BTC proxy ETFs: **7.5%**
+- international equities: **2.5%**
+- energy equities: **7.5%**
+- financials: **2.5%**
+- MSTR preferreds: **10%**
+- MSTR common: **7.5%**
+
 ---
 
 ## 8.3 Late Speculation benchmark allocation (transition risk rising)
@@ -347,6 +447,25 @@ This is the version closest to the currently discussed phase assumption.
 - broad equities and cyclicals are de-emphasized
 - MSTR preferreds rise in importance as a high-quality special sleeve
 - cash remains meaningful, but not dominant
+
+### Late Speculation All-Weather profile (50% tilt compression)
+
+- cash / equivalents: **10%**
+- short Treasuries: **7.5%**
+- long Treasuries: **2.5%**
+- investment-grade credit: **2.5%**
+- broad US equities: **7.5%**
+- defensive equities: **5%**
+- cyclical equities: **2.5%**
+- small caps: **2.5%**
+- commodities broad basket: **10%**
+- gold: **10%**
+- BTC proxy ETFs: **7.5%**
+- international equities: **2.5%**
+- energy equities: **7.5%**
+- financials: **2.5%**
+- MSTR preferreds: **12.5%**
+- MSTR common: **7.5%**
 
 ### Late Speculation risks
 - overstaying aggressive expressions as Turbulence forms
@@ -407,6 +526,25 @@ Protect capital, preserve optionality, and maintain only the highest-conviction 
 - MSTR common is minimized, but not necessarily zero, because the system allows selective residual conviction
 - MSTR preferreds remain meaningful because they can provide a better capital-preservation / yield tradeoff than common equity
 
+### Turbulence All-Weather profile (50% tilt compression)
+
+- cash / equivalents: **15%**
+- short Treasuries: **12.5%**
+- long Treasuries: **10%**
+- investment-grade credit: **5%**
+- broad US equities: **5%**
+- defensive equities: **7.5%**
+- cyclical equities: **2.5%**
+- small caps: **2.5%**
+- commodities broad basket: **2.5%**
+- gold: **10%**
+- BTC proxy ETFs: **2.5%**
+- international equities: **2.5%**
+- energy equities: **2.5%**
+- financials: **2.5%**
+- MSTR preferreds: **12.5%**
+- MSTR common: **5%**
+
 ### Turbulence risks
 - staying too offensive too long
 - under-allocating to liquidity and optionality
@@ -450,6 +588,25 @@ The explosive early recovery broadens into more stable participation.
 - MSTR preferreds: **5%**
 - MSTR common: **5%**
 
+### Rebound → Calm All-Weather profile (50% tilt compression)
+
+- cash / equivalents: **7.5%**
+- short Treasuries: **7.5%**
+- long Treasuries: **2.5%**
+- investment-grade credit: **6.5%**
+- broad US equities: **12.5%**
+- defensive equities: **5%**
+- cyclical equities: **8.5%**
+- small caps: **6%**
+- commodities broad basket: **5%**
+- gold: **4%**
+- BTC proxy ETFs: **6%**
+- international equities: **5%**
+- energy equities: **4%**
+- financials: **7.5%**
+- MSTR preferreds: **7.5%**
+- MSTR common: **5%**
+
 ---
 
 ## 10.2 Calm → Speculation
@@ -480,6 +637,25 @@ Broad participation narrows. Late-cycle and selective sleeves begin to outperfor
 - financials: **5%**
 - MSTR preferreds: **8%**
 - MSTR common: **7%**
+
+### Calm → Speculation All-Weather profile (50% tilt compression)
+
+- cash / equivalents: **9%**
+- short Treasuries: **7.5%**
+- long Treasuries: **2.5%**
+- investment-grade credit: **5%**
+- broad US equities: **10%**
+- defensive equities: **5%**
+- cyclical equities: **6%**
+- small caps: **4%**
+- commodities broad basket: **7.5%**
+- gold: **6.5%**
+- BTC proxy ETFs: **6.5%**
+- international equities: **4%**
+- energy equities: **6.5%**
+- financials: **5%**
+- MSTR preferreds: **9%**
+- MSTR common: **6%**
 
 ---
 
@@ -512,6 +688,25 @@ This is the most important defensive migration in the entire Howell cycle.
 - MSTR preferreds: **15%**
 - MSTR common: **5%**
 
+### Speculation → Turbulence All-Weather profile (50% tilt compression)
+
+- cash / equivalents: **12.5%**
+- short Treasuries: **10%**
+- long Treasuries: **7.5%**
+- investment-grade credit: **5%**
+- broad US equities: **6.5%**
+- defensive equities: **6.5%**
+- cyclical equities: **2.5%**
+- small caps: **2.5%**
+- commodities broad basket: **5%**
+- gold: **10%**
+- BTC proxy ETFs: **5%**
+- international equities: **2.5%**
+- energy equities: **4.5%**
+- financials: **2.5%**
+- MSTR preferreds: **12.5%**
+- MSTR common: **5%**
+
 ---
 
 ## 10.4 Turbulence → Rebound
@@ -542,6 +737,25 @@ The system begins re-risking out of defense and into recovery opportunities.
 - financials: **5%**
 - MSTR preferreds: **8%**
 - MSTR common: **7%**
+
+### Turbulence → Rebound All-Weather profile (50% tilt compression)
+
+- cash / equivalents: **10%**
+- short Treasuries: **10%**
+- long Treasuries: **6.5%**
+- investment-grade credit: **5%**
+- broad US equities: **10%**
+- defensive equities: **5%**
+- cyclical equities: **7.5%**
+- small caps: **5%**
+- commodities broad basket: **3.5%**
+- gold: **5%**
+- BTC proxy ETFs: **6.5%**
+- international equities: **3.5%**
+- energy equities: **2.5%**
+- financials: **5%**
+- MSTR preferreds: **9%**
+- MSTR common: **6%**
 
 ---
 
