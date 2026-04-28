@@ -194,6 +194,20 @@ This means both profiles share:
 
 The difference is the **amplitude of change**, not the timing or the asset choices.
 
+### Profile comparison summary
+
+| Dimension | AB4 Rotational Profile | AB4 All-Weather Profile |
+|---|---|---|
+| Core intent | Maximize risk-adjusted appreciation through macro rotation | Balance yield and appreciation with smoother benchmark behavior |
+| Phase timing | Same Howell timing | Same Howell timing |
+| Sleeve universe | Same | Same |
+| Migration direction | Same | Same |
+| Allocation amplitude | Full phase tilt | 50% compressed toward neutral/core baseline |
+| Turnover | Higher | Lower |
+| Concentration | Higher | Lower |
+| Use case | User prefers stronger active macro expression | User prefers steadier path with less aggressive rotation |
+
+
 
 ---
 
@@ -828,3 +842,76 @@ It is meant to answer:
 - and what the benchmark should become **before technical analysis is applied to timing and sequencing**.
 
 That is the right next artifact for evaluating the completeness of the AB4 project.
+
+## 15. PPR Profile Selection Logic
+
+The PPR process should explicitly ask the user which AB4 profile they want to use as their benchmark anchor.
+
+### 15.1 Why profile selection belongs in PPR
+AB4 now supports two benchmark profiles that share the same phase logic but differ in how aggressively they express it.
+
+That means the user should not only receive an allocation recommendation, but also specify the style of benchmark they want the system to use when evaluating their portfolio.
+
+### 15.2 The two benchmark profile choices
+The user should choose between:
+- **AB4 Rotational Profile**
+- **AB4 All-Weather Profile**
+
+### 15.3 Conceptual user preference split
+PPR should frame the choice roughly as:
+- **Rotational** → for users who want stronger capital appreciation and are comfortable with larger benchmark shifts
+- **All-Weather** → for users who want a steadier balance between yield and appreciation with lower rotation amplitude
+
+### 15.4 What PPR should record
+For each user, PPR should store or surface:
+- selected AB4 profile
+- current Howell phase
+- current benchmark allocation under that profile
+- actual portfolio allocation
+- deviations from benchmark
+- whether deviations are within AB4 tolerance, represent AB3 overage, or represent owner override
+
+### 15.5 Benchmark production rule
+The system should first determine:
+1. current Howell phase or transition state
+2. Rotational benchmark allocation for that phase
+3. All-Weather benchmark allocation via 50% tilt compression from the neutral/core baseline
+
+Then PPR should apply the user’s chosen profile as the benchmark anchor.
+
+### 15.6 Deviation handling
+Once the user’s chosen profile is identified, deviations should be evaluated relative to that profile, not relative to some abstract universal benchmark.
+
+This means:
+- the same actual portfolio may be benchmark-aligned under All-Weather
+- but look aggressively overweight under Rotational
+- or vice versa
+
+So benchmark selection must happen before deviation classification.
+
+### 15.7 Deviation classification model
+PPR should conceptually classify holdings as:
+- **benchmark-aligned**
+- **within AB4 tolerance band**
+- **AB3 positioning adjustment / overage**
+- **owner override**
+
+### 15.8 Recommended PPR conversational workflow
+The conceptual flow should be:
+1. identify the Howell phase
+2. identify the user’s AB4 profile (Rotational or All-Weather)
+3. display the benchmark allocation for that profile
+4. compare actual portfolio weights to benchmark weights
+5. identify deviations
+6. explain tradeoffs of those deviations
+7. classify the final posture
+
+### 15.9 Default behavior
+If the user has not explicitly chosen a profile, the system should either:
+- ask the user to choose, or
+- default to All-Weather and mark that default clearly
+
+### 15.10 Why this matters
+Without profile selection, the system cannot fairly judge whether a user is behaving conservatively, aggressively, or in line with the intended benchmark.
+
+Profile selection is therefore a necessary input to later PPR, reporting, and AB3 logic.
