@@ -188,10 +188,10 @@ Purpose: define the AB3 ruleset for leverage through LEAPs and for share-based o
 **Initial milestones:**
 | Milestone | Status |
 |---|---|
-| Define AB3 objective and relation to AB4 benchmark | ⬜ Planned |
-| Formalize LEAP vs shares decision rules | ⬜ Planned |
-| Define allowable overexposure conditions and limits | ⬜ Planned |
-| Tie AB3 rules into PPR and branch-specific deployment logic | ⬜ Planned |
+| Define AB3 objective and relation to AB4 benchmark | 🟡 Drafted |
+| Formalize LEAP vs shares decision rules | 🟡 Drafted |
+| Define allowable overexposure conditions and limits | 🟡 Drafted |
+| Tie AB3 rules into PPR and branch-specific deployment logic | 🟡 Drafted |
 
 ---
 ### P-SOUNDBOARD: Soundboarding Template / PPR Decision Workflow
