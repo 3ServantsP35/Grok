@@ -2,7 +2,11 @@
 
 **Project:** P-SRI-V3.2.2-BUILD
 **Version:** v1 — Draft for Greg + Gavin review
-**Date:** 2026-04-30 (revised same day — added RAW Hybrid profile; redirected TV ingest to MSTR Engine; added Camel Engine decommission track)
+**Date:** 2026-04-30
+**Revision history:**
+- rev1 — initial draft, two AB4 profiles, Camel-served TV feed
+- rev2 — added RAW Hybrid profile (third AB4 profile, computed midpoint)
+- rev3 — redirected TV ingest to MSTR Engine, added §5.9 Camel decommission track, recast §6 effort estimate with explicit units (Archie execution time vs calendar time)
 **Author:** Archie (on behalf of Gavin + Greg)
 **Source briefs:**
 - `briefs/howell-phase-allocation-tutorial-v1.md` (Cyler, 2026-04-27)
@@ -285,21 +289,39 @@ This track runs in parallel with §5.1–§5.8 but does not block them. Nothing 
 
 **Out-of-scope for v1 of this build:** the AI Portfolio Engine equivalent of this question (does APE eventually need its own TV ingest, and if so, do we extract a shared library between MSTR and APE?). Punt to a future doc.
 
-| Step | Type | Estimate |
-|---|---|---|
-| 5.1 reconcile + fix bugs | Code + migration | 0.5 day |
-| 5.2 schema | SQL + seed | 0.5 day |
-| 5.3 resolver module | Python | 1.5 days |
-| 5.4 backtest harness | Python + analysis | 2 days |
-| 5.5 MSTR Engine TV ingest + workspace feed | Python (TV client) + LaunchAgent | 2.5 days |
-| 5.6 P-TVI retirement | Cron + archive | 0.5 day |
-| 5.7 AGENTS.md rewrite | Doctrine | 1 day (Cyler review loop) |
-| 5.8 workspace knowledge | Markdown templates | 0.5 day |
-| 5.9 Camel decommission (parallel, gated) | Pine port + audit + sequenced shutdown | 1 day Pine fidelity audit; ~5 days for full decommission once both gates pass; runs in parallel with the rest |
-| **Total (primary track)** | | **~9 days of focused work** + backtest soak window |
-| **Total (incl. Camel decommission)** | | primary track + Pine port (Gavin's TV time, est. 1–2 days) + ~5 days decommission sequencing, much of it parallel |
+---
 
-This is "asap" pace, not staged-rollout pace. Steps 5.1–5.4 can compress to 3 days if backtest tooling reuses existing scaffolding in `backtest_btc_mstr_v2.py` and `backtest_indicators_v2.py`.
+## 6. Effort estimate
+
+### Units key (added rev3)
+
+Earlier revisions of this doc reported a single fuzzy "days" column that conflated Archie's execution time on this machine with calendar time including human review. That was a sloppy unit. This revision splits it.
+
+- **Archie execution time** — wall-clock time *I* (the Claude Code agent on the Mac Studio) need to do the work, assuming Gavin or Greg are reachable for go/no-go decisions but not co-authoring. Mostly tool-execution time + my own thinking. Numbers are honest best-guesses; padded for unknowns where I haven't yet validated environment behaviour (e.g., TV cookie auth flow against Gavin's account).
+- **Calendar time** — realistic elapsed time accounting for normal review-feedback loops with Gavin / Greg / Cyler, time waiting for sign-offs, and parallel work. This is what to plan around.
+- **Numbers diverge** by 2–6× on most rows. That divergence is *normal*, not waste — the calendar column reflects deliberate human-in-the-loop checkpoints, not idle time.
+
+### Estimate
+
+| Step | Archie execution | Calendar (with review loop) |
+|---|---|---|
+| 5.1 reconcile + fix bugs | ~1.5 hours | 0.5 day (waits on Gavin to pick reconciliation direction) |
+| 5.2 schema | ~45 min | 0.5 day (excludes Cyler authoring §7.1 weights — separately blocking) |
+| 5.3 resolver module | ~3 hours | 1–1.5 days (Cyler review on edge cases + tier rules) |
+| 5.4 backtest harness | ~4–6 hours pure exec; result interpretation can extend | 2–3 days (results may require seed re-tuning + re-run) |
+| 5.5 MSTR TV ingest + feed | ~4 hours + open-ended cookie/2FA debugging | 1–2 days (Gavin sets cookie, validates first feed against manual upload) |
+| 5.6 P-TVI retirement | ~30 min | 0.5 day after §5.5 1-week soak |
+| 5.7 AGENTS.md rewrite | ~2 hours | 1–2 days (Cyler review loop) |
+| 5.8 workspace knowledge | ~1 hour | 0.5 day |
+| 5.9 Camel decommission (parallel, gated) | ~6–8 hours total Archie execution, spread out | **~3–4 weeks** (dominated by 2-week parallel soak in §5.9 step 4; Pine port time on Gavin separate) |
+| **Total — primary track (§5.1–§5.8)** | **~22–25 hours of Archie execution** | **~9 days** + backtest soak window |
+| **Total — incl. Camel decommission** | primary + ~6–8 hours | primary + 3–4 weeks parallel, mostly soak/safety windows |
+
+### Compression levers
+
+- Steps 5.1–5.4 can compress to ~3 calendar days if backtest tooling reuses existing scaffolding in `backtest_btc_mstr_v2.py` and `backtest_indicators_v2.py`.
+- The §5.9 calendar column is conservative on purpose. If Greg sign-off is fast and the Pine port works first try, decommission can compress to ~2 weeks. The 2-week soak in step 4 is a hard floor — shortening it trades safety for speed and is not recommended.
+- The biggest variable I can't model from here is **how often Gavin's at the keyboard.** If you're reviewing in real time as I work, calendar shrinks toward Archie-execution time. If you're checking in once a day, it stretches toward the calendar column. The doc's calendar numbers assume the once-a-day pattern.
 
 ---
 
