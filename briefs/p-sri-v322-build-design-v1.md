@@ -2,7 +2,7 @@
 
 **Project:** P-SRI-V3.2.2-BUILD
 **Version:** v1 — Draft for Greg + Gavin review
-**Date:** 2026-04-30
+**Date:** 2026-04-30 (revised same day — added RAW Hybrid profile)
 **Author:** Archie (on behalf of Gavin + Greg)
 **Source briefs:**
 - `briefs/howell-phase-allocation-tutorial-v1.md` (Cyler, 2026-04-27)
@@ -13,7 +13,12 @@
 
 ## 1. Executive summary
 
-v3.2.2 reframes the AB framework. **AB4 is the benchmark anchor** with two profiles (Rotational, All-Weather), sized by Howell phase. **AB3 is the deviation layer** atop the chosen benchmark, scrutinised by phase, profile, and a tolerance band before being classified as a real deviation. The existing engine partially implements the inputs (Howell phase classifier, sector SRIBI ingest, GLI proxy) but the AB3/AB4 enforcement layer encodes an older mental model and must be rebuilt.
+v3.2.2 reframes the AB framework. **AB4 is the benchmark anchor** with three profiles (Rotational, All-Weather, RAW Hybrid), sized by Howell phase. **AB3 is the deviation layer** atop the chosen benchmark, scrutinised by phase, profile, and a tolerance band before being classified as a real deviation. The existing engine partially implements the inputs (Howell phase classifier, sector SRIBI ingest, GLI proxy) but the AB3/AB4 enforcement layer encodes an older mental model and must be rebuilt.
+
+**Profile definitions:**
+- **Rotational** — aggressively avoids bearish positions; phase-expressive, leans most into offensive sleeves when phase is supportive and most defensive when it is not.
+- **All-Weather** — intentionally smoother, less aggressive; carries balanced exposure across phases.
+- **RAW Hybrid** (Rotational-All-Weather Hybrid) — derived profile. Per-sleeve weight is the **arithmetic midpoint** of Rotational and All-Weather weights for the same (phase, sleeve). Architectural consequence: RAW Hybrid does not inherit Rotational's bearish-avoidance *stance* — it dilutes it by 50%. A sleeve that Rotational holds at 0% in Turbulence and All-Weather holds at 5% will appear in RAW Hybrid at 2.5%. This is the intended semantic of "midpoint of the difference"; flagging it explicitly so Cyler can confirm.
 
 This document defines the build that closes the gap. It assumes the existing `HowellPhaseEngine` is reused and bug-fixed; it adds new tables, modules, and a backtest harness; it migrates Cyler off manual GitHub-CSV uploads onto a Camel-Engine-fed workspace data feed; it rewrites `AGENTS.md` to match v3.2.2 doctrine.
 
@@ -89,7 +94,7 @@ Local `~/mstr-engine/scripts/sri_engine.py` is dated **2026-03-16**, 56 bytes sm
 | # | Decision | Rationale |
 |---|---|---|
 | D1 | **Reuse `HowellPhaseEngine`**, do not rewrite. | Already implements signature matrix, already writing daily rows. Rewriting buys nothing. |
-| D2 | **AB4 profile selection is per-portfolio**, stored in `ab_profile_selection`. | Each tracked portfolio (Greg / Gavin / Kathryn / Ali / mock) can run a different profile. |
+| D2 | **AB4 profile selection is per-portfolio**, stored in `ab_profile_selection`. Three profiles available: Rotational, All-Weather, RAW Hybrid. | Each tracked portfolio (Greg / Gavin / Kathryn / Ali / mock) can run a different profile. |
 | D3 | **Howell phase governs AB4 benchmark sizing**, via lookup tables (one per profile) keyed on `(profile, phase, sleeve)`. | Per Cyler's Howell brief: phase drives AB4 weights for the chosen profile. |
 | D4 | **Tolerance bands from AB3 ruleset §9.3 are seeded as the v1 numbers**; backtest tunes them. | The brief gives concrete starting values. |
 | D5 | **AB3 is computed, not stored as a portfolio target.** | AB3 deviation is a *classification* of actual positions vs benchmark, not a separate bucket with its own target. The AllocationEngine 25/25/25/25 model is wrong. |
@@ -97,6 +102,8 @@ Local `~/mstr-engine/scripts/sri_engine.py` is dated **2026-03-16**, 56 bytes sm
 | D7 | **Migrate Cyler off GitHub-CSV via Camel-Engine workspace feed**, not via a synchronous CE endpoint. | Yesterday's "convenience + operational continuity" answer. CE writes CSVs into `~/.openclaw-mstr/workspace-mstr-cio/data-feed/` on cron; Cyler reads files unchanged. |
 | D8 | **AGENTS.md is rewritten in lockstep**, both Grok-canonical and workspace-local. | Without this, Cyler keeps reasoning from old doctrine after we ship. |
 | D9 | **Backtest is a gate.** No flip to v3.2.2 enforcement until backtest passes a pre-declared bar. | Per Gavin's instruction. |
+| D10 | **RAW Hybrid is a *derived* profile, not a *seeded* one.** Weights are computed at lookup time as `(Rotational + All-Weather) / 2` per (phase, sleeve). No separate rows in `ab4_benchmark`. | Keeps the midpoint definition canonical — if Rotational or All-Weather weights are tuned, RAW Hybrid auto-updates. Eliminates drift between three parallel weight tables. |
+| D11 | **Tolerance bands for RAW Hybrid use the default §9.3 table unmodified.** | AB3 ruleset §9.5 currently differentiates Rotational (default) from All-Weather (slightly more generous in interpretation, default formal base). RAW Hybrid sits between, but the default table is already the formal base for both — no adjustment needed in v1. Tighten in v2 if backtest reveals asymmetry. |
 
 ---
 
@@ -117,17 +124,21 @@ Each step is a discrete unit of work. Steps 5.1–5.4 have minimal dependencies 
 
 ```sql
 -- Profile selection per portfolio
+-- RAWHybrid (Rotational-All-Weather Hybrid) is a derived profile; weights are
+-- computed at lookup time as the arithmetic midpoint of Rotational and AllWeather.
+-- It is a valid selection here, but does NOT receive its own rows in ab4_benchmark.
 CREATE TABLE ab_profile_selection (
   portfolio_id   TEXT PRIMARY KEY,
-  profile        TEXT NOT NULL CHECK (profile IN ('Rotational', 'AllWeather')),
+  profile        TEXT NOT NULL CHECK (profile IN ('Rotational', 'AllWeather', 'RAWHybrid')),
   selected_at    TEXT NOT NULL,
   selected_by    TEXT NOT NULL,
   notes          TEXT
 );
 
--- Benchmark sleeve weights per (profile, phase)
+-- Benchmark sleeve weights per (profile, phase).
+-- Only seeded for Rotational and AllWeather. RAWHybrid is computed in code.
 CREATE TABLE ab4_benchmark (
-  profile        TEXT NOT NULL,
+  profile        TEXT NOT NULL CHECK (profile IN ('Rotational', 'AllWeather')),
   phase          TEXT NOT NULL,
   sleeve         TEXT NOT NULL,
   sleeve_class   TEXT NOT NULL CHECK (sleeve_class IN ('standard', 'special')),
@@ -162,7 +173,7 @@ CREATE TABLE ab3_deviation_log (
 CREATE INDEX idx_ab3_dev_pf_ts ON ab3_deviation_log (portfolio_id, timestamp);
 ```
 
-Seed `ab4_tolerance_bands` directly from AB3 ruleset §9.3. Seed `ab4_benchmark` for both profiles × four phases × the standard/special sleeves listed in §9.2 — initial weights TBD by Cyler (open item §11.1).
+Seed `ab4_tolerance_bands` directly from AB3 ruleset §9.3. Seed `ab4_benchmark` for **Rotational and AllWeather** × four phases × the standard/special sleeves listed in §9.2 — initial weights TBD by Cyler (open item §7.1). RAW Hybrid is *not* seeded here; it is computed at lookup time per D10.
 
 ### 5.3 New module: `ab_profile_resolver.py`
 
@@ -170,11 +181,13 @@ Path: `~/mstr-engine/scripts/ab_profile_resolver.py`. Single responsibility: giv
 
 Algorithm:
 1. Look up `profile = ab_profile_selection[portfolio_id]`.
-2. Look up `benchmark = ab4_benchmark[(profile, phase, sleeve)]` for each sleeve.
+2. **Resolve benchmark weights for each sleeve:**
+   - If `profile in ('Rotational', 'AllWeather')`: direct lookup in `ab4_benchmark[(profile, phase, sleeve)]`.
+   - If `profile == 'RAWHybrid'`: lookup both `ab4_benchmark[('Rotational', phase, sleeve)]` and `ab4_benchmark[('AllWeather', phase, sleeve)]` and return `(rot + aw) / 2`. If either side is missing for a sleeve, treat the missing side as 0 and emit a warning to the deviation log so Cyler sees it during review.
 3. Compute `actual = portfolio_aggregate` rolled up to sleeve.
-4. For each sleeve: classify per AB3 ruleset §13 (benchmark-aligned / within-tolerance / AB3 / owner-override) using the tolerance band table.
-5. For AB3 status, classify into Tier A/B/C/D using rules from AB3 ruleset §10 (Tier definitions are *qualitative* in v1 — open item §11.2).
-6. Persist to `ab3_deviation_log`.
+4. For each sleeve: classify per AB3 ruleset §13 (benchmark-aligned / within-tolerance / AB3 / owner-override) using the tolerance band table. Tolerance bands apply uniformly across all three profiles per D11.
+5. For AB3 status, classify into Tier A/B/C/D using rules from AB3 ruleset §10 (Tier definitions are *qualitative* in v1 — open item §7.2).
+6. Persist to `ab3_deviation_log`. Always log the *effective* benchmark weight used (the resolved or computed value), not just the profile + phase, so the resolver run is reproducible after-the-fact.
 7. Return PPR payload.
 
 CLI: `python ab_profile_resolver.py --portfolio gavin --as-of 2026-04-30 --emit json`. Same module is callable as a Python import from `daily_analysis_cycle.py`.
@@ -191,6 +204,7 @@ Replays historical Howell phase output × historical portfolio marks × the new 
 - ≥ 95% of bars classified into a single status per sleeve (i.e., the resolver doesn't flip-flop within a phase)
 - Tolerance band sensitivity ≤ 30% status churn at ±20% bands (i.e., the bands aren't pathologically tight or loose)
 - AB3 deviations in Turbulence are <50% as frequent as in Rebound on the mock Rotational portfolio (sanity check that phase-conditioning works)
+- **RAW Hybrid sanity check:** for any (phase, sleeve), `RAWHybrid_weight ≈ (Rotational_weight + AllWeather_weight) / 2` to within 0.01 percentage points (tests the derivation is correct and stable across re-runs).
 
 **Backtest fails → tune §5.2 seeds → re-run.** Do not ship to live until all three bars pass.
 
@@ -243,7 +257,7 @@ Net-new under `~/.openclaw-mstr/workspace-mstr-cio/mstr-knowledge/`:
 | 5.2 schema | SQL + seed | 0.5 day |
 | 5.3 resolver module | Python | 1.5 days |
 | 5.4 backtest harness | Python + analysis | 2 days |
-| 5.5 CE → workspace feed | Camel Engine work | 1 day (assumes Camel Phase 3 TV ingest already shipped — open item §11.4) |
+| 5.5 CE → workspace feed | Camel Engine work | 1 day (assumes Camel Phase 3 TV ingest already shipped — open item §7.4) |
 | 5.6 P-TVI retirement | Cron + archive | 0.5 day |
 | 5.7 AGENTS.md rewrite | Doctrine | 1 day (Cyler review loop) |
 | 5.8 workspace knowledge | Markdown templates | 0.5 day |
@@ -257,9 +271,9 @@ This is "asap" pace, not staged-rollout pace. Steps 5.1–5.4 can compress to 3 
 
 These are cited per Gavin's instruction (2026-04-30) — ship the design doc with the gaps explicit, resolve in parallel.
 
-### 7.1 Initial AB4 benchmark weights (per profile × phase × sleeve)
+### 7.1 Initial AB4 benchmark weights (Rotational × phase × sleeve, AllWeather × phase × sleeve)
 
-The AB3 ruleset §9.2 lists sleeves but doesn't give weights. Cyler's Howell tutorial gives the framework but not the table. **Cyler needs to author the seed weights for both profiles across all four phases** — this is the input that makes the resolver run. Without this, backtest is blocked.
+The AB3 ruleset §9.2 lists sleeves but doesn't give weights. Cyler's Howell tutorial gives the framework but not the table. **Cyler needs to author the seed weights for Rotational and All-Weather across all four phases** — RAW Hybrid is computed from these two per D10, so it does not need its own seed table. This is the input that makes the resolver run. Without it, backtest is blocked.
 
 **Owner:** Cyler. **Required by:** §5.4 start.
 
@@ -281,7 +295,13 @@ CLAUDE.md describes Camel Phase 3 (TradingView MCP) as the "next planned additio
 
 **Owner:** Greg. **Required by:** §5.5 start.
 
-### 7.5 Howell signal inputs not yet verified in `mstr.db`
+### 7.5 AB3 ruleset needs a §8.3 for RAW Hybrid
+
+AB3 ruleset v1 has §8.1 (AB3 logic if benchmark = Rotational) and §8.2 (AB3 logic if benchmark = All-Weather). It does not yet have a §8.3 for RAW Hybrid. The resolver in v1 will use the default tolerance table for RAW Hybrid per D11; what is missing is the *qualitative* doctrine on whether RAW Hybrid AB3 deviations should be judged closer to Rotational's high-bar stance or All-Weather's "more conceptual room" stance.
+
+**Owner:** Cyler. **Required by:** v2 of AB3 ruleset, not v1 of resolver. v1 resolver works without it; the doctrine fills in over time.
+
+### 7.6 Howell signal inputs not yet verified in `mstr.db`
 
 The Howell brief references inputs whose presence I have not yet verified end-to-end:
 - GLI cycle index (Howell's primary)
