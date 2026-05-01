@@ -1,6 +1,6 @@
 # #mstr-cio Project Tracker
 **Managed by:** Gavin (rizenshine5359) — Project Manager  
-**Updated:** 2026-04-22
+**Updated:** 2026-05-01
 
 ---
 
@@ -17,6 +17,8 @@
 | P-AB4-STRAT | Define the AB4 Strategy | 🔴 HIGH | Gavin/CIO |
 | P-AB3-RULESET | Define the AB3 Ruleset | 🔴 HIGH | Gavin/CIO |
 | P-SOUNDBOARD | Soundboarding Template / PPR Decision Workflow | 🟡 Active | Gavin/CIO |
+| P-COUNCIL | Capital Allocation Council / Adversarial Decision Council | 🟡 Active | Gavin/CIO |
+| P-OPT-SCREENER | Technical Options Opportunity Screener | 🟡 Active | Gavin/CIO |
 | P-REPORTING | Portfolio and Layer Reporting Framework | 🟡 Active | Gavin/CIO |
 | P-AB1AB2-AUTO | Automating AB1 and AB2 Trading | 🟡 Active | Greg/Gavin/CIO |
 | P-MCP-CSV | Automating CSV Uploads with MCP | 🔴 HIGH | Greg/Gavin/CIO |
@@ -216,6 +218,74 @@ Purpose: define the soundboarding template and decision workflow used inside PPR
 
 ---
 
+### P-COUNCIL: Capital Allocation Council / Adversarial Decision Council
+**Status:** 🟡 Active  
+**Lead:** Gavin/CIO
+
+Purpose: build a structured multi-perspective council that pressure-tests capital allocation decisions before commitment, so the system gets better at challenging its own assumptions, reducing gas-lighting dynamics, and resisting groupthink.
+
+**Current scope:**
+- define a reusable council workflow for high-leverage capital decisions
+- formalize distinct advisor roles rather than one blended assistant voice
+- force explicit downside, first-principles, upside, outsider, and execution review before verdict
+- integrate the council into layer-aware allocation and soundboarding decisions
+- capture where the council agrees, where it clashes, and what blind spots it surfaces
+
+**Initial milestones:**
+| Milestone | Status |
+|---|---|
+| Define the five-advisor council structure and chairman verdict format | ⬜ Planned |
+| Map council lenses into AB4, AB3, Howell, and branch decision workflows | ⬜ Planned |
+| Create prompts/templates for stress-testing major allocation decisions | ⬜ Planned |
+| Define when to invoke council review vs normal soundboarding | ⬜ Planned |
+| Design lightweight recordkeeping for disagreements, blind spots, and final verdicts | ⬜ Planned |
+
+**Design note:**
+- intended structure reflects a five-advisor council:
+  - **Contrarian** for fatal-flaw / downside attack
+  - **First Principles** for assumption stripping and reframing
+  - **Expansionist** for upside / underappreciated optionality
+  - **Outsider** for fresh-eyes pattern detection
+  - **Executor** for practical feasibility and sequencing
+- output should end with a **chairman’s verdict** that summarizes agreement, conflict, blind spots, and final recommendation
+- this project is for **high-leverage decisions**, not trivial lookups or simple yes/no requests
+
+---
+
+### P-OPT-SCREENER: Technical Options Opportunity Screener
+**Status:** 🟡 Active  
+**Lead:** Gavin/CIO
+
+Purpose: build a technical-analysis-driven screener for identifying opportunistic options entries where structure, timing, and asymmetry justify deeper review for AB1, AB2, or AB3 deployment.
+
+**Current scope:**
+- define the technical conditions that make an options entry worth surfacing
+- scan the in-scope asset universe for high-quality setups rather than relying on ad hoc chart review
+- rank candidate entries by timing quality, asymmetry, and regime compatibility
+- separate income-oriented setups from directional-convexity setups
+- feed the best candidates into soundboarding, council review, or trade-planning workflows
+
+**Initial milestones:**
+| Milestone | Status |
+|---|---|
+| Define screener objective and in-scope option opportunity types | ⬜ Planned |
+| Define technical trigger set for opportunistic entries | ⬜ Planned |
+| Map triggers into AB1 / AB2 / AB3 candidate categories | ⬜ Planned |
+| Design ranking logic for setup quality and asymmetry | ⬜ Planned |
+| Prototype screener output format and review workflow | ⬜ Planned |
+
+**Design note:**
+- this project is about **finding technically attractive options entries**, not executing trades automatically
+- it should remain distinct from **P-AB1AB2-AUTO**, which is about execution workflow and automation boundaries
+- the screener should eventually help surface:
+  - bullish income setups
+  - bearish income setups
+  - bullish convexity setups
+  - bearish convexity setups
+  - timing-sensitive MSTR-complex opportunities
+
+---
+
 ### P-REPORTING: Portfolio and Layer Reporting Framework
 **Status:** 🟡 Active  
 **Lead:** Gavin/CIO
@@ -328,8 +398,10 @@ The following projects are archived as part of the 2026-04-22 tracker reset. The
 2. **P-AB4-STRAT**
 3. **P-AB3-RULESET**
 4. **P-SOUNDBOARD**
-5. **P-REPORTING**
-6. **P-AB1AB2-AUTO**
+5. **P-COUNCIL**
+6. **P-OPT-SCREENER**
+7. **P-REPORTING**
+8. **P-AB1AB2-AUTO**
 
 ### Parallel tracks
 - **P-LAYER-ARCH** continues in parallel because architecture hardening affects almost every downstream project.
@@ -343,10 +415,14 @@ The following projects are archived as part of the 2026-04-22 tracker reset. The
   - AB3 rules depend on a clear benchmark posture to define what counts as overexposure or justified deviation.
 - **P-AB4-STRAT + P-AB3-RULESET → P-SOUNDBOARD**
   - the soundboarding workflow must know what the benchmark is and what deviation rules exist before it can guide users coherently.
-- **P-SOUNDBOARD → P-REPORTING**
-  - reporting should reuse the same benchmark/deviation vocabulary and classifications defined in the decision workflow.
+- **P-SOUNDBOARD → P-COUNCIL**
+  - the council should sit on top of a defined soundboarding workflow so adversarial review is structured rather than improvised.
+- **P-SOUNDBOARD + settled technical doctrine → P-OPT-SCREENER**
+  - the screener should surface candidates into an already-defined review vocabulary rather than inventing its own recommendation language.
+- **P-OPT-SCREENER → P-REPORTING**
+  - reporting should eventually show what opportunities were surfaced, why they ranked highly, and how they resolved.
 - **P-REPORTING + settled doctrine → P-AB1AB2-AUTO**
-  - automation should come after the system has stable benchmark language, deviation rules, and visible reporting outputs.
+  - automation should come after the system has stable benchmark language, deviation rules, council review patterns, screener outputs, and visible reporting outputs.
 
 ### Interpretation
-The architecture work has made doctrine the bottleneck, but the user-directed reprioritization means **data plumbing now becomes the first enabling step** because AB4 strategy needs backtesting support.
+The architecture work has made doctrine the bottleneck, but the user-directed reprioritization means **data plumbing now becomes the first enabling step** because AB4 strategy needs backtesting support. The new council project adds an explicit anti-groupthink layer so major capital decisions are stress-tested before they become doctrine, recommendation, or automation. The new options screener project adds a dedicated technical funnel for surfacing higher-quality options entries before they reach execution or reporting layers.
