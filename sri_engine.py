@@ -28,7 +28,10 @@ from enum import Enum
 from pathlib import Path
 import json
 import math
+import os
 import glob as _glob
+
+DEFAULT_DATA_DIR = os.environ.get("MSTR_DATA_DIR", "/Users/vera/mstr-engine/data")
 
 # Layer 0: GLI Engine (optional import — engine runs without it if unavailable)
 try:
@@ -1046,7 +1049,7 @@ if __name__ == "__main__":
     engine = SRIEngine()
     
     # Auto-discover CSV files
-    data_dir = "/mnt/mstr-data"
+    data_dir = DEFAULT_DATA_DIR
     csv_map = {
         "MSTR": f"{data_dir}/BATS_MSTR, 240_7b1cc.csv",
         "BTC":  f"{data_dir}/INDEX_BTCUSD, 240_6739b.csv",
@@ -1372,7 +1375,7 @@ class HowellPhaseEngine:
         'PURR':  'beta',
     }
 
-    def __init__(self, data_dir: str = "/mnt/mstr-data"):
+    def __init__(self, data_dir: str = DEFAULT_DATA_DIR):
         self.data_dir = Path(data_dir)
 
     # ── Internal helpers ─────────────────────────────────────────
@@ -1510,9 +1513,9 @@ class RegimeEngine:
       VIX: >25 high vol(+0 neutral), <18 low vol(-1), 18-25 normal(+0)
       MSTR/IBIT ratio context: used for vehicle selection only
     """
-    
-    DATA_DIR = "/mnt/mstr-data"
-    
+
+    DATA_DIR = DEFAULT_DATA_DIR
+
     REGIME_FILES = {
         "BTC":        "INDEX_BTCUSD",          # switched from BITSTAMP to INDEX source
         "MSTR_IBIT":  "BATS_MSTR_BATS_IBIT",
@@ -2562,9 +2565,9 @@ class SRIEngineV2:
       Trading (8): MSTR, IBIT, SPY, QQQ, GLD, IWM, TSLA, PURR
       Regime (8):  BTC, MSTR/IBIT, StableDom, STRC, TLT, DXY, HYG, VIX
     """
-    
-    DATA_DIR = "/mnt/mstr-data"
-    
+
+    DATA_DIR = DEFAULT_DATA_DIR
+
     TRADING_ASSETS = {
         # Prefix includes ", " separator to avoid partial matches (e.g. MSTR vs MSTR_BATS_IBIT)
         "MSTR":  ("BATS_MSTR, ",  AssetMode.MOMENTUM_BTC),
