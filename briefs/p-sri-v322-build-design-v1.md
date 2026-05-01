@@ -7,6 +7,7 @@
 - rev1 — initial draft, two AB4 profiles, Camel-served TV feed
 - rev2 — added RAW Hybrid profile (third AB4 profile, computed midpoint)
 - rev3 — redirected TV ingest to MSTR Engine, added §5.9 Camel decommission track, recast §6 effort estimate with explicit units (Archie execution time vs calendar time)
+- rev4 (2026-05-01) — Gavin signed off on §5.4 acceptance bars and overall sequence. Greg sign-off no longer required (full ownership of trading systems transferred to Gavin same day). §5.9 Camel decommission now gated on Gavin alone + Pine fidelity audit. §5.1 schema/bug-fix work was already executed 2026-04-30 and is reflected in current `mstr.db` state — see Status note in §10. Primary track unblocked pending Cyler's §7.1 weights.
 **Author:** Archie (on behalf of Gavin + Greg)
 **Source briefs:**
 - `briefs/howell-phase-allocation-tutorial-v1.md` (Cyler, 2026-04-27)
@@ -408,11 +409,11 @@ The Howell brief references inputs whose presence I have not yet verified end-to
 
 | Owner | Role | Decision needed | Status |
 |---|---|---|---|
-| Gavin | MSTR Engine co-lead | Approve sequence + acceptance bars in §5.4 | ☐ |
-| Greg | AI Portfolio Engine + Camel co-lead | (a) Approve primary track §5.1–§5.8 generally. (b) **Approve Camel Engine decommission per §5.9** — separate decision, gated also on Pine fidelity audit. | ☐ |
+| Gavin | Trading systems owner | Approve sequence + §5.4 acceptance bars; approve §5.9 Camel decommission (subject to Pine fidelity audit gate B) | ☒ **2026-05-01** |
+| Greg | (transferred) | Ownership of trading systems transferred to Gavin 2026-05-01; sign-off no longer required. Courtesy heads-up before §5.9 destructive steps still recommended. | n/a |
 | Cyler | CIO doctrine author | Author AB4 benchmark weights (open item §7.1) and Tier thresholds (§7.2) | ☐ |
 
-Once Gavin and Cyler sign off, Archie executes §5.1 same-day. **Greg's decommission decision (§5.9) does not gate the primary track** — it gates only the Camel decommission steps. Primary build ships either way.
+**Status note (2026-05-01):** §5.1 reconcile + bug fixes already executed on 2026-04-30 (sri_engine.py drift resolved, VT/DBC columns added, stale `id=1` reads removed, Howell rows fresh through 2026-05-01T14:00). §5.2 schema partially executed: all four tables created; `ab4_tolerance_bands` seeded from §9.3; `ab4_benchmark` and `ab_profile_selection` empty pending Cyler §7.1 input. **Critical-path blocker: Cyler's seed weights.** §5.9 Camel decommission also approved by Gavin; awaiting only Pine fidelity audit (gate B) before destructive steps.
 
 ---
 
