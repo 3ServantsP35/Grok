@@ -2,7 +2,22 @@
 **Project:** P-SRI-V3.2.2-BUILD  
 **Date:** 2026-05-01  
 **Author:** Cyler (CIO)  
-**Status:** Reconciliation guidance for Archie validation / application before §5.4 backtest
+**Status:** **DEFERRED 2026-05-02** — see status note below.
+
+---
+
+## Status note (2026-05-02, Gavin)
+
+This artifact is **deferred indefinitely**, pending broker-data reconciliation that would have required Greg-portfolio operator input. Per the 2026-05-01 ownership transfer, day-to-day operation of the trading systems sits with Gavin alone; Gavin's call (2026-05-02) is to leave Greg's stale option/spread rows as-is for now and not block the rev7 build on this reconciliation.
+
+What this means in practice:
+
+- The convention work in §1 (notional / delta doctrine) **stands** and is canonical for any new position rows.
+- The §5.4 backtest continues to run shares-only on Greg's portfolio per the 2026-05-01 instruction; the options exposure understated/dropped per §1 is a known gap, not a fixable defect, until and unless we revive this reconciliation.
+- The SQL in this brief has **not been applied** and is not currently scheduled to be applied. The required `BROKER INPUT REQUIRED` markers were never filled in.
+- `portfolio_positions` does not exist as a separate table in `mstr.db`; positions live in the existing `positions` table where the stale rows sit.
+
+If we ever revive this work — broker data appears, or a Greg-portfolio refresh becomes worth the effort — this brief is the starting point. Until then, it's archival reference.
 
 ---
 
