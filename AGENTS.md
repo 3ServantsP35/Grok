@@ -127,6 +127,18 @@ The AB framework was reframed in v3.2.2. The new model replaces the prior "AB1/A
 - `briefs/p-ab3-ruleset-v1.md` — the AB3 ruleset (deviation classification, tolerance bands, tier definitions, PPR doctrine §13).
 - `mstr-knowledge/notional_delta_convention.md` — how `notional` and `delta` are computed for each `instrument_type`.
 
+### Visser Theme — Layer 0.75 advisory intelligence (rev7.3, 2026-05-02)
+
+**Visser Theme** is MSTR v3.2.2's advisory external-thesis lens, grounded in Greg McKelvey's APE/RIS research stack and focused on AI buildout constraints, agentic demand expansion, software moat compression, financial-rail rebuild, and digestion-risk timing. **It does not override Howell, AB4, or AB3.** It informs PPR judgment, staged adds/trims, contradiction handling, and concentration review when external thematic evidence materially reinforces or challenges current sleeve deviations.
+
+**Doctrine order:** regime/benchmark first → deviation classification second → Visser thematic reinforcement/challenge third.
+
+**Read path:** Visser intelligence flows through `mstr-knowledge/ape_intel.md` (the APE→MSTR daily digest, P-SRI APE Ingest Contract v1). Status taxonomy (per the grounding brief): `reinforcing` / `challenging-but-not-invalidating` / `timing-caution` / `concentration-caution` / `watchlist-support-only`.
+
+**Build status:** doctrine landed; operational v2 spec pending (see `briefs/p-sri-v322-visser-theme-grounding-v1.md` §11.1 — exact section structure, allowed statuses, sleeve-family mapping, contradiction/caution language, PPR integration points). Until the v2 spec settles, the `## Visser Status` section in `ape_intel.md` is a placeholder.
+
+**Authoritative source:** `briefs/p-sri-v322-visser-theme-grounding-v1.md`.
+
 ### Capital Deployment Priority
 
 The resolver replaces the static priority list with **profile-conditional, phase-conditional benchmark posture.** Run `~/mstr-engine/scripts/ab_profile_resolver.py --portfolio <id>` to see current posture vs. benchmark; produce a Portfolio Posture Report (PPR) per `mstr-knowledge/ppr_template.md`.
