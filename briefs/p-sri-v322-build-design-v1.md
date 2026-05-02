@@ -11,6 +11,12 @@
 - rev5 (2026-05-01) — §5.1–§5.4 all complete. Cyler authored §7.1 weights, §7.2 tier ladder, §7.5 RAW Hybrid doctrine (`briefs/p-sri-v322-cyler-inputs-v1.md`), and the canonical sleeve_map (`briefs/p-sri-v322-sleeve-map-v1.md`). Two unplanned additions: `ab3_tier_thresholds` table (not originally in §5.2; tier ladder needed an auditable home) and `sleeve_map` table (not originally in design — discovered as a gap during §5.3 implementation). Positions reconciliation artifact authored (`briefs/p-sri-v322-positions-reconcile-greg-v1.md`); SQL not yet applied — pending broker data input from Gavin. §5.4 backtest passes infrastructure bars (1, 2, 4); bar 3 skipped on single-phase history (all rows Turbulence). Portfolio scope expanded to all five operators (Gavin/Greg/Gary/Kathryn/Ali), all defaulting to RAWHybrid.
 - rev6 (2026-05-02) — **Camel Engine decommission de-scoped per Gavin.** Build now stops at "MSTR Engine writes the workspace data feed that replaces Cyler's manual GitHub-CSV upload." Camel Engine continues running unmodified — no Pine port, no LaunchAgent disable, no codebase archive, no two-engine reframing of CLAUDE.md. §5.9, the §6 Camel-decom row, §7.4, the §8 Camel-decom risk rows, the §10 Greg-sign-off entry, and the Camel-decom block in Appendix A are all retired. D13 is withdrawn. The CSV-decom functionality inside MSTR Engine (§5.5 + §5.6) is unchanged and remains the active deliverable.
 - rev7 (2026-05-02) — **§5.5 reframed from CSV snapshot feed to price+indicator timeseries warehouse.** Per Gavin: ticker is the organizing unit, theme determines the TV layout that defines the indicator stack, and `mstr.db` is the canonical warehouse of OHLCV + indicator history per (ticker, timeframe). v1 ships the **MSTR Suite** theme only — 16 tickers (incl. 5 ratio charts and STABLE.C.D dominance series) under the `MSTR Suite - Download` layout. Single timeframe **4H**. History seeded back to **March 2009** where available, **3y minimum** otherwise. Recurring cadence: twice daily Mon–Fri at **11:30 CT** and **15:00 CT** (incl. Bitcoin). Cyler reads workspace summary files (`tv_state.md`, `tv_history_index.md`) plus a SQL helper (`tv_query.py`) for ad-hoc deep dives — not a flat-file data-feed dir. The earlier session-cookie auth assumption is also retired: implementation reuses Camel's CDP attach to TV Desktop on `127.0.0.1:9222`, no cookie. Adds D14–D17, expands §5.2 schema with `tv_price_bars` / `tv_indicator_values` / `tv_ingest_runs`, fully rewrites §5.5, retires the data-feed dir and the manual cookie-rotation procedure. MR Assets and Visser themes deferred to a follow-on rev once their layouts and ticker scopes are confirmed.
+- rev7.1 (2026-05-02) — **Build amendment based on live discovery during implementation.** Three findings, all narrowing scope rather than changing direction:
+  1. **Indicator history is forward-only.** The `tv` CLI's `values` command returns only the current snapshot; it is not history-aware (`tv data indicator` is metadata, not history; `tv range` does not move the values cursor). There is no clean way to backfill historical indicator readings. `tv_seed.py` is therefore OHLCV-only; indicator values accumulate forward from the first `tv_poll.py` run. Documented in `tv-ingest-runbook.md §7`. The earlier rev7 §5.5.1 promised an `indicator_history()` wrapper — that wrapper is **not** implemented; rev7.1 removes it from the planned API.
+  2. **`tv` CLI argument convention.** The earlier wrappers used `tv symbol set <SYM>` and `tv timeframe set <TF>`. These run successfully but interpret the literal string `"set"` as the value (the symbol literally becomes "SET" — observed in `state` output). The correct form is positional: `tv symbol <SYM>` and `tv timeframe <TF>`. Fixed in `tv_ingest.py`.
+  3. **TV symbol exchange corrections.** Two ratio charts in `tv_themes.yaml` had the wrong exchange prefix on the bond-ETF leg: `NASDAQ:LQD` and `NASDAQ:HYG` did not load; `AMEX:LQD` and `AMEX:HYG` do. Updated. All 16 MSTR Suite tickers verified loading on 2026-05-02 against the live `MSTR Suite - Download` layout.
+
+  Pipeline build is otherwise complete: schema migration applied, all 7 new scripts shipped, `com.mstr.tv-feed.plist` updated to twice-daily Mon–Fri, runbook rewritten, first live poll succeeded (16/16 tickers OK, 96 bars + 1742 indicator values written). LaunchAgent intentionally left **not loaded** so Gavin can review before activation.
 **Author:** Archie (on behalf of Gavin + Greg)
 **Source briefs:**
 - `briefs/howell-phase-allocation-tutorial-v1.md` (Cyler, 2026-04-27)
@@ -292,7 +298,7 @@ The replacement for Cyler's manual GitHub-CSV upload is **a price+indicator time
 The current `tv_ingest.py` only wraps `status / set_symbol / set_timeframe / values`. Extend it with thin functions over additional `tv` CLI commands the implementation already exposes:
 
 - `ohlcv(symbol, timeframe, bars=N) → list[Bar]` — wraps `tv ohlcv`. Returns rows from the chart's currently-loaded view. Caller is responsible for ensuring enough history is loaded (see seed below).
-- `indicator_history(symbol, timeframe, study_filter, bars=N) → list[IndicatorReading]` — wraps `tv data indicator`. Returns historical indicator values aligned to bar timestamps.
+- ~~`indicator_history(symbol, timeframe, study_filter, bars=N)`~~ — **withdrawn rev7.1.** TV CLI's `values` is current-snapshot-only; no first-class historical-indicator-values API exists. `tv_poll.py` reads `current_indicator_values()` at each poll instead, building indicator history forward from first run.
 - `layout_switch(layout_name)` — wraps `tv layout switch`.
 - `chart_state() → dict` — wraps `tv state`. Used to confirm symbol/timeframe took effect after `set_symbol` + `set_timeframe`.
 - `scroll_back_to(symbol, timeframe, target_date)` — helper that drives the chart's history-load by combining `tv scroll` and `tv range`. Used only by the seed script. May require multiple iterations with brief sleeps between calls; TV's history paginates and the chart needs to render before bars become readable.
@@ -356,7 +362,7 @@ Sequence per ticker:
 2. `set_symbol` + `set_timeframe`.
 3. `scroll_back_to(target_date)` — drives the chart to load history. Iterate `tv scroll` + a short sleep until the leftmost loaded bar is at-or-before the target, or until `tv ohlcv` reports no further history (TV's natural left edge).
 4. Read `ohlcv` page-by-page; UPSERT into `tv_price_bars`.
-5. Read `indicator_history` for every study in the data window (one pass per study, all bars of the loaded range); UPSERT into `tv_indicator_values`.
+5. ~~Read `indicator_history` for every study in the data window~~ — **withdrawn rev7.1.** No historical-indicator-values API. Seed is OHLCV-only; indicator history grows forward from `tv_poll.py`.
 6. Append a row to `tv_ingest_runs` with `run_kind='seed'` and counts.
 
 **Acceptance for the seed:** for each ticker, either (a) the warehouse holds a continuous bar history from the configured target through the most recent closed 4H bar, or (b) the warehouse holds the maximum available history from TV and the gap from `history_seed_minimum_years` is logged as a known-short ticker (e.g. STRC/STRD/STRF). No partial seeds: a ticker either makes the bar or is logged as an exception.
@@ -371,7 +377,7 @@ Pipeline sketch (per run):
 2. For each ticker in the theme:
    - `set_symbol` + `set_timeframe`.
    - `ohlcv(bars=6)` → UPSERT.
-   - `indicator_history(bars=6)` → UPSERT for every study in the data window.
+   - `current_indicator_values()` → UPSERT a current-snapshot keyed to the latest bar's ts (rev7.1: `indicator_history` was withdrawn — no historical-values API exists).
 3. Append a `tv_ingest_runs` row.
 4. Trigger the workspace summary generator (§5.5.5).
 5. Smoke test: if `bars_written` for a ticker is 0 across 2 consecutive runs (and the day is a normal trading day), post to the alerts webhook.
@@ -646,7 +652,7 @@ MODIFIED:
   ~/mstr-engine/scripts/daily_analysis_cycle.py                (rev5 — latest-row reads, done)
   ~/mstr-engine/scripts/morning_brief.py                       (rev5 — latest-row reads, done)
   ~/mstr-engine/scripts/pmcc_alerts.py                         (rev5 — latest-row reads, done)
-  ~/mstr-engine/scripts/tv_ingest.py                           (rev7 — add ohlcv/indicator_history/layout_switch/scroll_back_to)
+  ~/mstr-engine/scripts/tv_ingest.py                           (rev7 — add ohlcv/layout_switch/layout_list/chart_state/set_range/scroll_to; rev7.1 fix: positional symbol/timeframe args)
   ~/Library/LaunchAgents/com.mstr.tv-feed.plist                (rev7 — schedule changes from daily 08:00 PT to twice-daily Mon–Fri 09:30 + 13:00 PT; ProgramArguments points to tv_poll.py)
   ~/.openclaw-mstr/workspace-mstr-cio/AGENTS.md                (workspace doctrine rewrite, partial done — rev7 adds tv_state.md/tv_history_index.md to load list)
   ~/.openclaw-mstr/workspace-mstr-cio/Grok/AGENTS.md           (canonical mirror — pending; D8 lockstep open)
