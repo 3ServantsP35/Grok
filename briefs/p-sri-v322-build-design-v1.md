@@ -9,6 +9,7 @@
 - rev3 — redirected TV ingest to MSTR Engine, added §5.9 Camel decommission track, recast §6 effort estimate with explicit units (Archie execution time vs calendar time)
 - rev4 (2026-05-01) — Gavin signed off on §5.4 acceptance bars and overall sequence. Greg sign-off no longer required (full ownership of trading systems transferred to Gavin same day). §5.9 Camel decommission now gated on Gavin alone + Pine fidelity audit. §5.1 schema/bug-fix work was already executed 2026-04-30 and is reflected in current `mstr.db` state — see Status note in §10. Primary track unblocked pending Cyler's §7.1 weights.
 - rev5 (2026-05-01) — §5.1–§5.4 all complete. Cyler authored §7.1 weights, §7.2 tier ladder, §7.5 RAW Hybrid doctrine (`briefs/p-sri-v322-cyler-inputs-v1.md`), and the canonical sleeve_map (`briefs/p-sri-v322-sleeve-map-v1.md`). Two unplanned additions: `ab3_tier_thresholds` table (not originally in §5.2; tier ladder needed an auditable home) and `sleeve_map` table (not originally in design — discovered as a gap during §5.3 implementation). Positions reconciliation artifact authored (`briefs/p-sri-v322-positions-reconcile-greg-v1.md`); SQL not yet applied — pending broker data input from Gavin. §5.4 backtest passes infrastructure bars (1, 2, 4); bar 3 skipped on single-phase history (all rows Turbulence). Portfolio scope expanded to all five operators (Gavin/Greg/Gary/Kathryn/Ali), all defaulting to RAWHybrid.
+- rev6 (2026-05-02) — **Camel Engine decommission de-scoped per Gavin.** Build now stops at "MSTR Engine writes the workspace data feed that replaces Cyler's manual GitHub-CSV upload." Camel Engine continues running unmodified — no Pine port, no LaunchAgent disable, no codebase archive, no two-engine reframing of CLAUDE.md. §5.9, the §6 Camel-decom row, §7.4, the §8 Camel-decom risk rows, the §10 Greg-sign-off entry, and the Camel-decom block in Appendix A are all retired. D13 is withdrawn. The CSV-decom functionality inside MSTR Engine (§5.5 + §5.6) is unchanged and remains the active deliverable.
 **Author:** Archie (on behalf of Gavin + Greg)
 **Source briefs:**
 - `briefs/howell-phase-allocation-tutorial-v1.md` (Cyler, 2026-04-27)
@@ -26,11 +27,11 @@ v3.2.2 reframes the AB framework. **AB4 is the benchmark anchor** with three pro
 - **All-Weather** — intentionally smoother, less aggressive; carries balanced exposure across phases.
 - **RAW Hybrid** (Rotational-All-Weather Hybrid) — derived profile. Per-sleeve weight is the **arithmetic midpoint** of Rotational and All-Weather weights for the same (phase, sleeve). Architectural consequence: RAW Hybrid does not inherit Rotational's bearish-avoidance *stance* — it dilutes it by 50%. A sleeve that Rotational holds at 0% in Turbulence and All-Weather holds at 5% will appear in RAW Hybrid at 2.5%. This is the intended semantic of "midpoint of the difference"; flagging it explicitly so Cyler can confirm.
 
-This document defines the build that closes the gap. It assumes the existing `HowellPhaseEngine` is reused and bug-fixed; it adds new tables, modules, and a backtest harness; it migrates Cyler off manual GitHub-CSV uploads onto a Camel-Engine-fed workspace data feed; it rewrites `AGENTS.md` to match v3.2.2 doctrine.
+This document defines the build that closes the gap. It assumes the existing `HowellPhaseEngine` is reused and bug-fixed; it adds new tables, modules, and a backtest harness; it migrates Cyler off manual GitHub-CSV uploads onto an MSTR-Engine-fed workspace data feed; it rewrites `AGENTS.md` to match v3.2.2 doctrine.
 
 It does **not** ship until backtest validates the classifier and the new ruleset.
 
-**Operational shift baked into this build (added 2026-04-30):** TV ingest is owned by MSTR Engine, not Camel Engine. Camel's cycle indicators get rebuilt as Pine in Gavin's TradingView account and flow to Cyler through the same MSTR ingest pipeline as everything else. Camel Engine itself is on a decommission track gated on (a) Greg's explicit sign-off and (b) a Pine fidelity audit confirming DCL/WCL/YCL classification ports cleanly. Until both gates pass, Camel keeps running unmodified. See §5.9 for the decommission plan.
+**Operational shift baked into this build (added 2026-04-30, scope adjusted 2026-05-02):** TV ingest is owned by MSTR Engine, not Camel Engine. The MSTR-Engine-owned data feed (§5.5) is the replacement for Cyler's manual GitHub-CSV upload pattern. Camel Engine itself stays running unchanged — there is no decommission, no Pine port of cycle indicators, no operational surface reduction in this build. The descope was Gavin's call on 2026-05-02: build only the MSTR-side functionality required to retire the manual CSV process; leave Camel as a live engine that may be revisited separately later.
 
 ---
 
@@ -113,7 +114,7 @@ Local `~/mstr-engine/scripts/sri_engine.py` is dated **2026-03-16**, 56 bytes sm
 | D10 | **RAW Hybrid is a *derived* profile, not a *seeded* one.** Weights are computed at lookup time as `(Rotational + All-Weather) / 2` per (phase, sleeve). No separate rows in `ab4_benchmark`. | Keeps the midpoint definition canonical — if Rotational or All-Weather weights are tuned, RAW Hybrid auto-updates. Eliminates drift between three parallel weight tables. |
 | D11 | **Tolerance bands for RAW Hybrid use the default §9.3 table unmodified.** | AB3 ruleset §9.5 currently differentiates Rotational (default) from All-Weather (slightly more generous in interpretation, default formal base). RAW Hybrid sits between, but the default table is already the formal base for both — no adjustment needed in v1. Tighten in v2 if backtest reveals asymmetry. |
 | D12 | **MSTR Engine owns its TV ingest.** No dependency on Camel Engine for data plumbing. Future engines (APE, etc.) build or share separately when they need TV data; not solved at this layer in v1. | Camel is currently producing errors. Routing Cyler's data dependency through an unstable engine violates the "engines stay separated at the data layer" doctrine in CLAUDE.md. Also: Camel Phase 3 TV ingest was never built — "reuse" was always going to mean "build it, then couple to it." Same total work, more coupling. |
-| D13 | **Camel Engine is on a decommission track.** Cycle indicators (DCL/WCL/YCL) get rebuilt as Pine in Gavin's TradingView account; their outputs flow to Cyler through MSTR Engine's TV ingest like any other indicator. Camel Engine itself — the codebase, the SQLCipher DB, the 9 LaunchAgents, the camel-engine vault remote — gets archived. **Gated on Greg sign-off and Pine fidelity audit.** See §5.9. | Honors v3.2.2's own framing that "Camel is a sourced indicator, not an architecture layer." The engine wrapper was always doing more than the methodology required. Removing it shrinks the operational surface (3 engines → 2), simplifies the Discord topology, and removes a SQLCipher DB and a vault repo from rotation. |
+| ~~D13~~ | ~~Camel Engine is on a decommission track…~~ **Withdrawn 2026-05-02 (rev6).** Camel Engine stays running unmodified. This build's only operational reduction is replacing Cyler's manual GitHub-CSV upload with the MSTR-owned workspace data feed (§5.5–§5.6). Camel decommission, if it happens, is a future decision outside this build. | n/a |
 
 ---
 
@@ -229,7 +230,7 @@ MSTR Engine writes CSVs into `~/.openclaw-mstr/workspace-mstr-cio/data-feed/` on
 - **Auth rotation:** monthly cookie refresh procedure documented in `~/mstr-engine/docs/tv-ingest-runbook.md`.
 - **Soak window:** after 1 week of clean parallel runs (new MSTR feed + manual upload both populating workspace), retire the manual upload + the cron entry that pulls Grok into the workspace.
 
-This step is **independent of the Camel decommission gate (§5.9).** MSTR Engine TV ingest ships regardless of whether Camel decommission is approved — the only thing the decommission decides is whether Camel keeps running its current Pine pipeline alongside, or hands over to Pine-in-Gavin's-TV-account.
+This step is the **functional replacement for Cyler's manual GitHub-CSV upload** and is the headline deliverable of rev6. Camel Engine continues running its existing pipeline unchanged in parallel — that is by design, not a temporary state.
 
 ### 5.6 P-TVI retirement
 
@@ -261,35 +262,25 @@ Net-new under `~/.openclaw-mstr/workspace-mstr-cio/mstr-knowledge/`:
 
 `active-tasks.md` updated to show v3.2.2 build complete and to drop the stale 2026-03-15 sprint entries that no longer apply.
 
-### 5.9 Camel Engine decommission (parallel track, gated)
+### 5.9 Camel Engine decommission — **DESCOPED 2026-05-02 (rev6)**
 
-This track runs in parallel with §5.1–§5.8 but does not block them. Nothing destructive happens until **both gates** pass:
+Per Gavin: this build only needs to deliver the MSTR-side functionality required to retire the manual GitHub-CSV process — **not** to actually decommission Camel Engine. The functional replacement for the manual CSV upload is §5.5 (MSTR TV ingest writes to `~/.openclaw-mstr/workspace-mstr-cio/data-feed/`) plus §5.6 (P-TVI retirement once §5.5 has soaked one week). Both remain in scope and unchanged.
 
-- **Gate A — Greg's explicit sign-off.** Greg built Camel Engine. Decommissioning is his call, not Gavin's alone. Sign-off required even though Gavin and Greg are equal co-principals on this machine.
-- **Gate B — Pine fidelity audit.** Archie reads `~/camel-engine/pipeline/` and confirms whether DCL/WCL/YCL classification logic ports cleanly to Pine. If something doesn't port (Python-only logic Pine cannot express), three options: accept the loss, port it to Python *inside* MSTR Engine, or keep that one piece of Camel running. Gate cleared either by green audit or by an explicit decision on a non-portable piece.
+What is **out of scope** as of rev6:
 
-**Sequence after both gates pass:**
+- Pine port of Camel cycle indicators (DCL/WCL/YCL) into Gavin's TradingView account.
+- `~/.openclaw-mstr/workspace-mstr-cio/mstr-knowledge/cycle_state.md` (would have been populated from the Pine port).
+- `~/mstr-engine/docs/camel-decom-pine-fidelity-audit.md` (gate B output — gate withdrawn).
+- 2-week parallel soak comparing Camel vs Pine outputs.
+- Sequential disable of the 9 `com.camel.*` LaunchAgents.
+- Archive of `~/camel-engine/` codebase, `camel.db`, `~/camel-engine/.secrets/`, and the LaunchAgent plists.
+- CLAUDE.md rewrite from "three engines" to "two engines + MSTR-owned cycle indicators."
+- rclone backup filter changes for `~/camel-engine/`.
+- Memory updates to `project_camel_engine.md` and `project_sri_engine_integration_topology.md` related to a Camel-as-output reframing.
 
-1. **Pine port.** Gavin recreates Camel's cycle indicators in his TradingView account. Verified outputs match `~/camel-engine/data/camel.db` historical cycle outputs to within an agreed tolerance over a 90-day window.
-2. **Wire to MSTR ingest.** Pine outputs included in the canonical ticker × interval list in `tv_feed_writer.py` (§5.5).
-3. **Cyler workspace doc.** Add a `cycle_state.md` file to `mstr-knowledge/` parallel to `phase_state.md`; populated daily from the new ingest. Update AGENTS.md session-start load list.
-4. **Soak window.** 2 weeks of parallel running (Camel still up, new Pine pipeline running). Compare daily outputs. Discrepancy >5% on any cycle classification = stop, investigate.
-5. **Camel quiet-down.** Disable LaunchAgents one at a time over a week (`com.camel.tv` → `com.camel.cross-system-signal` last). After each, verify nothing downstream broke. Discord webhooks (`cross_signals`, `system_log`, `briefing`, `alerts`, `trades`, `research` on Camel) marked deprecated; Cyler is told not to subscribe.
-6. **Preservation, not deletion.**
-   - `~/camel-engine/data/camel.db` — final SQLCipher snapshot to `~/Archive/camel-engine-decom-YYYY-MM-DD/data/`. Preserve key.
-   - `~/camel-engine/data/backups/` — copy in the same archive.
-   - `~/camel-engine/.secrets/` — copy in the same archive (preserve sqlcipher key + any TV session cookie).
-   - `~/camel-engine/` codebase — final commit + tag `decommissioned-YYYY-MM-DD` on the GitHub remote, then archive locally.
-   - `~/vault-cycle-trading/` — keep on disk and on GitHub indefinitely (it's methodology, not just code).
-7. **LaunchAgent cleanup.** All 9 `com.camel.*` plists moved to `~/Archive/camel-engine-decom-YYYY-MM-DD/LaunchAgents/`.
-8. **Crontab cleanup.** Remove any `~/camel-engine/` entries from crontab (none expected — Camel uses LaunchAgents — but verify).
-9. **CLAUDE.md rewrite.** Drop the Camel Engine section. Update the "three engines" framing to "two engines + MSTR-owned cycle indicators." Update the Discord webhook topology table (rows for Camel-only channels become "[archived]"). Update the Backup section if it references `camel.db`. Update the rclone backup filters to stop covering `~/camel-engine/`.
-10. **Memory updates.** Update `project_camel_engine.md` (mark superseded with archive pointer). Update `project_sri_engine_integration_topology.md` (Camel-as-engine reference becomes Camel-as-Pine-indicator-output; Layer 2 placement preserved).
-11. **rclone backup filter update.** Remove `~/camel-engine/` from offsite backup, since the archive captures it once.
+Camel Engine continues running unmodified. Its LaunchAgents stay loaded, its cron-equivalents stay live, its Discord webhooks stay subscribed, its SQLCipher DB and vault stay in rotation. If a future decision revives the decommission, this section is the starting point — but it is no longer part of v3.2.2 ship.
 
-**Rollback path.** Until step 7 (LaunchAgent move), the decommission is fully reversible — re-enable the LaunchAgents and Camel resumes. After step 7 + a full backup cycle, rollback requires restoring from the archive bundle.
-
-**Out-of-scope for v1 of this build:** the AI Portfolio Engine equivalent of this question (does APE eventually need its own TV ingest, and if so, do we extract a shared library between MSTR and APE?). Punt to a future doc.
+**Out-of-scope for v1 of this build (carried over):** the AI Portfolio Engine equivalent of this question (does APE eventually need its own TV ingest, and if so, do we extract a shared library between MSTR and APE?). Punt to a future doc.
 
 ---
 
@@ -315,14 +306,12 @@ Earlier revisions of this doc reported a single fuzzy "days" column that conflat
 | 5.6 P-TVI retirement | ~30 min | 0.5 day after §5.5 1-week soak |
 | 5.7 AGENTS.md rewrite | ~2 hours | 1–2 days (Cyler review loop) |
 | 5.8 workspace knowledge | ~1 hour | 0.5 day |
-| 5.9 Camel decommission (parallel, gated) | ~6–8 hours total Archie execution, spread out | **~3–4 weeks** (dominated by 2-week parallel soak in §5.9 step 4; Pine port time on Gavin separate) |
+| 5.9 Camel decommission | — | **DESCOPED rev6** — not in this build. |
 | **Total — primary track (§5.1–§5.8)** | **~22–25 hours of Archie execution** | **~9 days** + backtest soak window |
-| **Total — incl. Camel decommission** | primary + ~6–8 hours | primary + 3–4 weeks parallel, mostly soak/safety windows |
 
 ### Compression levers
 
 - Steps 5.1–5.4 can compress to ~3 calendar days if backtest tooling reuses existing scaffolding in `backtest_btc_mstr_v2.py` and `backtest_indicators_v2.py`.
-- The §5.9 calendar column is conservative on purpose. If Greg sign-off is fast and the Pine port works first try, decommission can compress to ~2 weeks. The 2-week soak in step 4 is a hard floor — shortening it trades safety for speed and is not recommended.
 - The biggest variable I can't model from here is **how often Gavin's at the keyboard.** If you're reviewing in real time as I work, calendar shrinks toward Archie-execution time. If you're checking in once a day, it stretches toward the calendar column. The doc's calendar numbers assume the once-a-day pattern.
 
 ---
@@ -349,14 +338,9 @@ AB3 ruleset §17 lists "technical timing requirements for LEAP approval" as open
 
 **Owner:** Cyler. **Required by:** v2, not v1.
 
-### 7.4 Camel decommission gates
+### 7.4 ~~Camel decommission gates~~ — **CLOSED 2026-05-02 (rev6)**
 
-This open item replaces the previous "Camel Phase 3 readiness" question, which is now moot. The decommission requires:
-
-- **(a) Greg's explicit sign-off.** Greg built Camel; the call is his. Gavin and Greg are equal co-principals on this machine in general, but the decommission of an engine one of them built specifically should be confirmed by the builder.
-- **(b) Pine fidelity audit.** Archie reads `~/camel-engine/pipeline/` to confirm DCL/WCL/YCL classification logic ports cleanly to Pine. Audit produces a written report listing each piece of cycle logic and verdict (ports / lossy port / does not port). Anything that doesn't port gets a separate decision: accept loss, port to Python in MSTR Engine, or keep that piece of Camel running.
-
-**Owners:** Greg (gate a), Archie (gate b). **Required by:** §5.9 step 1. The rest of the build (§5.1–§5.8) does not block on this; it ships either way.
+Per Gavin's descope, Camel decommission is no longer in scope. Both gates (Greg sign-off; Pine fidelity audit) are retired. Camel Engine remains a running engine.
 
 ### 7.5 AB3 ruleset needs a §8.3 for RAW Hybrid
 
@@ -387,10 +371,7 @@ The Howell brief references inputs whose presence I have not yet verified end-to
 | MSTR Engine TV ingest takes longer than 2.5 days | §5.5 slips. Manual GitHub-CSV continues to work as fallback for the duration. No critical path break. |
 | Schema changes to `howell_phase_state` break existing readers | ADD COLUMN is backward-compatible; existing readers don't touch the new columns. |
 | Engine-file drift turns out to mean local has divergent fixes that need preservation | §5.1 starts with a real diff, not an overwrite. |
-| **Camel decommission:** Pine fidelity audit reveals cycle logic that doesn't port to Pine | §5.9 gate B fails. Either accept loss, port that piece to Python in MSTR Engine, or keep just that one Camel cron running. The audit catches this before any LaunchAgent gets disabled. |
-| **Camel decommission:** something we don't know about depends on a Camel Discord webhook or signal | Soak window in §5.9 step 4 surfaces this before destructive steps. Disabling LaunchAgents one at a time in step 5 preserves rollback. |
-| **Camel decommission:** TradingView session cookie auth proves brittle (account lockout, frequent breakage) | Mitigation already planned in §5.5 (monthly rotation, smoke test). Worst case: fall back to Pine alert webhooks for the most critical signals while we figure out a better auth path. |
-| Greg sign-off on Camel decommission lags behind primary build | Primary build (§5.1–§5.8) ships independently. Camel keeps running unmodified. No delivery dependency. |
+| TV session cookie auth proves brittle (account lockout, frequent breakage) | Mitigation already planned in §5.5 (monthly rotation, smoke test). Manual GitHub-CSV upload remains a fallback throughout the §5.5 1-week soak. |
 
 ---
 
@@ -403,6 +384,7 @@ The Howell brief references inputs whose presence I have not yet verified end-to
 - Renaming MSTR Engine to SRI Engine across paths/configs — deferred per session memory `project_sri_engine_rename.md`.
 - Personal-portfolio data appearing in Grok — strict GitHub privacy rule remains in force.
 - Extracting a shared TV-ingest library between MSTR Engine and AI Portfolio Engine — deferred. APE doesn't currently need TV data; if it does later, that's a future refactor decision, not a v1 question.
+- **Camel Engine decommission** — descoped 2026-05-02 (rev6). This build delivers the MSTR-side functionality that retires the manual CSV upload, but it does **not** decommission Camel. Camel keeps running unmodified. See §5.9 for what was removed from scope.
 
 ---
 
@@ -410,9 +392,9 @@ The Howell brief references inputs whose presence I have not yet verified end-to
 
 | Owner | Role | Decision needed | Status |
 |---|---|---|---|
-| Gavin | Trading systems owner | Approve sequence + §5.4 acceptance bars; approve §5.9 Camel decommission (subject to Pine fidelity audit gate B) | ☒ **2026-05-01** |
-| Greg | (transferred) | Ownership of trading systems transferred to Gavin 2026-05-01; sign-off no longer required. Courtesy heads-up before §5.9 destructive steps still recommended. | n/a |
-| Cyler | CIO doctrine author | Author AB4 benchmark weights (open item §7.1) and Tier thresholds (§7.2) | ☐ |
+| Gavin | Trading systems owner | (rev4) Approve sequence + §5.4 acceptance bars. (rev6) Descope §5.9 Camel decommission; build only the MSTR-side CSV-replacement functionality. | ☒ **rev4 2026-05-01 / rev6 2026-05-02** |
+| Greg | (transferred) | Ownership of trading systems transferred to Gavin 2026-05-01; sign-off no longer required. Camel decommission descoped rev6, so the prior "courtesy heads-up before destructive steps" note is also retired. | n/a |
+| Cyler | CIO doctrine author | Author AB4 benchmark weights (open item §7.1) and Tier thresholds (§7.2) | ☒ **2026-05-01** (`p-sri-v322-cyler-inputs-v1.md`) |
 
 **Status note (2026-05-01, end of day):** §5.1–§5.4 complete and verified.
 
@@ -421,7 +403,8 @@ The Howell brief references inputs whose presence I have not yet verified end-to
 - **§5.3** — `~/mstr-engine/scripts/ab_profile_resolver.py` shipped. Resolves Rotational/AllWeather/RAWHybrid; rolls up positions through `sleeve_map`; logs + drops unmapped or missing-data positions; persists to `ab3_deviation_log`. CLI: `--portfolio --as-of --emit json|table --dry-run`. Tested live against `greg`.
 - **§5.4** — `~/mstr-engine/scripts/backtest_v322.py` shipped. 17,520 sleeve-bars across 73 phase rows × 5 portfolios × 3 profiles. Acceptance bars: bar 1 PASS (240/240 groups consistent), bar 2 PASS (2.08% churn at ±20% bands), bar 3 SKIP (single-phase history — all rows Turbulence), bar 4 PASS (RAW Hybrid math exact across all 64 (phase, sleeve) checks). Reports written to `~/mstr-engine/data/backtests/`.
 - **Position-data gap surfaced during §5.3** — Greg's options/spread rows (id=2, 3, 4, 5, 6) have NULL notional/delta and id=2/3 are past expiry. Cyler authored a reconciliation artifact (`briefs/p-sri-v322-positions-reconcile-greg-v1.md`) with explicit BROKER INPUT REQUIRED markers. SQL not yet applied; pending broker data from Gavin. The §5.4 backtest was run shares-only per Gavin's 2026-05-01 instruction (infrastructure validation, not strategy validation).
-- **§5.5–§5.9** — TV ingest, P-TVI retire, AGENTS.md rewrite, workspace knowledge files, Camel decommission — all not yet started. §5.9 gating note in §10 above remains: Pine fidelity audit (gate B) is the only remaining gate; Greg sign-off (former gate A) is moot per ownership transfer.
+- **§5.5–§5.8** — TV ingest scaffolding staged (scripts + plist + runbook present), but feed not yet activated (no TV cookie, no `data-feed/` dir, plist not loaded). P-TVI retire pending §5.5 1-week soak. Workspace AGENTS.md rewritten 2026-05-01; canonical `Grok/AGENTS.md` mirror still pre-rewrite (D8 lockstep open). Workspace knowledge files (`ab_profile.md`, `phase_state.md`, `ppr_template.md`) present.
+- **§5.9 Camel decommission — DESCOPED rev6 (2026-05-02).** Removed from this build. Camel Engine continues running unmodified.
 
 ---
 
@@ -459,27 +442,7 @@ ARCHIVED (after §5.6 soak):
   ~/Archive/p-tvi-retired-YYYY-MM-DD/                          (P-TVI scripts + last logs)
 
 
-CAMEL DECOMMISSION TRACK (§5.9 — gated on Greg sign-off + Pine fidelity audit)
-
-NEW:
-  ~/.openclaw-mstr/workspace-mstr-cio/mstr-knowledge/cycle_state.md
-  ~/mstr-engine/docs/camel-decom-pine-fidelity-audit.md        (audit report — gate B output)
-
-MODIFIED (post-decommission):
-  ~/.claude/CLAUDE.md                                          (drop Camel Engine section, update three-engines framing, update Discord topology table, update Backups section)
-  ~/scripts/rclone-backup.sh + rclone-backup-filters.txt       (drop ~/camel-engine/ from offsite scope)
-  ~/.claude/projects/-Users-vera/memory/project_camel_engine.md          (mark superseded, link to archive)
-  ~/.claude/projects/-Users-vera/memory/project_sri_engine_integration_topology.md  (Camel-as-engine → Camel-as-Pine-output)
-
-ARCHIVED (after §5.9 step 6):
-  ~/Archive/camel-engine-decom-YYYY-MM-DD/data/                (final camel.db SQLCipher snapshot + backups/)
-  ~/Archive/camel-engine-decom-YYYY-MM-DD/.secrets/            (sqlcipher key + session cookies)
-  ~/Archive/camel-engine-decom-YYYY-MM-DD/LaunchAgents/        (all 9 com.camel.* plists)
-  ~/Archive/camel-engine-decom-YYYY-MM-DD/codebase/            (final ~/camel-engine/ snapshot)
-
-PRESERVED ON DISK + GITHUB (not archived):
-  ~/vault-cycle-trading/                                       (methodology, kept indefinitely)
-  3ServantsP35/Grok briefs/ Camel-related docs                 (kept for historical reference)
+CAMEL DECOMMISSION TRACK — REMOVED rev6 (2026-05-02). See §5.9.
 ```
 
 ---
