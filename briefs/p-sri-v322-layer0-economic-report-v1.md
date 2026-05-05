@@ -12,11 +12,12 @@
 
 This document is the first actual draft of the **Layer 0 Economic Report** for the v3.2.2 architecture.
 
-The purpose of the report is to make Layer 0 legible to users by reporting three things for both **GLI** and **Economic Growth**:
+The purpose of the report is to make Layer 0 legible to users by reporting four things for both **GLI** and **Economic Growth**:
 
 1. a **number**
 2. a **trend**
 3. a **stage**
+4. a **confidence factor**
 
 That gives Layer 0 a repeatable reporting language instead of a purely narrative macro note.
 
@@ -47,6 +48,7 @@ Each block should report:
 - **Level / Number**
 - **Trend**
 - **Stage**
+- **Confidence**
 
 ### 2.1 Four-stage framework
 
@@ -70,8 +72,32 @@ The report should therefore separate:
 - **number** = where the series is
 - **trend** = what direction it is moving
 - **stage** = what cycle state that combination implies
+- **confidence** = how clearly the current evidence supports the trend/stage label
 
 That is the durable Layer 0 labeling system.
+
+### 2.3 Confidence-factor framework
+
+The confidence factor should not pretend to be false quantitative precision.
+
+It should answer a narrower and more useful question:
+
+> How clear is the current classification of this series?
+
+This means the confidence factor is about **clarity of trend/stage interpretation**, not a literal prediction-probability estimate.
+
+A simple v1 scale is enough:
+
+- **High confidence** = level, direction, and stage all align cleanly
+- **Moderate confidence** = the call is reasonable, but some ambiguity or transition risk remains
+- **Low confidence** = the evidence is mixed, early, noisy, or near a stage boundary
+
+This is especially important when:
+- a series is close to a stage transition
+- level and momentum disagree
+- one component is doing most of the work
+- GLI and Growth are diverging
+- Layer 0 and Layer 0.5 are telling different stories
 
 ---
 
@@ -98,6 +124,7 @@ This is a **tailwind backdrop**, not an all-clear backdrop.
 - **GLI Number:** `+1.067` Z-score
 - **GLI Trend:** `Rising / Expanding`
 - **GLI Stage:** `Expansion`
+- **GLI Confidence:** `High`
 
 ## 4.2 Why this is the stage call
 
@@ -111,6 +138,12 @@ That combination suggests:
 Under the four-stage framework, that is most cleanly labeled:
 
 ## **GLI Stage = Expansion**
+
+The confidence is currently best described as:
+
+## **GLI Confidence = High**
+
+because the level, direction, and momentum are all aligned in the same constructive direction.
 
 ## 4.3 User interpretation
 
@@ -138,6 +171,7 @@ It means the market climate is **more supportive than hostile**.
 - **Economic Growth Number:** `+0.200` GEGI
 - **Economic Growth Trend:** `Stabilizing / Improving`
 - **Economic Growth Stage:** `Expansion`
+- **Economic Growth Confidence:** `Moderate`
 
 ## 5.2 Why this is the stage call
 
@@ -158,6 +192,12 @@ So the best draft stage call is:
 ## **Economic Growth Stage = Expansion**
 
 with the important qualifier that it is **modest expansion**, not exuberant expansion.
+
+The confidence is best described as:
+
+## **Economic Growth Confidence = Moderate**
+
+because the composite is only modestly positive and still depends on judgment about whether the series is better described as early expansion versus late recovery.
 
 ## 5.3 User interpretation
 
@@ -191,6 +231,9 @@ Current Layer 0 combined state is:
 
 ### Combined Layer 0 conclusion:
 ## **Constructive macro backdrop with liquidity leadership**
+
+### Combined confidence:
+## **Moderate-to-High confidence**
 
 This is the most important synthesis.
 
@@ -282,16 +325,16 @@ This is not necessarily an error. It is exactly the kind of tension a good layer
 For each recurring Layer 0 Economic Report, the published format should begin with two summary lines.
 
 ### GLI line
-- **GLI:** `number | trend | stage`
+- **GLI:** `number | trend | stage | confidence`
 
 Example:
-- **GLI:** `+1.067 | Rising | Expansion`
+- **GLI:** `+1.067 | Rising | Expansion | High confidence`
 
 ### Economic Growth line
-- **Growth:** `number | trend | stage`
+- **Growth:** `number | trend | stage | confidence`
 
 Example:
-- **Growth:** `+0.200 | Stabilizing / Improving | Expansion`
+- **Growth:** `+0.200 | Stabilizing / Improving | Expansion | Moderate confidence`
 
 ### Combined line
 - **Layer 0 Conclusion:** `Constructive backdrop with liquidity leadership`
@@ -341,11 +384,13 @@ The following reporting pattern should be preserved going forward:
 - report the current **number**
 - call the **trend** clearly
 - assign one **stage** under the four-stage framework
+- assign one **confidence factor** for the clarity of the trend/stage call
 
 ### For Economic Growth
 - report the current **number**
 - call the **trend** clearly
 - assign one **stage** under the same four-stage framework
+- assign one **confidence factor** for the clarity of the trend/stage call
 
 ### For Layer 0 as a whole
 - synthesize the two blocks
@@ -359,17 +404,19 @@ The following reporting pattern should be preserved going forward:
 The Layer 0 report should evolve from a loose macro backdrop note into a disciplined economic report with repeatable labels.
 
 The best v1 reporting structure is:
-- **GLI number, trend, stage**
-- **Growth number, trend, stage**
+- **GLI number, trend, stage, confidence**
+- **Growth number, trend, stage, confidence**
 - **combined Layer 0 conclusion**
+- **combined confidence read**
 - **downstream implications for Layers 0.5 through 3**
 - **chart package in the published version**
 
 Current draft call:
 
-- **GLI:** `+1.067 | Rising | Expansion`
-- **Growth:** `+0.200 | Stabilizing / Improving | Expansion`
+- **GLI:** `+1.067 | Rising | Expansion | High confidence`
+- **Growth:** `+0.200 | Stabilizing / Improving | Expansion | Moderate confidence`
 - **Layer 0 Conclusion:** `Constructive backdrop with liquidity leadership`
+- **Combined Confidence:** `Moderate-to-High`
 
 That gives users a clean answer to both questions that matter:
 
