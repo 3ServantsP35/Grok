@@ -20,6 +20,7 @@
 | P-COUNCIL | Capital Allocation Council / Adversarial Decision Council | 🟡 Active | Gavin/CIO |
 | P-OPT-SCREENER | Technical Options Opportunity Screener | 🟡 Active | Gavin/CIO |
 | P-REPORTING | Portfolio and Layer Reporting Framework | 🟡 Active | Gavin/CIO |
+| P-SERVICE-MODEL | Portfolio Strategy Service Model | 🔴 HIGH | Gavin/CIO |
 | P-AB1AB2-AUTO | Automating AB1 and AB2 Trading | 🟡 Active | Greg/Gavin/CIO |
 | P-MCP-CSV | Automating CSV Uploads with MCP | 🔴 HIGH | Greg/Gavin/CIO |
 
@@ -308,6 +309,36 @@ Purpose: define how the system reports on portfolios and layers so users can see
 
 ---
 
+### P-SERVICE-MODEL: Portfolio Strategy Service Model
+**Status:** 🔴 HIGH  
+**Lead:** Gavin/CIO
+
+Purpose: build the service layer that turns the existing market, layer, and portfolio architecture into a usable educational portfolio-management workflow for named users.
+
+**Current scope:**
+- define portfolio strategy as the primary object of the service
+- turn architecture outputs into user-facing reporting, approvals, execution plans, and performance workflows
+- keep the service configurable rather than bespoke
+- support one tier of users, with learning modules that level users up into effective use of the system
+- use Gavin's live portfolio as the first live-fire design case once current layer testing is complete
+
+**Current framing:**
+- weekly cadence with event-driven engagement
+- core loop: user inputs → system strategy → user approval → system execution plan → user execution confirmation → performance/adjustment loop
+- target core artifacts: Portfolio Strategy Report, Execution Plan, learning modules, execution confirmation workflow
+
+**Initial milestones:**
+| Milestone | Status |
+|---|---|
+| Define v1 service operating model and lifecycle | 🟡 In progress |
+| Draft Portfolio Strategy Report schema | ⬜ Planned |
+| Draft Execution Plan schema | ⬜ Planned |
+| Define user input/config schema | ⬜ Planned |
+| Define learning-module set (service use, layers, management model) | ⬜ Planned |
+| Run live-fire design pass on Gavin portfolio intake and reporting flow | ⬜ Planned |
+
+---
+
 ### P-AB1AB2-AUTO: Automating AB1 and AB2 Trading
 **Status:** 🟡 Active  
 **Lead:** Greg/Gavin/CIO
@@ -401,7 +432,8 @@ The following projects are archived as part of the 2026-04-22 tracker reset. The
 5. **P-COUNCIL**
 6. **P-OPT-SCREENER**
 7. **P-REPORTING**
-8. **P-AB1AB2-AUTO**
+8. **P-SERVICE-MODEL**
+9. **P-AB1AB2-AUTO**
 
 ### Parallel tracks
 - **P-LAYER-ARCH** continues in parallel because architecture hardening affects almost every downstream project.
@@ -421,8 +453,10 @@ The following projects are archived as part of the 2026-04-22 tracker reset. The
   - the screener should surface candidates into an already-defined review vocabulary rather than inventing its own recommendation language.
 - **P-OPT-SCREENER → P-REPORTING**
   - reporting should eventually show what opportunities were surfaced, why they ranked highly, and how they resolved.
-- **P-REPORTING + settled doctrine → P-AB1AB2-AUTO**
-  - automation should come after the system has stable benchmark language, deviation rules, council review patterns, screener outputs, and visible reporting outputs.
+- **P-REPORTING → P-SERVICE-MODEL**
+  - the service layer should sit on top of the reporting layer so users can receive strategy recommendations, gap analysis, and execution guidance in a coherent operating model rather than as disconnected reports.
+- **P-SERVICE-MODEL + settled doctrine → P-AB1AB2-AUTO**
+  - automation should come after the system has stable benchmark language, deviation rules, reporting outputs, service workflows, and user-approval patterns.
 
 ### Interpretation
 The architecture work has made doctrine the bottleneck, but the user-directed reprioritization means **data plumbing now becomes the first enabling step** because AB4 strategy needs backtesting support. The new council project adds an explicit anti-groupthink layer so major capital decisions are stress-tested before they become doctrine, recommendation, or automation. The new options screener project adds a dedicated technical funnel for surfacing higher-quality options entries before they reach execution or reporting layers.
