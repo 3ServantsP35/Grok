@@ -21,6 +21,7 @@ The report should make clear:
 - what deployment posture the architecture should take
 - whether liquidity is still supporting financial assets or being absorbed elsewhere
 - how close the system appears to the next phase transition
+- what data and evidence support those calls
 - what this should mean for the layers below it
 
 Like the Layer 0 report, this report should stay **pure in authority** while becoming highly useful in implication.
@@ -40,7 +41,7 @@ It should **not**:
 
 ## 2. Core reporting framework
 
-The Layer 0.5 Howell Phase Report should be organized around seven durable reporting fields.
+The Layer 0.5 Howell Phase Report should be organized around eight durable reporting fields.
 
 1. **Phase**
 2. **Trend / transition direction**
@@ -49,6 +50,7 @@ The Layer 0.5 Howell Phase Report should be organized around seven durable repor
 5. **Deployment posture**
 6. **Liquidity destination / absorption state**
 7. **Transition percentage**
+8. **Evidence package**
 
 These fields reflect the architecture definition in `SRI-Engine-Tutorial-v3.md` and turn Layer 0.5 into a repeatable report instead of a one-line phase label.
 
@@ -166,6 +168,52 @@ because:
 
 The main uncertainty is not the current label. The main uncertainty is **when** the transition out of Turbulence becomes real enough to call.
 
+## 5.4 Evidence package for the current phase call
+
+The report should not stop at the label. It should show the evidence behind the label.
+
+### Current phase-score evidence
+
+| Phase | Score |
+|---|---:|
+| Rebound | -9.00 |
+| Calm | -2.00 |
+| Speculation | 3.00 |
+| **Turbulence** | **5.00** |
+
+Interpretation:
+- Turbulence is the highest score
+- Speculation is the nearest alternative, but still trails by 2 points
+- Rebound and Calm are not close enough to challenge the headline label right now
+
+### Current sector / proxy evidence
+
+| Proxy | SRIBI | Signal | Howell implication |
+|---|---:|---|---|
+| XLK | -35.00 | BEAR | weak technology leadership |
+| XLY | -50.00 | BEAR | weak cyclicals |
+| XLF | -35.00 | BEAR | weak financial sponsorship |
+| XLE | 60.00 | BULL | late-cycle / commodity strength nuance |
+| XLP | 15.00 | BULL | defensive support |
+| TLT | 10.00 | BULL | bond-duration support |
+| GLD | 40.00 | BULL | defensive / hard-asset support |
+| IWM | -5.00 | NEUTRAL | no strong cyclical breadth rescue |
+| VT | -25.00 | BEAR | broad equity weakness |
+| DBC | 30.00 | BULL | commodity support still present |
+
+Interpretation:
+- the core Turbulence pattern is visible in weak Tech, weak Cyclicals, positive Defensives, and positive Bond Duration
+- commodity and hard-asset strength add nuance, but they do not overturn the dominant defensive read
+- this is why the report can be data-backed and still acknowledge complexity
+
+### Persistence evidence
+
+Recent published history has remained `Turbulence` throughout the current window rather than flickering across multiple phases.
+
+Interpretation:
+- persistence supports a higher-confidence current phase label
+- persistence does not prove no transition is coming, but it does argue against prematurely calling one
+
 ---
 
 ## 6. Factor preference block
@@ -281,6 +329,23 @@ The report should distinguish clearly among:
 
 That sequence will make the report much more useful than binary flipping.
 
+## 9.3 What data should support the transition call
+
+The transition language should be backed by observable evidence, not tone.
+
+At minimum, the report should reference:
+- the phase-score spread versus the next-best phase
+- whether that spread is widening or narrowing
+- whether Cyclicals and Tech are improving enough to challenge a defensive phase
+- whether Bond Duration and Defensives are losing sponsorship
+- whether broad proxies like VT and IWM are confirming improvement or still lagging
+- whether the latest readings represent a one-off move or a persistent shift across several observations
+
+For the current state, the evidence supports:
+- **phase intact**
+- **some cross-layer constructive tension from Layer 0**
+- **not enough internal Howell evidence yet to call confirmed transition**
+
 ---
 
 ## 10. Combined Layer 0.5 synthesis
@@ -394,7 +459,14 @@ For each recurring Layer 0.5 Howell Phase Report, the published format should be
 Example:
 - **Howell:** `Turbulence | Stable / early transition pressure possible | High confidence | Defensive over cyclical | Defensive / selective | Mixed to absorptive | 25% toward Rebound`
 
-That makes the report compact, comparable across weeks, and easy to chart historically.
+### Required evidence block
+After the summary line, the report should publish a compact evidence block containing:
+- current phase scores for all four phases
+- current sector/proxy SRIBI readings and signals
+- recent phase persistence / recent transition history
+- a short note on what evidence would be needed to upgrade or downgrade the phase call
+
+That makes the report compact at the top, but still auditable and data-backed below.
 
 ---
 
@@ -442,6 +514,7 @@ The following reporting pattern should be preserved going forward:
 - publish the current **deployment posture**
 - publish the current **liquidity destination / absorption state**
 - publish the current **transition percentage**
+- publish an **evidence package** with scores, proxy readings, and persistence data
 - synthesize what the combined Layer 0.5 backdrop implies for lower layers
 - explicitly surface important divergence with Layer 0 or lower layers
 - when tensions exist, state not only possible interpretations but the **most likely interpretation**
@@ -460,6 +533,7 @@ The best v1 reporting structure is:
 - **deployment posture**
 - **liquidity destination / absorption state**
 - **transition percentage**
+- **evidence package**
 - **combined Layer 0.5 conclusion**
 - **downstream implications for Layers 0.75 through 3**
 - **chart package in the published version**
