@@ -134,7 +134,7 @@ This report uses the validated screenshot interpretation below.
 | Cash | — | — | $2,214,955.47 | AB4 baseline reserve |
 | STRC | 3002 | 99.9697 | $300,109.04 | AB4 baseline yield/cash-equivalent reserve |
 | MSTR common | 4 | 185.34 | $741.36 | negligible direct MSTR sleeve exposure |
-| MSTR Jun 05 '26 $190 Call | 117 | 11.29-11.82 (OCR range) | ~$132K-$143K | short-dated bullish tactical / overlay exposure |
+| MSTR Jun 05 '26 $190 Call | -117 | 11.29-11.82 (OCR range) | -~$132K to -$143K | AB2 short-call income / negative-delta overlay |
 | MSTR Jun 18 '26 $190 Call | -55 | 15.35 | -$85,662.50 | AB2 short-call overlay |
 | MSTR Jan 15 '27 $170 Call | 200 | 53.50 | $1,074,500.00 | core AB3 conviction exposure |
 | MSTR Jan 15 '27 $170 Put | 22 | 34.35 | $75,020.00 | hedge / risk-shaping sleeve |
@@ -180,26 +180,26 @@ This is the cleanest benchmark expression from the inputs given so far.
 ## 6. Current portfolio vs benchmark
 
 ## 6.1 Current MSTR sleeve estimate
-Using the validated holdings table above, the current **net MSTR sleeve market value** is approximately:
+Using the corrected holdings table above, the current **net MSTR sleeve market value** is approximately:
 
 - MSTR common: `$741`
-- Jun 05 '26 $190 calls: `~$132K-$143K`
+- Jun 05 '26 $190 calls: `-~$143,325`
 - Jun 18 '26 $190 short calls: `-$85,662`
 - Jan 15 '27 $170 calls: `$1,074,500`
 - Jan 15 '27 $170 puts: `$75,020`
 - Jan 21 '28 $130 calls: `$166,472`
 
 ### Estimated net MSTR sleeve
-**~$1.374M** (using the higher validated call value set)
+**~$1.088M**
 
 ### Estimated sleeve weight
-**~38.1% of NAV**
+**~30.2% of NAV**
 
 ### Gap vs 40% target
 - **Target:** `$1,441,124`
-- **Current estimate:** `~$1,374,396`
-- **Shortfall:** `~$66,728`
-- **Shortfall as % of NAV:** `~1.85%`
+- **Current estimate:** `~$1,087,746`
+- **Shortfall:** `~$353,378`
+- **Shortfall as % of NAV:** `~9.81%`
 
 ## 6.2 Current reserve posture
 - Cash: `$2.215M`
@@ -211,7 +211,7 @@ This is **far above** the hard floor of `$240K`.
 That means the portfolio currently has:
 - ample reserve
 - meaningful optionality
-- no immediate pressure to force an aggressive add solely for liquidity reasons
+- enough liquidity to repair a benchmark underweight if charts justify it
 
 ## 6.3 Current bucket interpretation
 
@@ -219,7 +219,7 @@ That means the portfolio currently has:
 |---|---:|---|
 | AB4 reserve | very high | far above hard floor, gives exceptional flexibility |
 | AB3 core conviction | ~34.5% of NAV | Jan '27 + Jan '28 longs + negligible common |
-| AB2 overlay | ~1.6% net market value effect | short-dated long calls vs short calls are the main live management levers |
+| AB2 overlay | ~-6.4% of NAV net market value effect | two short-call overlays are materially suppressing net sleeve exposure |
 | Hedge | ~2.1% of NAV | long Jan '27 puts |
 
 ---
@@ -230,16 +230,16 @@ That means the portfolio currently has:
 Relative to the AB4 benchmark, where is the best opportunity to capture more profit or improve risk control?
 
 ## 7.2 Current answer
-The current answer is:
+The corrected answer is:
 
-### **Do not force a gross increase in core MSTR exposure solely to hit 40% exactly.**
+### **The portfolio is materially underweight the 40% MSTR benchmark unless chart ambiguity is high enough to justify standing aside.**
 
-Instead:
-- treat the current **~38.1%** as an **acceptable deviation** while the chart remains unresolved
-- use **AB2 rotation and tactical overlays** as the primary levers
-- keep the AB3 core largely intact until chart structure becomes more decisive
+Instead of a slight underweight, the current portfolio is:
+- **~30.2% net MSTR sleeve exposure**
+- **~9.8% of NAV below benchmark**
+- carrying a large negative overlay from the two short-call positions
 
-This is the most important precision upgrade relative to the earlier Discord draft.
+That changes the interpretation materially.
 
 ## 7.3 Why
 Because the current stack says:
@@ -250,7 +250,7 @@ Because the current stack says:
 
 Therefore the best current Layer 2 read is:
 
-> **Maintain the sleeve concept, but let chart clarity determine whether to refill the missing 1.85% immediately or leave it as dry powder.**
+> **If the chart is ambiguous, the current underweight can be tolerated as a temporary defensive deviation. If the chart is not ambiguous, the current sleeve is too far below benchmark and should be repaired first through overlay reduction, then through AB3 re-expansion if needed.**
 
 ---
 
@@ -262,17 +262,17 @@ This section is the actual portfolio prescription.
 
 ### Benchmark recommendation now
 1. **Preserve the reserve floor** without question
-2. **Preserve the MSTR sleeve concept** at a benchmark target of 40%
-3. **Do not add to AB3 core immediately** unless chart structure turns cleaner
-4. Use the **short-dated call complex** as the first management lever
+2. **Preserve the 40% MSTR sleeve doctrine** as the default benchmark
+3. Recognize that the portfolio is currently **materially underweight** that benchmark
+4. Use the **short-call overlays** as the first repair lever before touching AB3 core
 
 That means the portfolio should currently be run with this priority order:
 
 ### Adjustment priority order
-1. **Jun 05 '26 $190 long calls**
+1. **Jun 05 '26 $190 short calls**
 2. **Jun 18 '26 $190 short calls**
 3. **Jan 15 '27 $170 puts**
-4. **Jan 15 '27 / Jan 21 '28 long calls** (AB3 core, touch last)
+4. **Jan 15 '27 / Jan 21 '28 long calls** (AB3 core, touch last unless you are deliberately rebuilding toward benchmark)
 
 This is the most important sequencing recommendation in the whole report.
 
@@ -282,26 +282,28 @@ This is the most important sequencing recommendation in the whole report.
 
 Given the current shared-layer backdrop and your objectives, the most critical current adjustments are:
 
-### Adjustment 1 — Treat the 38.1% MSTR sleeve as acceptable underweight unless charts improve
-Do **not** force the missing `~$66.7K` of sleeve exposure back on immediately just to satisfy a benchmark number.
+### Adjustment 1 — Recognize the underweight correctly
+The portfolio is not slightly underweight. It is **~$353K below** the 40% sleeve target.
 
-Reason:
-- your own exception rule explicitly allows stepping aside when charts are ambiguous
-- the current layer stack does not justify automatic expansion
+That means the real question is not whether to ignore a small gap. The real question is:
+- is the chart ambiguous enough to justify staying this far underweight?
+- or should the sleeve be rebuilt closer to benchmark?
 
-### Adjustment 2 — Freeze AB3 core unless the chart gives a cleaner green light
-For now, treat the **Jan '27 $170 calls** and **Jan '28 $130 calls** as the protected core.
+### Adjustment 2 — Treat the Jun 05 short calls as the first active repair lever
+Because the Jun 05 calls are **short**, not long, they should be interpreted as a meaningful suppressor of net MSTR sleeve exposure.
+
+That means the first live decision is whether to:
+- maintain them if your chart read is cautious
+- partially cover them if your chart read is improving
+- fully cover them if your chart read turns clearly constructive
+
+### Adjustment 3 — Protect the AB3 core unless you are deliberately re-optimizing the benchmark sleeve
+For now, treat the **Jan '27 $170 calls** and **Jan '28 $130 calls** as the protected structural core.
 
 That means:
-- **no immediate AB3 add**
-- **no immediate AB3 trim** unless rollover evidence strengthens materially
-
-### Adjustment 3 — Use the short-dated complex as the active risk/profit lever
-The biggest live-management opportunity is the interaction between:
-- **117 Jun 05 '26 $190 long calls**
-- **55 Jun 18 '26 $190 short calls**
-
-This is where profit capture, delta control, and stage-sensitive rotation should happen first.
+- do **not** trim AB3 first just because the short-term tape gets messy
+- use overlays first
+- only add to AB3 if you decide the underweight should be repaired through longer-duration exposure rather than through short-covering alone
 
 ---
 
@@ -310,43 +312,49 @@ This is where profit capture, delta control, and stage-sensitive rotation should
 Because chart precision is still missing from this report, the cleanest way to be precise is through a **conditional recommendation ladder**.
 
 ### State A — Current base case: ambiguous / selective caution
-**This is the most defensible “now” posture from the current stack.**
+**This is only appropriate if your chart read is genuinely ambiguous.**
 
 Recommended posture:
 - **AB3 core:** no change
-- **Jun 05 '26 $190 long calls:** no fresh add
+- **Jun 05 '26 $190 short calls:** maintain current `-117`
 - **Jun 18 '26 $190 short calls:** maintain current `-55`
 - **Jan '27 puts:** maintain current `+22`
-- **MSTR sleeve target:** accept current `~38.1%` as an allowable temporary underweight
+- **MSTR sleeve target:** accept current `~30.2%` only as a temporary defensive underweight
 
 Interpretation:
 - benchmark says 40%
-- current evidence says underweight by ~1.85% is acceptable until charts improve
+- current evidence would have to be ambiguous enough to justify staying ~9.8% underweight
 
 ### State B — Constructive upside confirmation
-If the charts become materially constructive again, the cleanest way to restore the sleeve toward 40% is:
+If the charts become materially constructive again, the cleanest way to restore the sleeve toward 40% is to reduce the short overlays first.
 
 #### Preferred refill options
-**Option B1:** add **12 Jan 15 '27 $170 calls**
-- estimated added market value: `~$64,200`
-- brings the sleeve close to the 40% target
-- best fit with AB3 time horizon
+**Option B1:** cover **50-75** of the `-117` Jun 05 short calls
+- estimated sleeve restoration: `~$56K-$85K`
+- first repair step because it removes the nearest suppressor of upside expression
 
-**Option B2:** add **7 Jan 21 '28 $130 calls**
-- estimated added market value: `~$70,007`
-- slightly overshoots the exact target but keeps the add long-duration
+**Option B2:** cover **20-30** of the `-55` Jun 18 short calls
+- estimated sleeve restoration: `~$31K-$46K`
+- good second repair step if you want a more gradual rebuild
 
-**Option B3:** cover **20-30** of the `-55` Jun 18 short calls first
-- reduces upside cap
-- increases net bullish sleeve expression without adding new long exposure first
+**Option B3:** if you want to restore benchmark through AB3 instead of short-covering, add **66 Jan 15 '27 $170 calls**
+- estimated added market value: `~$353,100`
+- this is the cleanest direct one-step restoration of the benchmark gap using current prices
+
+**Option B4:** alternatively add **35 Jan 21 '28 $130 calls**
+- estimated added market value: `~$350,035`
+- slightly underfills the full gap but keeps the add very long-duration
+
+**Option B5:** full overlay normalization path
+- cover **all 117** Jun 05 shorts and **all 55** Jun 18 shorts
+- then add roughly **23 Jan '27 $170 calls** or **12 Jan '28 $130 calls** to finish the move toward 40%
 
 ### State C — Early rollover / diminishing upside
 If MSTR starts rolling over but the top is not yet fully confirmed:
 
 #### Preferred adjustments
-**Option C1:** trim **25-40** of the `117` Jun 05 $190 long calls
-- this is the cleanest first reduction of short-dated bullish convexity
-- lowers decay risk and near-term overexposure
+**Option C1:** keep the `-117` Jun 05 shorts in place
+- they are already doing useful defensive and income work
 
 **Option C2:** increase Jun 18 short calls from `-55` to **-65 or -75**
 - adds income
@@ -360,46 +368,42 @@ If MSTR starts rolling over but the top is not yet fully confirmed:
 If the chart moves from “rollover risk” to “top largely confirmed”:
 
 #### Preferred adjustments
-**Option D1:** trim **50-75** of the Jun 05 $190 long calls
-- remove the fastest-decaying bullish tactical exposure first
+**Option D1:** increase short calls from `-117 / -55` toward a more defensive overlay mix first
+- the exact ratio depends on where you want net delta to land
 
-**Option D2:** increase short calls from `-55` to **-75, -85, or -90**
-- creates the diminishing-delta path you explicitly want
-- can push the sleeve toward flat or negative delta while preserving the sleeve concept
+**Option D2:** hold or modestly increase the `+22` Jan '27 puts if you want cleaner negative-delta protection
 
-**Option D3:** trim **10-20** of the Jan 15 '27 $170 calls only after the short-dated complex has already been tightened
+**Option D3:** trim **10-20** of the Jan 15 '27 $170 calls only after the overlay layer has already been optimized
 - use AB3 trimming as a second-order lever, not first response
-
-**Option D4:** keep the `+22` Jan '27 puts and consider increasing by **+10 to +15** only if the top is strong enough that you want a cleaner negative-delta posture without going under 40% sleeve conceptually
 
 ---
 
 ## 9. Ranked recommendation set
 
 ## Rank 1 — Best fit right now
-### **Hold the AB3 core, keep the sleeve slightly under 40%, and use AB2 rotation as the primary live tool**
+### **Reclassify the portfolio as materially underweight benchmark, and let chart clarity decide whether to keep that underweight or repair it first through short-call reduction.**
 
 Why this ranks first:
-- matches the current stack best
-- respects chart ambiguity exception
-- protects appreciation objective while avoiding forced expansion
-- keeps short-dated tactical levers available
+- it reflects the corrected asset sign
+- it matches your rotational process better
+- it identifies the right first levers
+- it prevents false comfort from the earlier understated underweight
 
 ## Rank 2
-### **If constructive confirmation appears, refill the 1.85% sleeve gap with 12 Jan '27 $170 calls or 7 Jan '28 $130 calls**
+### **If constructive confirmation appears, cover part of the Jun 05 shorts first, then part of the Jun 18 shorts, before adding fresh AB3 size.**
 
 Why this ranks second:
-- cleaner than forcing more short-dated exposure
-- fits AB3 time horizon
-- restores the benchmark quantitatively
+- cleaner than immediately buying more long exposure
+- preserves your existing structure
+- restores benchmark in the order most consistent with your style
 
 ## Rank 3
-### **If rollover strengthens, reduce 25-40 Jun 05 longs and raise short calls to -65/-75 before touching the core LEAPs**
+### **If rollover strengthens, keep the Jun 05 shorts, add more Jun 18 short-call pressure, and leave the AB3 core mostly intact.**
 
 Why this ranks third:
 - aligns directly with your stated rotational process
-- monetizes and de-risks without abandoning the sleeve
-- preserves optionality for deeper negative-delta rotation later
+- uses overlays first
+- preserves optionality for deeper defensive rotation later
 
 ---
 
@@ -455,15 +459,15 @@ The later version should explicitly calculate:
 The most important quantitative conclusion in this report is:
 
 - **Target MSTR sleeve:** `$1.441M` (40.0% of NAV)
-- **Current estimated MSTR sleeve:** `~$1.374M` (38.1% of NAV)
-- **Shortfall vs target:** `~$66.7K` (1.85% of NAV)
+- **Current estimated MSTR sleeve:** `~$1.088M` (30.2% of NAV)
+- **Shortfall vs target:** `~$353.4K` (9.81% of NAV)
 
 The most important strategic conclusion is:
 
-> **Do not force the missing 1.85% back into the sleeve while the chart remains ambiguous. Preserve the AB3 core, and use the short-dated long/short call complex as the primary lever for profit capture and risk control.**
+> **The corrected portfolio is materially underweight the 40% MSTR benchmark. If the chart is ambiguous, that underweight can be tolerated temporarily. If the chart is constructive enough, the first repair action should be covering short-call overlays, starting with the Jun 05 line, before deciding whether new AB3 size is still needed.**
 
 The most important sequencing conclusion is:
 
-> **First adjust the Jun 05 longs and the Jun 18 short calls. Touch the Jan '27 and Jan '28 core only after the tactical layer has already been used.**
+> **First adjust the Jun 05 shorts and the Jun 18 short calls. Touch the Jan '27 and Jan '28 core only after the overlay layer has already been used or if you explicitly choose to rebuild benchmark exposure through longer-duration longs.**
 
-That is the clearest current Layer 2-3 prescription I can give from the available data.
+That is the corrected current Layer 2-3 prescription I can give from the available data.
