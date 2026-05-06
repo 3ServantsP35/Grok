@@ -14,10 +14,12 @@ This document is the first actual draft of the **Layer 2 Signal Report** for the
 
 The purpose of the report is to make Layer 2 legible to users by reporting:
 - what signal state is active inside each relevant branch
+- how Layer 2 applies to each asset currently in the user’s portfolio relative to the chosen AB4 profile
 - whether AB1, AB2, or AB3 conditions are firing, forming, blocked, or invalidated
 - how much confidence to place in the current signal state
 - what timing structure is driving the signal view
 - what evidence supports the signal call
+- whether there is an opportunity to capture more profit through other buckets relative to the AB4 baseline
 - what this should imply for Layer 3 allocation decisions
 
 Like the Layer 0 through Layer 1 reports, this report should stay **pure in authority** while becoming highly useful in implication.
@@ -39,17 +41,18 @@ It should **not**:
 
 ## 2. Core reporting framework
 
-The Layer 2 report should be organized around nine durable reporting fields.
+The Layer 2 report should be organized around ten durable reporting fields.
 
 1. **Signal state**
 2. **Signal direction / timing posture**
 3. **Confidence**
-4. **AB1 state**
-5. **AB2 state**
-6. **AB3 state**
-7. **Blocking / invalidation state**
-8. **Warnings / tensions**
-9. **Evidence package**
+4. **AB4-relative opportunity context**
+5. **AB1 state**
+6. **AB2 state**
+7. **AB3 state**
+8. **Blocking / invalidation state**
+9. **Warnings / tensions**
+10. **Evidence package**
 
 These fields reflect what Layer 2 actually owns in the architecture: converting branch state plus regime context into actual execution signals.
 
@@ -83,6 +86,7 @@ In v3.2.2:
 That means the report should treat Layer 2 primarily as:
 - a signal-state and timing report
 - a bucket-translation report for AB1 / AB2 / AB3
+- an **AB4-relative opportunity report** for assets already in the portfolio or under active consideration
 - a bridge from structural context to allocation readiness
 
 ### 2.3 Confidence-factor framework
@@ -124,7 +128,7 @@ This matters because a good Layer 2 report should tell users not just what direc
 
 ## 3.1 Executive conclusion
 
-Layer 2 should currently be interpreted as the architecture’s **state-to-signal conversion layer**, where the central question is not just “is the thesis good?” but “is the structure actionable now?”
+Layer 2 should currently be interpreted as the architecture’s **state-to-signal conversion layer**, where the central question is not just “is the thesis good?” but “is the structure actionable now, and is there an AB1 / AB2 / AB3 opportunity relative to the user’s chosen AB4 baseline?”
 
 The present top-level interpretation is:
 - Layer 2 inherits caution from Layer 0.5 and selectivity from Layer 1
@@ -137,7 +141,7 @@ This is a **signal-discipline layer**, not a thesis layer.
 
 My base-case draft for Layer 2 is:
 
-## **Signal opportunity should be treated as selective, ladder-based, and gate-conditioned rather than continuously “on.”**
+## **Signal opportunity should be treated as selective, ladder-based, gate-conditioned, and explicitly measured relative to the chosen AB4 baseline rather than continuously “on.”**
 
 That is the most important behavior the report should communicate.
 
@@ -147,11 +151,11 @@ That is the most important behavior the report should communicate.
 
 The published summary line for Layer 2 should look like this:
 
-- **Layer 2:** `signal regime | timing posture | confidence | AB1 state | AB2 state | AB3 state | major block / tension`
+- **Layer 2:** `signal regime | timing posture | confidence | AB4-relative opportunity | AB1 state | AB2 state | AB3 state | major block / tension`
 
 Current draft doctrine line:
 
-- **Layer 2:** `Selective signal opportunity | Watch/forming/confirmed ladder, not binary timing | Moderate confidence | AB1 tactical / conditional | AB2 directional or income state conditional | AB3 structural / staged | Gated by phase, breadth, and structural confirmation`
+- **Layer 2:** `Selective signal opportunity | Watch/forming/confirmed ladder, not binary timing | Moderate confidence | Asset-level opportunities must be judged relative to AB4 baseline | AB1 tactical / conditional | AB2 directional or income state conditional | AB3 structural / staged | Gated by phase, breadth, and structural confirmation`
 
 This gives users one compact line and then a fuller signal interpretation below it.
 
@@ -206,7 +210,68 @@ This is a good kind of moderation. It reflects discipline, not weakness.
 
 ---
 
-## 6. AB1 state block
+## 6. AB4-relative opportunity block
+
+## 6.1 Why this block is necessary
+
+This is the missing practical bridge in the earlier draft.
+
+Layer 2 is not just answering whether a signal exists in the abstract. It is answering:
+
+> Relative to the user’s chosen AB4 profile and current holdings, is there an opportunity to capture additional profit or improve expression through AB1, AB2, or AB3?
+
+That means Layer 2 has to become explicitly **asset-in-portfolio aware**.
+
+It should evaluate each relevant asset through three lenses:
+- current portfolio role under AB4 baseline
+- current technical/chart signal opportunity
+- whether another bucket offers a superior profit-capture expression right now
+
+## 6.2 What the report should publish for each asset
+
+For each asset currently held, watched, or benchmark-relevant, the report should publish:
+- current AB4 baseline role
+- whether AB1 opportunity exists
+- whether AB2 opportunity exists
+- whether AB3 opportunity exists
+- whether no incremental bucket opportunity exists relative to simply holding baseline exposure
+- what chart / timing evidence is driving that conclusion
+
+## 6.3 Core Layer 2 question by asset
+
+For each asset, Layer 2 should answer:
+
+- should this remain just AB4 baseline exposure?
+- is there a tactical AB1 opportunity here?
+- is there an AB2 directional or income opportunity here?
+- is there an AB3 structural overexposure / deviation opportunity here?
+- or is the right answer still **do nothing beyond baseline**?
+
+That is the asset-level application logic that makes Layer 2 genuinely portfolio-relevant.
+
+## 6.4 Reporting principle
+
+The report should not assume every asset deserves an active bucket opportunity.
+
+A very important valid Layer 2 output is:
+
+- **No incremental bucket opportunity relative to AB4 baseline**
+
+That is just as important as identifying an active opportunity.
+
+## 6.5 Suggested per-asset report row
+
+The eventual published Layer 2 report should include an asset-by-asset table or section like:
+
+| Asset | AB4 baseline role | AB1 | AB2 | AB3 | Best current opportunity | Why |
+|---|---|---|---|---|---|---|
+| MSTR | active / overweight candidate / baseline absent / etc. | ... | ... | ... | ... | ... |
+
+This is probably the single most important practical addition to the report.
+
+---
+
+## 7. AB1 state block
 
 ## 6.1 What AB1 owns
 
@@ -242,7 +307,7 @@ That is a better user-facing output than raw indicator fragments.
 
 ---
 
-## 7. AB2 state block
+## 8. AB2 state block
 
 ## 7.1 What AB2 owns
 
@@ -275,7 +340,7 @@ This is one of the most practically useful outputs of Layer 2.
 
 ---
 
-## 8. AB3 state block
+## 9. AB3 state block
 
 ## 8.1 What AB3 owns
 
@@ -310,7 +375,7 @@ This translates the structural signal state into something users can actually un
 
 ---
 
-## 9. Blocking / invalidation block
+## 10. Blocking / invalidation block
 
 ## 9.1 Why this block is essential
 
@@ -334,7 +399,7 @@ That means the report should make blocked and invalidated states as visible as c
 
 ---
 
-## 10. Warnings / tensions block
+## 11. Warnings / tensions block
 
 ## 10.1 Why this block is essential
 
@@ -357,7 +422,7 @@ That is exactly what makes it a real signal layer instead of a hype amplifier.
 
 ---
 
-## 11. Evidence package
+## 12. Evidence package
 
 The report should not stop at signal labels. It should show the evidence behind them.
 
@@ -424,7 +489,7 @@ That honesty is one of the main quality controls of the whole architecture.
 
 ---
 
-## 12. Combined Layer 2 synthesis
+## 13. Combined Layer 2 synthesis
 
 ## 12.1 Current combined read
 
@@ -451,7 +516,7 @@ The right user takeaway is:
 
 ---
 
-## 13. Downstream impact by layer
+## 14. Downstream impact by layer
 
 ## 13.1 Impact on Layer 3 — Allocation Engine
 
@@ -466,18 +531,27 @@ Current implication:
 
 ---
 
-## 14. Recommended published report format
+## 15. Recommended published report format
 
 For each recurring Layer 2 report, the published format should begin with one summary line and then expand by bucket and active setup.
 
 ### Layer 2 line
-- **Layer 2:** `signal regime | timing posture | confidence | AB1 state | AB2 state | AB3 state | major block / tension`
+- **Layer 2:** `signal regime | timing posture | confidence | AB4-relative opportunity | AB1 state | AB2 state | AB3 state | major block / tension`
 
 Example:
-- **Layer 2:** `Selective signal opportunity | Ladder-based timing with explicit gates | Moderate confidence | AB1 tactical / conditional | AB2 state context-dependent | AB3 staged structural opportunity | Gate Zero + breadth + VLT confirmation matter`
+- **Layer 2:** `Selective signal opportunity | Ladder-based timing with explicit gates | Moderate confidence | Only some assets justify bucket activity beyond AB4 baseline | AB1 tactical / conditional | AB2 state context-dependent | AB3 staged structural opportunity | Gate Zero + breadth + VLT confirmation matter`
+
+### Required asset-application block
+After the summary line, the report should publish an asset-by-asset application block containing:
+- asset
+- current AB4 baseline role
+- current AB1 / AB2 / AB3 opportunity states
+- best current bucket opportunity relative to baseline
+- key chart / signal evidence
+- current block / invalidation if any
 
 ### Required evidence block
-After the summary line, the report should publish a compact evidence block containing:
+The report should also publish a compact evidence block containing:
 - latest upstream layer conclusions
 - current ladder / stage state
 - current CPS / VLT clock or equivalent timing evidence
@@ -488,7 +562,7 @@ That makes the report compact at the top, but still auditable and tactically use
 
 ---
 
-## 15. Chart package for the published version
+## 16. Chart package for the published version
 
 Charts are not embedded in this chat workflow, but the eventual published report should include them.
 
@@ -517,16 +591,18 @@ Charts are not embedded in this chat workflow, but the eventual published report
 
 ---
 
-## 16. Draft labeling rules to preserve
+## 17. Draft labeling rules to preserve
 
 The following reporting pattern should be preserved going forward:
 
 - report the current **signal state**
 - call the **signal direction / timing posture** clearly
 - assign one **confidence factor**
+- publish the current **AB4-relative opportunity context**
 - publish the current **AB1 state**
 - publish the current **AB2 state**
 - publish the current **AB3 state**
+- apply Layer 2 explicitly **asset by asset** for the user’s portfolio or active watch universe
 - publish the current **blocking / invalidation state**
 - publish the current **warnings / tensions**
 - publish an **evidence package**
@@ -536,7 +612,7 @@ The following reporting pattern should be preserved going forward:
 
 ---
 
-## 17. Bottom line
+## 18. Bottom line
 
 The Layer 2 report should evolve from vague signal talk into a disciplined actionability report with repeatable fields.
 
@@ -544,6 +620,7 @@ The best v1 reporting structure is:
 - **signal state**
 - **signal direction / timing posture**
 - **confidence**
+- **AB4-relative opportunity context**
 - **AB1 state**
 - **AB2 state**
 - **AB3 state**
@@ -556,8 +633,8 @@ The best v1 reporting structure is:
 
 Current draft doctrine call:
 
-- **Layer 2:** `Selective signal opportunity | Watch/forming/confirmed ladder, not binary timing | Moderate confidence | AB1 tactical / conditional | AB2 directional or income state conditional | AB3 structural / staged | Gated by phase, breadth, and structural confirmation`
-- **Layer 2 Conclusion:** `Signal opportunity exists, but it must earn actionability through gates, ladder progression, and timing confirmation`
+- **Layer 2:** `Selective signal opportunity | Watch/forming/confirmed ladder, not binary timing | Moderate confidence | Asset-level opportunities must be judged relative to AB4 baseline | AB1 tactical / conditional | AB2 directional or income state conditional | AB3 structural / staged | Gated by phase, breadth, and structural confirmation`
+- **Layer 2 Conclusion:** `Signal opportunity exists, but it must earn actionability through gates, ladder progression, timing confirmation, and asset-level comparison to the chosen AB4 baseline`
 - **Combined Confidence:** `Moderate`
 
 That gives users a clean answer to both questions that matter:
