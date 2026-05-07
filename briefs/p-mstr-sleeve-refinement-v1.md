@@ -364,7 +364,26 @@ Triggered by combinations of:
 - poor rebound quality
 - evidence that the market is no longer merely topping but actively breaking down
 
-## 5.13 Reporting integration
+## 5.13 Implementation matrix by sleeve component (draft)
+
+This section translates the stage framework into how the major sleeve components should usually behave.
+
+This is still draft doctrine and should later be tightened with backtesting and portfolio review.
+
+| Stage | Long call core | Short-call layer | Put layer | Reserve / deployment posture | First thing to change when rotating |
+|---|---|---|---|---|---|
+| **Stage 1** | keep strategic long core intact; expand only when asymmetry is unusually compelling | use selectively to keep posture near neutral when price is near stage center; reduce suppression if deep oversold asymmetry becomes compelling | keep selective protection; size up only if rebuild remains uncertain | keep reserve available because Stage 1 often rewards patience and selective redeployment | short-call suppression first, then opportunistic long re-expansion |
+| **Stage 2** | let long call core dominate; this is the main offensive engine | reduce suppressive short-call pressure unless needed for user-specific risk constraints | keep light unless needed for tail risk or portfolio-specific protection | deploy more aggressively when expansion quality is confirmed | release short-call suppression first |
+| **Stage 3** | preserve core initially; avoid cutting it too early unless deterioration becomes severe | tighten, add, or roll short calls more actively to bleed off delta from Stage 2 posture | begin increasing put participation as topping risk grows | slow fresh deployment; emphasize rotation over new offense | short-call layer first, then put layer, core last |
+| **Stage 4** | trim selectively if needed, but not automatically; core is subordinate to survival and markdown profit capture | use heavy suppression to prevent the sleeve from behaving like a softened bull book | make the put layer substantial enough to matter in true markdown conditions | keep reserve strong and flexible for later re-entry | defensive overlays and put layer first, then selective core trimming if needed |
+
+### Implementation logic notes
+- The **long call core** is usually the last structural layer to be touched, except when markdown conditions become severe enough that survival and expected payoff justify direct cuts.
+- The **short-call layer** is the main rotation lever for most transitions because it changes delta efficiently without forcing immediate abandonment of the strategic core.
+- The **put layer** is the main bridge between merely defensive posture and truly negative posture.
+- **Reserve posture** is not passive cash management. It is part of the sleeve’s optionality engine and should be reported as such.
+
+## 5.14 Reporting integration
 Define how Layer reports and PPRs should express sleeve recommendations so users are not left extracting clarity manually.
 
 At minimum, outputs should clearly answer:
@@ -373,6 +392,10 @@ At minimum, outputs should clearly answer:
 - what is the target aggregate delta for that stage?
 - what is the current estimated aggregate delta?
 - is the sleeve inside or outside the default band?
+- what deviation is acceptable and why?
+- how should the long call core be treated?
+- how should the short-call layer be treated?
+- how should the put layer be treated?
 - what deviation is acceptable and why?
 - which positions should change first?
 - what is the recommended adjustment ladder?
@@ -413,7 +436,7 @@ A list of minimum required quantitative and chart inputs for production-grade sl
 1. pressure-test and refine the **stage-by-stage aggregate delta framework** for stages 1-4
 2. refine the **stage classification rule set** into explicit observable conditions
 3. refine the **default delta bands**, acceptable deviation bands, and migration thresholds for each stage
-4. map **preferred structures by stage** into a more explicit implementation table
+4. turn the implementation matrix into a more explicit **position-management playbook**
 5. define the **current-state reporting template** for personalized sleeve recommendations
 6. define the minimum chart/quant appendix needed to support decision-ready clarity
 7. determine whether a formal **chart-reading capability** should be added to the architecture with Archie’s help
