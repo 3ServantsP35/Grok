@@ -213,16 +213,80 @@ Working question:
 
 This should be treated as an open architecture task, not a side note.
 
-## 5.8 Reporting integration
+## 5.8 Stage classification and target-zone table (draft)
+
+The next step is to turn the stage concept into a usable operating table.
+
+This table is still provisional and should later be refined through backtesting and live review.
+
+| Stage | Operational description | Draft target aggregate delta | Preferred structural expression | Main reporting question |
+|---|---|---:|---|---|
+| **Stage 1** | damaged / unresolved / early rebuilding zone, with price likely pulled toward a stage center | mean-revert toward `0`; typically mild positive to mild negative depending on distance from stage center | keep long-duration core, use short calls and selective puts to flatten posture as price approaches center of mass | are we still far enough from the stage center to carry positive delta, or should the sleeve flatten now? |
+| **Stage 2** | expansion / favorable thrust / offensive regime | `> 1` when supported by structure, leverage preference, and concentration tolerance | dominant long call posture, reduced suppressive overlays, lighter defensive posture unless needed for tail risk | how much offensive leverage is justified here, and what is the best way to express it? |
+| **Stage 3** | cooling / topping / deterioration / transition | migrate back toward `0` from clearly positive posture | preserve core, tighten short calls, introduce or increase puts, use overlays before touching structural core | how fast should the sleeve shed delta, and when is the top credible enough to push through flat? |
+| **Stage 4** | markdown / panic / violent downside volatility | `-0.5` to `-1.0`, subject to backtest refinement | heavy short-call suppression, substantial downside participation, selective core trimming if needed | how negative should the sleeve get, and how quickly should it move there? |
+
+## 5.9 Stage classification rule set (draft)
+
+For reporting purposes, the system should not merely label a stage. It should explain **why** it thinks the stage applies.
+
+A usable stage-classification rule set will likely need at least these inputs:
+- **price structure**
+  - higher highs / lower highs
+  - support / resistance behavior
+  - stage center or center-of-mass estimate
+- **FF ROC behavior**
+  - accelerating, decelerating, deteriorating, or recovering thrust
+- **ST vs LT SRI pattern alignment**
+  - alignment
+  - divergence
+  - breakdown of ST first with LT holding
+- **shared-layer context**
+  - whether Layers 0-1 are supportive enough to let the sleeve stay offensive
+
+### Draft classification logic by stage
+
+#### Stage 1
+Likely when:
+- damage has occurred or the structure is unresolved
+- price is not yet in clean offensive expansion
+- the system expects mean reversion toward a stage center
+- FF ROC is not showing trustworthy upside thrust
+
+#### Stage 2
+Likely when:
+- price structure is constructive and follow-through is working
+- FF ROC supports continuing thrust
+- ST and LT SRI patterns are aligned constructively
+- shared layers are supportive enough to trust expansion
+
+#### Stage 3
+Likely when:
+- price is cooling after an offensive phase
+- FF ROC is decelerating or deteriorating
+- ST pattern weakens before LT fully breaks
+- failed pushes, lower highs, or topping behavior begin to appear
+
+#### Stage 4
+Likely when:
+- markdown / downside volatility becomes dominant
+- FF ROC and structure both confirm deterioration
+- the market is no longer merely topping but actively breaking down
+- defensive or negative-delta posture is required for survival and profit capture
+
+## 5.10 Reporting integration
 Define how Layer reports and PPRs should express sleeve recommendations so users are not left extracting clarity manually.
 
 At minimum, outputs should clearly answer:
 - what stage does the system think we are in?
+- why does it think that stage applies?
 - what is the target aggregate delta for that stage?
 - what is the current estimated aggregate delta?
 - how far from target is the sleeve?
 - which positions should change first?
 - what is the recommended adjustment ladder?
+
+The user should not have to infer the posture from the analysis. The report should say the posture plainly.
 
 ---
 
@@ -256,11 +320,12 @@ A list of minimum required quantitative and chart inputs for production-grade sl
 ## 7. Immediate next steps
 
 1. pressure-test and refine the **stage-by-stage aggregate delta framework** for stages 1-4
-2. define a **stage classification rule set** that is specific enough to support target-delta recommendations
-3. define the **current-state reporting template** for personalized sleeve recommendations
-4. define the minimum chart/quant appendix needed to support decision-ready clarity
-5. determine whether a formal **chart-reading capability** should be added to the architecture with Archie’s help
-6. revise PPR reporting so the user sees a recommended posture first, with analysis supporting it rather than replacing it
+2. refine the **stage classification rule set** into explicit observable conditions
+3. define the **default target delta zones** and acceptable deviation bands for each stage
+4. define the **current-state reporting template** for personalized sleeve recommendations
+5. define the minimum chart/quant appendix needed to support decision-ready clarity
+6. determine whether a formal **chart-reading capability** should be added to the architecture with Archie’s help
+7. revise PPR reporting so the user sees a recommended posture first, with analysis supporting it rather than replacing it
 
 ---
 
