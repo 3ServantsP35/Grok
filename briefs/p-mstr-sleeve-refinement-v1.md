@@ -383,7 +383,75 @@ This is still draft doctrine and should later be tightened with backtesting and 
 - The **put layer** is the main bridge between merely defensive posture and truly negative posture.
 - **Reserve posture** is not passive cash management. It is part of the sleeve’s optionality engine and should be reported as such.
 
-## 5.14 Reporting integration
+## 5.14 Position-management playbook (draft)
+
+This section turns the stage framework into action sequencing.
+
+The purpose is not to prescribe one rigid move in every circumstance. The purpose is to define the **default order of operations** when the sleeve’s current aggregate delta differs from the target posture.
+
+## 5.14.1 If target delta is higher than current delta
+
+### Default order of operations
+1. **reduce suppressive short-call pressure first**
+2. **reduce excess put pressure second**
+3. **expand long-duration bullish exposure third**
+4. **deploy additional reserve capital last, only if needed after the first three steps**
+
+### Rationale
+- short calls are usually the cheapest and cleanest first lever for restoring upside participation
+- puts may still be useful, so they should not always be removed before short-call normalization is tested
+- expanding the long core should usually come after overlays are no longer suppressing the sleeve excessively
+
+## 5.14.2 If target delta is lower than current delta
+
+### Default order of operations
+1. **tighten or add short-call pressure first**
+2. **increase put participation second**
+3. **trim long-duration bullish exposure third**
+4. **increase reserve posture only as a consequence of prior reductions, not as the primary first lever**
+
+### Rationale
+- short calls are the main efficient rotation tool for shedding delta without immediately abandoning structural upside
+- puts are the main bridge from moderately defensive posture into more explicitly negative posture
+- trimming the core should usually come after overlays and puts have already done as much work as they reasonably can
+
+## 5.14.3 When to prefer short calls over puts
+
+Prefer more short-call pressure when:
+- the goal is to reduce delta without fully abandoning the strategic core
+- the likely path is chop, stall, failed continuation, or moderate downside
+- premium harvest matters
+- the user wants a rotational rather than outright bearish expression
+
+## 5.14.4 When to prefer puts over more short calls
+
+Prefer more put exposure when:
+- the downside move is expected to be faster or more violent
+- negative convexity from the core needs to be offset more directly
+- the sleeve needs to move from defensive to meaningfully negative posture
+- the user wants more direct participation in markdown rather than primarily suppressing upside
+
+## 5.14.5 When to trim core longs
+
+Trim core longs only after serious consideration of whether overlays and puts can achieve the needed posture first.
+
+Core trimming becomes more justified when:
+- markdown conditions are severe
+- expected payoff improves materially from direct reduction rather than overlay management alone
+- concentration or risk constraints require it
+- the system concludes that survival and future redeployment flexibility matter more than holding maximum structural upside exposure through the current phase
+
+## 5.14.6 When to redeploy reserve
+
+Reserve should be redeployed when:
+- asymmetry becomes unusually attractive
+- the stage framework supports more offensive posture
+- overlays are no longer suppressing the sleeve excessively
+- the expected incremental payoff from redeployment is superior to simply normalizing existing structures
+
+Reserve should not be treated as idle capital. It is part of the sleeve’s optionality engine.
+
+## 5.15 Reporting integration
 Define how Layer reports and PPRs should express sleeve recommendations so users are not left extracting clarity manually.
 
 At minimum, outputs should clearly answer:
@@ -396,7 +464,6 @@ At minimum, outputs should clearly answer:
 - how should the long call core be treated?
 - how should the short-call layer be treated?
 - how should the put layer be treated?
-- what deviation is acceptable and why?
 - which positions should change first?
 - what is the recommended adjustment ladder?
 
@@ -436,7 +503,7 @@ A list of minimum required quantitative and chart inputs for production-grade sl
 1. pressure-test and refine the **stage-by-stage aggregate delta framework** for stages 1-4
 2. refine the **stage classification rule set** into explicit observable conditions
 3. refine the **default delta bands**, acceptable deviation bands, and migration thresholds for each stage
-4. turn the implementation matrix into a more explicit **position-management playbook**
+4. turn the position-management playbook into a more explicit **implementation decision tree**
 5. define the **current-state reporting template** for personalized sleeve recommendations
 6. define the minimum chart/quant appendix needed to support decision-ready clarity
 7. determine whether a formal **chart-reading capability** should be added to the architecture with Archie’s help
