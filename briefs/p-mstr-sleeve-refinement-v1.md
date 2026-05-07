@@ -109,21 +109,32 @@ Stage 1 is the early / damaged / unresolved zone where the sleeve should be caut
 
 ### User framing worth preserving
 - delta should **mean-revert toward 0** at the natural center of the stage
-- current rough “center of mass” hypothesis is around **150**
+- doctrine should reference a **stage center of mass** concept, not fixed cycle-specific price points as permanent anchors
+- cycle-specific price examples are acceptable only when explicitly labeled as time-bound examples
 
 ### Draft posture implication
-- positive delta can still exist, especially if the larger thesis is constructive
-- but the sleeve should not behave like an all-clear offensive expression
-- posture should be able to **flatten naturally** as price approaches the stage center
+- Stage 1 should not be treated as inherently neutral in all cases
+- when price is relatively close to the stage center of mass, the sleeve should usually stay near neutral rather than strongly offensive
+- when price moves far outside the center of mass and asymmetry becomes extreme, Stage 1 can justify a sharp increase in positive delta, potentially even **> 1**, especially when reserve capital is available
 
 ### Draft target zone
-Provisional target: **mild positive to mild negative**, with the expectation that the posture drifts toward **0** near the stage center.
+Provisional target:
+- **within roughly 20% of the stage center of mass:** keep posture relatively close to neutral, roughly in a **+0.5 to -0.5** style zone
+- **far outside the center of mass with strong asymmetry:** allow Stage 1 to stretch materially more positive, potentially **> 1 delta**
+
+These are still draft declarations and should be validated through backtesting.
+
+### Rotational view of delta
+Stage 1 should also be understood rotationally.
+
+If the sleeve is emerging from Stage 4 and the system gains confidence that markdown is ending and transition is underway, delta should **migrate upward** from negative posture toward neutral and then constructive posture rather than jumping all at once.
 
 ### Structural expression
 Often best expressed through:
 - preserved long-duration call core
 - active short-call overlays
 - selective put LEAPs or protective structures
+- opportunistic re-expansion of bullish exposure when deep oversold asymmetry becomes unusually favorable
 
 ## 5.3 Stage 2 draft
 
@@ -155,9 +166,15 @@ Stage 3 is the cooling / topping / transition zone where the sleeve should stop 
 ### Draft posture implication
 - delta should begin migrating back toward **0**
 - the goal is to monetize stall, deterioration, and failed continuation while still preserving the possibility of re-acceleration if the market proves stronger than expected
+- Stage 3 should be understood as a **rotational migration zone**, not only as a static target zone
 
 ### Draft target zone
 Provisional target: **declining toward 0**, potentially moving from clearly positive to flat depending on timing quality.
+
+These declarations should be backtested rather than treated as final doctrine.
+
+### Rotational view of delta
+If the sleeve is coming out of a strong Stage 2 markup posture, Stage 3 is where delta should usually **step down progressively** from `1+` rather than collapsing abruptly, unless chart deterioration becomes severe enough to justify faster defensive rotation.
 
 ### Structural expression
 Often best expressed through:
@@ -221,9 +238,9 @@ This table is still provisional and should later be refined through backtesting 
 
 | Stage | Operational description | Draft target aggregate delta | Preferred structural expression | Main reporting question |
 |---|---|---:|---|---|
-| **Stage 1** | damaged / unresolved / early rebuilding zone, with price likely pulled toward a stage center | mean-revert toward `0`; typically mild positive to mild negative depending on distance from stage center | keep long-duration core, use short calls and selective puts to flatten posture as price approaches center of mass | are we still far enough from the stage center to carry positive delta, or should the sleeve flatten now? |
+| **Stage 1** | damaged / unresolved / early rebuilding zone, with price likely pulled toward a stage center | mean-revert toward `0` near the stage center, but can stretch materially positive when price is far outside the center and asymmetry is strong | keep long-duration core, use short calls and selective puts near the center, then re-expand bullish posture when deep oversold asymmetry becomes compelling | are we close enough to the stage center to stay near neutral, or far enough away that asymmetry justifies re-levering? |
 | **Stage 2** | expansion / favorable thrust / offensive regime | `> 1` when supported by structure, leverage preference, and concentration tolerance | dominant long call posture, reduced suppressive overlays, lighter defensive posture unless needed for tail risk | how much offensive leverage is justified here, and what is the best way to express it? |
-| **Stage 3** | cooling / topping / deterioration / transition | migrate back toward `0` from clearly positive posture | preserve core, tighten short calls, introduce or increase puts, use overlays before touching structural core | how fast should the sleeve shed delta, and when is the top credible enough to push through flat? |
+| **Stage 3** | cooling / topping / deterioration / transition | rotational migration back toward `0` from clearly positive posture | preserve core, tighten short calls, introduce or increase puts, use overlays before touching structural core | how fast should the sleeve rotate down from Stage 2 posture, and when is the top credible enough to push through flat? |
 | **Stage 4** | markdown / panic / violent downside volatility | `-0.5` to `-1.0`, subject to backtest refinement | heavy short-call suppression, substantial downside participation, selective core trimming if needed | how negative should the sleeve get, and how quickly should it move there? |
 
 ## 5.9 Stage classification rule set (draft)
