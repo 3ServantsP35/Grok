@@ -291,7 +291,80 @@ Likely when:
 - the market is no longer merely topping but actively breaking down
 - defensive or negative-delta posture is required for survival and profit capture
 
-## 5.10 Reporting integration
+## 5.10 Operational posture table (draft)
+
+The framework now needs a more explicit operating table so it can drive PPR outcomes.
+
+This is still draft doctrine and should later be refined through backtesting.
+
+| Stage | Default delta band (draft) | Acceptable deviation logic | Preferred structures | First rotation lever | Escalation trigger |
+|---|---:|---|---|---|---|
+| **Stage 1** | near-neutral by default when price is near stage center, roughly **+0.5 to -0.5** | may stretch materially more positive when price is far outside the stage center and asymmetry becomes compelling | long-duration call core, selective short calls, selective put protection, opportunistic bullish re-expansion when deeply oversold | overlays first, then opportunistic long re-expansion | strong asymmetry away from stage center, improving structure, and evidence transition from Stage 4 into Stage 1 is maturing |
+| **Stage 2** | **> 1** when structure and leverage tolerance support it | can stay below max offense if shared layers are only partially supportive or concentration tolerance is lower | dominant long call posture, reduced suppressive short calls, lighter protective structures | release suppressive overlays first | deterioration in FF ROC, failed pushes, ST weakness, or loss of clean expansion quality |
+| **Stage 3** | migrate from clearly positive toward **0** | can remain somewhat positive if deterioration is mild; can push through flat faster if top evidence strengthens | preserve long core, tighten or add short calls, increase puts, use overlays before trimming structural core | short-call tightening first | repeated failed continuation, worsening FF ROC, ST/LT divergence, lower highs, or clearer transition into markdown risk |
+| **Stage 4** | **-0.5 to -1.0** | can be less negative if downside volatility is moderating or transition into Stage 1 is beginning | heavy short-call suppression, substantial put participation, selective core trimming if needed | defensive overlays and put layer first | stabilization, exhaustion, improving FF ROC, and increasing evidence markdown is ending |
+
+## 5.11 Rotational migration rules (draft)
+
+The stage model should not be treated as four isolated static boxes. The real edge comes from **rotational migration of aggregate delta** as evidence changes.
+
+### Stage 4 -> Stage 1 migration
+- begin raising delta from strongly negative posture as markdown exhaustion and rebuilding evidence accumulate
+- first remove the most suppressive defensive overlays
+- then reduce excess put pressure
+- re-expand bullish posture only as transition confidence improves
+
+### Stage 1 -> Stage 2 migration
+- move from near-neutral / asymmetry-sensitive posture into offensive posture only when constructive follow-through is proving itself
+- release suppressive overlays first
+- let long-duration bullish structures reclaim leadership
+- do not force `> 1` delta until expansion quality is actually present
+
+### Stage 2 -> Stage 3 migration
+- rotate down from `1+` progressively rather than waiting for full breakdown confirmation
+- begin with tighter short calls and added protection
+- preserve the structural core unless deterioration becomes strong enough to justify deeper cuts
+- recognize Stage 3 as the zone where failure to rotate early can give back a large amount of prior edge
+
+### Stage 3 -> Stage 4 migration
+- when topping behavior becomes markdown behavior, stop acting like a softened bull book
+- push toward genuinely defensive or negative-delta posture
+- let overlays and put structures do the first heavy lifting
+- trim structural core only if needed to survive volatility expansion or improve expected payoff
+
+## 5.12 Observable transition triggers (draft)
+
+The system should later formalize these as explicit signals, but the early draft is:
+
+### Transition toward more offensive posture
+Triggered by combinations of:
+- improving price structure
+- FF ROC recovery or acceleration
+- ST/LT SRI alignment improving
+- higher confidence that a damaged/rebuilding zone is becoming true expansion
+
+### Transition toward more neutral posture
+Triggered by combinations of:
+- price nearing stage center / fair-value area within the stage
+- weakening asymmetry
+- reduced edge from prior extreme positioning
+- uncertainty rising without clear continuation signal
+
+### Transition toward more defensive posture
+Triggered by combinations of:
+- FF ROC deterioration
+- failed pushes and lower highs
+- ST weakness appearing ahead of LT weakness
+- markdown risk becoming more credible than continued markup
+
+### Transition toward strongly negative posture
+Triggered by combinations of:
+- confirmed structural deterioration
+- markdown volatility expansion
+- poor rebound quality
+- evidence that the market is no longer merely topping but actively breaking down
+
+## 5.13 Reporting integration
 Define how Layer reports and PPRs should express sleeve recommendations so users are not left extracting clarity manually.
 
 At minimum, outputs should clearly answer:
@@ -299,7 +372,8 @@ At minimum, outputs should clearly answer:
 - why does it think that stage applies?
 - what is the target aggregate delta for that stage?
 - what is the current estimated aggregate delta?
-- how far from target is the sleeve?
+- is the sleeve inside or outside the default band?
+- what deviation is acceptable and why?
 - which positions should change first?
 - what is the recommended adjustment ladder?
 
@@ -338,11 +412,12 @@ A list of minimum required quantitative and chart inputs for production-grade sl
 
 1. pressure-test and refine the **stage-by-stage aggregate delta framework** for stages 1-4
 2. refine the **stage classification rule set** into explicit observable conditions
-3. define the **default target delta zones** and acceptable deviation bands for each stage
-4. define the **current-state reporting template** for personalized sleeve recommendations
-5. define the minimum chart/quant appendix needed to support decision-ready clarity
-6. determine whether a formal **chart-reading capability** should be added to the architecture with Archie’s help
-7. revise PPR reporting so the user sees a recommended posture first, with analysis supporting it rather than replacing it
+3. refine the **default delta bands**, acceptable deviation bands, and migration thresholds for each stage
+4. map **preferred structures by stage** into a more explicit implementation table
+5. define the **current-state reporting template** for personalized sleeve recommendations
+6. define the minimum chart/quant appendix needed to support decision-ready clarity
+7. determine whether a formal **chart-reading capability** should be added to the architecture with Archie’s help
+8. revise PPR reporting so the user sees a recommended posture first, with analysis supporting it rather than replacing it
 
 ---
 
