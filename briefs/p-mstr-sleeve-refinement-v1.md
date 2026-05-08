@@ -467,6 +467,15 @@ At minimum, outputs should clearly answer:
 - which positions should change first?
 - what is the recommended adjustment ladder?
 
+### Greeks communication rule
+Option recommendations should begin layering in Greeks as an **explanation layer**, not as a full independent analysis block by default.
+
+User-facing communication should focus primarily on:
+- **delta** when explaining posture migration, targeted exposure changes, or why a structure better fits the current opportunity
+- **theta** when explaining income generation, premium harvest, or why a short-option layer is being emphasized
+
+Other Greeks may still inform internal calibration and assessment, but ordinarily should not dominate the user-facing explanation unless they become unusually important to the recommendation.
+
 The user should not have to infer the posture from the analysis. The report should say the posture plainly.
 
 ---
@@ -487,6 +496,7 @@ A reporting specification that adds to PPR outputs:
 - current benchmark vs actual sleeve exposure
 - recommended structure by chart state
 - first / second / third adjustment priority
+- brief Greeks explanation focused mainly on **delta migration** and **theta-income intent** where relevant
 
 ## 6.3 Quant/chart deliverable
 A list of minimum required quantitative and chart inputs for production-grade sleeve guidance, likely including:
