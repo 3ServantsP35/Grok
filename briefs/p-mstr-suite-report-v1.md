@@ -73,19 +73,122 @@ The system should prefer no report over a misleading report.
 
 ---
 
-## 6. Draft report requirements
+## 6. Draft report structure
 
-The new suite report should likely include:
-- structural state
-- force diagnostics
-- trend / transition interpretation
-- scenario framing
-- bucket translation
-- clear CIO conclusion
+The new MSTR Suite report should be designed as a **decision-first chart-state report**.
 
-It should also align with the newer product/reporting principle:
+It should not merely dump indicator readings. It should convert live suite state into a clear structural interpretation and a usable downstream implication.
+
+## 6.1 Recommended top-level structure
+
+1. **Executive state**
+2. **Structural state**
+3. **Force diagnostics**
+4. **Transition / stage interpretation**
+5. **Scenario framing**
+6. **Bucket translation**
+7. **MSTR sleeve implication**
+8. **CIO conclusion**
+9. **Data-quality / freshness banner**
+
+## 6.2 Section-by-section draft
+
+### 1. Executive state
+This section should answer, in plain English:
+- what is the highest-level current read?
+- is the chart constructive, mixed, transitional, or deteriorating?
+- what is the primary path?
+
+This should be the first thing a user sees.
+
+### 2. Structural state
+This section should summarize the live structural readings across the suite, likely including:
+- MSTR structural posture
+- relevant sponsorship / credit / liquidity context
+- relevant ratio-state context such as MSTR/IBIT
+- any important internal confirmations or contradictions
+
+The goal is not to show everything, but to explain whether the structure is:
+- supportive
+- mixed
+- weakening
+- or broken
+
+### 3. Force diagnostics
+This section should explain:
+- current Force Field posture
+- whether force is strengthening, weakening, or mixed
+- whether current force supports continuation, stall, or deterioration
+
+This is where the suite should explicitly use the force complex as a tactical state interpreter.
+
+### 4. Transition / stage interpretation
+This section should answer:
+- are we stable in the current posture?
+- are we transitioning?
+- if transitioning, in what direction?
+
+This is the bridge from chart structure to MSTR sleeve posture.
+
+It should also tie into the emerging MSTR sleeve doctrine, where transition risk matters more than a static label alone.
+
+### 5. Scenario framing
+This section should give a compact scenario distribution, such as:
+- primary path
+- second path
+- failure path
+
+The point is not fake precision. The point is to force the report to say what it thinks is most likely.
+
+### 6. Bucket translation
+This section should translate the suite read into:
+- AB1
+- AB2
+- AB3
+- AB4
+
+The report should not stop at market interpretation. It should connect to the portfolio architecture.
+
+### 7. MSTR sleeve implication
+This is a new critical section.
+
+The suite report should explicitly say what the chart-state read implies for the MSTR sleeve, including:
+- whether the sleeve should be more offensive, neutral, or defensive
+- whether aggregate delta should be migrating up, down, or holding steady
+- whether the first lever should be:
+  - short calls
+  - puts
+  - long-core expansion
+  - core trimming
+
+This section is where the suite report becomes directly useful to PPR and Layer 2-3 logic.
+
+### 8. CIO conclusion
+This should be a concise summary of:
+- most likely current read
+- main tactical implication
+- main portfolio implication
+
+This should be short and decision-oriented.
+
+### 9. Data-quality / freshness banner
+The report should always state:
+- when the live source data was generated
+- whether freshness is acceptable
+- whether any contradiction or stale-source warning applies
+
+This is part of the fail-closed design.
+
+## 6.3 Reporting principle
+
+The report should align with the newer product/reporting principle:
 
 > the real deliverable is decision-ready clarity, not just rational analysis.
+
+That means the user should come away knowing:
+- what the chart most likely means
+- what that implies for the MSTR sleeve
+- what sort of posture the portfolio should be in because of it
 
 ---
 
@@ -106,6 +209,14 @@ It should also align with the newer product/reporting principle:
 3. define the new report structure
 4. determine whether the legacy generator should be archived or retained only for reference
 5. connect the new suite report to the broader PPR / Layer 2-3 workflow
+
+## 6.4 Immediate Cyler-side design follow-up
+
+The next Cyler-side design tasks after this structure are:
+1. define the exact wording and compression standard for each section
+2. decide which live indicators are required versus optional in the report body
+3. map the suite report sections into downstream Layer 2-3 and PPR usage
+4. define how the MSTR sleeve implication section should reference target delta posture without overexplaining Greeks
 
 ## 8.1 Immediate Archie-dependent work
 
