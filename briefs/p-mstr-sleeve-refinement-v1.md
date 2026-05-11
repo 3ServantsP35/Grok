@@ -508,12 +508,88 @@ A list of minimum required quantitative and chart inputs for production-grade sl
 
 ---
 
+## 5.16 Implementation decision tree (draft)
+
+This is the first draft of the sleeve decision tree.
+
+It is meant to bridge the gap between stage doctrine and actual user-facing guidance.
+
+## 5.16.1 Step 1 — Determine current stage and transition risk
+The system should first answer:
+- what stage are we most likely in now?
+- how confident is that stage call?
+- is the market stable within that stage, or transitioning toward the next one?
+
+This matters because transition risk often matters more than the static stage label.
+
+## 5.16.2 Step 2 — Estimate current aggregate delta versus target band
+The system should then answer:
+- what is the current estimated aggregate delta of the sleeve?
+- what is the default target band for the current stage?
+- is the current posture inside the target band, above it, or below it?
+
+## 5.16.3 Step 3 — If current delta is above target
+### Default sequence
+1. tighten or add **short-call pressure**
+2. increase **put participation**
+3. trim **core longs** only if overlays and puts are insufficient
+
+### Skip-ahead condition
+If markdown risk is accelerating quickly, the system may move faster toward puts or selective core trimming rather than waiting for a slow overlay-only adjustment.
+
+## 5.16.4 Step 4 — If current delta is below target
+### Default sequence
+1. reduce **short-call suppression**
+2. reduce excess **put pressure**
+3. expand **long-duration bullish exposure**
+4. redeploy **reserve** only if the first steps are insufficient
+
+### Skip-ahead condition
+If asymmetry is unusually strong and reserve is abundant, the system may justify faster direct long re-expansion.
+
+## 5.16.5 Step 5 — If current delta is inside the target band
+If the sleeve is already inside the target band, the system should usually avoid unnecessary change.
+
+The main question then becomes:
+- should posture be held steady?
+- or is transition evidence growing strong enough that the system should proactively rotate before the band itself changes?
+
+## 5.16.6 Step 6 — Prioritize rotational levers by situation
+### Prefer short calls first when:
+- the goal is incremental delta reduction
+- the likely path is stall, chop, or moderate downside
+- the user wants income and rotational flexibility
+
+### Prefer puts first when:
+- downside acceleration risk is higher
+- the sleeve needs to move from defensive to truly negative posture
+- direct downside participation matters more than simple upside suppression
+
+### Prefer core-long changes first only when:
+- the current structure is badly mismatched to stage
+- overlays and puts cannot solve the posture problem cleanly enough
+- concentration / survival / payoff concerns justify direct structural change
+
+## 5.16.7 Step 7 — Output decision-ready recommendation
+The reporting layer should then produce a clear recommendation in this order:
+1. **current stage + confidence**
+2. **target delta band**
+3. **current estimated delta posture**
+4. **gap versus target**
+5. **first rotation lever**
+6. **second rotation lever**
+7. **owner override / acceptable deviation logic**
+
+That structure should become the backbone of personalized sleeve recommendations and PPR outputs.
+
+---
+
 ## 7. Immediate next steps
 
 1. pressure-test and refine the **stage-by-stage aggregate delta framework** for stages 1-4
 2. refine the **stage classification rule set** into explicit observable conditions
 3. refine the **default delta bands**, acceptable deviation bands, and migration thresholds for each stage
-4. turn the position-management playbook into a more explicit **implementation decision tree**
+4. refine the **implementation decision tree** into a more explicit production decision flow
 5. define the **current-state reporting template** for personalized sleeve recommendations
 6. define the minimum chart/quant appendix needed to support decision-ready clarity
 7. determine whether a formal **chart-reading capability** should be added to the architecture with Archie’s help
