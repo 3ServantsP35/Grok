@@ -210,13 +210,95 @@ That means the user should come away knowing:
 4. determine whether the legacy generator should be archived or retained only for reference
 5. connect the new suite report to the broader PPR / Layer 2-3 workflow
 
-## 6.4 Immediate Cyler-side design follow-up
+## 6.4 Compression and wording standard (draft)
 
-The next Cyler-side design tasks after this structure are:
-1. define the exact wording and compression standard for each section
-2. decide which live indicators are required versus optional in the report body
-3. map the suite report sections into downstream Layer 2-3 and PPR usage
-4. define how the MSTR sleeve implication section should reference target delta posture without overexplaining Greeks
+The new suite report should be concise by default.
+
+### Compression rule
+Each major section should answer one clear question and avoid long indicator dumps.
+
+### Recommended section behavior
+- **Executive state:** 2-4 lines max
+- **Structural state:** compact bullets, not raw tables by default
+- **Force diagnostics:** one clear force read plus a few supporting values
+- **Transition / stage interpretation:** concise directional interpretation
+- **Scenario framing:** 2-3 scenarios max
+- **Bucket translation:** one line per bucket
+- **MSTR sleeve implication:** direct posture statement first, explanation second
+- **CIO conclusion:** short, decisive, memorable
+- **Data-quality banner:** brief but explicit
+
+### Wording standard
+The report should prefer wording like:
+- “most likely read”
+- “primary path”
+- “current posture implication”
+- “first lever”
+- “target delta should be migrating…”
+
+It should avoid overlong indicator recitations unless explicitly requested.
+
+## 6.5 Required vs optional indicator policy (draft)
+
+The report should distinguish between indicators that are normally required for a trustworthy suite interpretation and those that are optional/supporting.
+
+### Required by default
+These should normally be available for the report to run with confidence:
+- current **MSTR price / latest bar freshness**
+- **Force Field** state
+- **FF ROC / momentum direction**
+- **ST vs LT SRI bias / alignment**
+- key **trendline / support / resistance** context
+
+### Strongly preferred
+These materially improve interpretation quality:
+- VLT context
+- LOI / DOI style structural pressure readings
+- sponsorship / credit / friction context from the suite
+- ratio-state context such as MSTR/IBIT where relevant
+
+### Optional / supporting
+These may be useful but should not be required for a valid report by default:
+- deeper secondary indicator details
+- cycle-state references, unless freshness is acceptable
+- options-aware overlays, unless the report is being extended into PPR / Layer 2-3 posture work
+
+## 6.6 Downstream integration into Layer 2-3 and PPR (draft)
+
+The new suite report should not be an isolated market brief.
+
+It should feed downstream outputs in a structured way.
+
+### Into Layer 2
+The suite report should provide:
+- current chart-state quality
+- trust level for offensive vs defensive opportunity
+- whether the opportunity is continuation, reset, topping, or deterioration
+
+### Into Layer 3
+The suite report should provide:
+- posture implication for deployment
+- whether the user should be pressing, waiting, trimming, or defending
+- whether delta should be moving up, down, or holding
+
+### Into PPR
+The suite report should provide:
+- a chart-state anchor for the personalized recommendation
+- the directional reason for any delta migration recommendation
+- a natural bridge into short-call / put / long-core sequencing
+
+## 6.7 MSTR sleeve implication wording rule (draft)
+
+The MSTR sleeve implication section should explicitly state:
+- target posture direction
+- target delta migration direction
+- first rotation lever
+
+If Greeks are mentioned, the explanation should focus mainly on:
+- **delta** for posture migration
+- **theta** for income / short-call emphasis
+
+The suite report should not turn into a generalized Greeks analysis.
 
 ## 8.1 Immediate Archie-dependent work
 
