@@ -107,6 +107,30 @@ It should also align with the newer product/reporting principle:
 4. determine whether the legacy generator should be archived or retained only for reference
 5. connect the new suite report to the broader PPR / Layer 2-3 workflow
 
+## 8.1 Immediate Archie-dependent work
+
+These are the items Cyler currently sees as likely Archie-priority fixes for getting the MSTR theme fully operational:
+
+1. **Legacy suite generator resolution bug**
+   - root-cause why the old suite path can still resolve stale CSV state and emit contradictory output
+   - either fix it fail-closed or explicitly retire it from production use
+
+2. **Canonical live-source enforcement**
+   - ensure the new suite path has one clear source-of-truth contract, most likely centered on `mstr-knowledge/tv_state.md`
+   - prevent silent fallback to deprecated CSV logic
+
+3. **Freshness / contradiction validation**
+   - implement checks that compare source recency and key live values before report generation
+   - fail closed if source state is stale or materially contradictory
+
+4. **Report-path replacement support**
+   - help determine whether the new suite report should read directly from `tv_state.md` or from a purpose-built intermediate artifact
+
+5. **Chart-state infrastructure question**
+   - evaluate whether we need a stronger machine-assisted chart-reading layer in the architecture to support stage classification and MSTR sleeve posture guidance reliably
+
+These Archie items should be treated as top-priority blockers when they prevent trustworthy MSTR theme outputs.
+
 ---
 
 ## 9. Bottom line
@@ -116,3 +140,5 @@ This is not just a bug fix.
 It is a report-path replacement project.
 
 The goal is to build a **new MSTR Suite report** that is live-source-driven, fail-closed, and trustworthy enough to support downstream portfolio and sleeve decisions.
+
+User priority is explicit: the **MSTR theme is top priority** and should be brought up as quickly as possible. Archie-dependent blockers should therefore be surfaced immediately when Cyler identifies them.
