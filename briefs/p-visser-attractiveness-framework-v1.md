@@ -1,4 +1,4 @@
-# P-VISSER-ATTRACTIVENESS — Visser Theme Attractiveness Framework v1
+# P-VISSER-ATTRACTIVENESS — Visser Theme Operating Brief Framework v1
 
 **Project:** P-VISSER-ATTRACTIVENESS  
 **Date:** 2026-05-13  
@@ -26,18 +26,27 @@ This project exists to build that framework.
 
 ## 2. Core doctrine
 
+The Visser deliverable should be framed as an **Operating Brief**.
+
 Visser analysis should be:
 - **independent from MSTR**
 - informed by the preceding layers of the architecture
 - informed by APE Theme Analysis
-- focused on **theme attractiveness**, not on whether Visser merely confirms another theme
+- focused on **theme attractiveness and composition**, not on whether Visser merely confirms another theme
 
-That means the core Visser output should answer:
-- should the theme be pressed?
-- should the theme be held?
-- should exposure be harvested / profit taken?
-- how attractive is the theme right now relative to its own structure and the broader architectural backdrop?
+That means the core Visser Operating Brief should answer two main things:
+
+### 2.1 Overall theme attractiveness
+- how attractive is the Visser Theme relative to:
+  - other themes
+  - the benchmark / reserve alternative, **STRC**
+- should capital be pressed, held, trimmed, or deferred at the theme level?
+
+### 2.2 Optimal internal composition
 - which **composite of investments within the theme** currently looks most attractive, rather than treating the theme as a single monolith?
+- which internal clusters deserve fresh capital?
+- which should be held?
+- which are ripe for selective trimming or profit-taking?
 
 A critical refinement is that Visser should not stop at a yes/no judgment on the theme in the abstract.
 
@@ -67,22 +76,27 @@ This is the key design gap.
 
 This project should define:
 
-1. the canonical Visser analysis question
+1. the canonical Visser Operating Brief question
 2. how the preceding layers should constrain Visser attractiveness judgments
 3. how APE Theme Analysis should enter the assessment
 4. what a Visser-side **attractiveness / force equivalent** should measure
 5. how to present Visser outputs in a decision-ready format
+6. how to compare Visser Theme attractiveness against other themes and **STRC**
+7. how to identify the optimal internal composite of assets within the theme
 
 ---
 
 ## 5. Draft question set
 
-A proper Visser Theme analysis should likely answer these questions:
+A proper Visser Operating Brief should likely answer these questions:
 
 1. Is the theme structurally attractive enough for **additional investment**?
 2. Is the theme becoming stretched enough that **profit-taking** is favored?
-3. Is the theme mixed enough that the correct answer is **hold / selective / wait**?
-4. Is the theme deteriorating enough that new adds should be deferred or exposure reduced?
+3. Is the theme more attractive than competing themes?
+4. Is the theme attractive enough relative to **STRC** to justify deployment rather than reserve-like posture?
+5. Is the theme mixed enough that the correct answer is **hold / selective / wait**?
+6. Is the theme deteriorating enough that new adds should be deferred or exposure reduced?
+7. Which internal composite clusters are the best homes for incremental capital?
 
 Those questions are independent from whether MSTR itself is attractive.
 
@@ -282,20 +296,22 @@ It should instead act as an interpretable attractiveness engine that says:
 
 ## 8. Draft output standard
 
-The Visser output should be **decision-first**.
+The Visser output should be **decision-first** and explicitly framed as an **Operating Brief**.
 
-A mature Visser report should likely say:
+A mature Visser Operating Brief should likely say:
 - **Current attractiveness:** add / hold / selective / profit-take / avoid
+- **Relative ranking:** how Visser compares with other themes and with **STRC**
 - **Why:** brief explanation rooted in the architecture and theme state
 - **Theme posture:** constructive / mixed / stretched / deteriorating
 - **Most likely implication:** additional investment, selective adds, wait, or harvesting
 - **Composite view:** which internal sleeve clusters are most attractive, neutral, or ripe for profit-taking
+- **Optimal composition:** the current best internal mix of capital across the theme composite
 
 The real deliverable is not theme description for its own sake.
 
 The real deliverable is:
 
-> decision-ready clarity about whether the Visser Theme should be pressed or harvested.
+> decision-ready clarity about whether the Visser Theme is attractive enough relative to alternatives and how capital should be composed inside the theme.
 
 ---
 
