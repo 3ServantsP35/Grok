@@ -37,6 +37,15 @@ That means the core Visser output should answer:
 - should the theme be held?
 - should exposure be harvested / profit taken?
 - how attractive is the theme right now relative to its own structure and the broader architectural backdrop?
+- which **composite of investments within the theme** currently looks most attractive, rather than treating the theme as a single monolith?
+
+A critical refinement is that Visser should not stop at a yes/no judgment on the theme in the abstract.
+
+It should also form a point of view on the **internal composite** of the theme:
+- which sleeve families or investment clusters inside the theme are the strongest
+- which are still investable but less attractive
+- which are becoming crowded, mature, or harvest candidates
+- whether the opportunity is broad or concentrated in only a subset of the theme
 
 ---
 
@@ -94,6 +103,26 @@ The future framework should probably combine:
 - breadth / participation inside the theme
 - leadership concentration vs broad sponsorship
 - evidence of expansion, digestion, or deterioration
+- relative attractiveness across the theme's internal investment composite
+
+### 6.2a Internal composite concept
+
+The Visser Theme should be treated as a **composite of investment clusters**, not as a single trade.
+
+At a minimum, the composite may include sleeves such as:
+- physical AI infrastructure / power / thermal / energization
+- compute / accelerators / fabrication chokepoints
+- connectivity / optical / enabling fabric
+- software survivors versus software moat-compression losers
+- financial-rail / stablecoin / tokenization expressions
+- optional frontier sleeves where doctrine permits
+
+This matters because the correct Visser output may often be:
+- the theme is still attractive, but only certain clusters deserve fresh capital
+- the theme is intact, but leadership is too narrow for broad adds
+- profit-taking belongs in one sleeve while additional investment belongs in another
+
+So the system should learn to judge not just **theme attractiveness**, but also **composite attractiveness inside the theme**.
 
 ### 6.3 APE Theme Analysis inputs
 - reinforcement vs challenge
@@ -127,6 +156,7 @@ Question:
 Meaning:
 - broadening breadth supports additional investment
 - narrowing breadth raises caution and profit-taking risk
+- narrowing breadth can also mean the theme remains valid, but only a smaller internal composite deserves adds
 
 ### B. Leadership durability
 Question:
@@ -178,7 +208,21 @@ These dimensions should eventually collapse into a small set of user-facing judg
 - **Profit-Take / Harvest**
 - **Avoid / Defer**
 
-The engine should not just score the theme abstractly. It should produce one of these actionable states.
+But a mature Visser engine should produce judgments at two levels:
+
+### Theme-level judgment
+- Is the overall theme attractive enough to press, hold, or harvest?
+
+### Composite-level judgment
+- Which internal clusters deserve:
+  - fresh capital
+  - patient hold treatment
+  - selective trimming
+  - active harvesting
+
+The engine should not just score the theme abstractly. It should produce both:
+- an overall theme state
+- and a ranked internal composite view
 
 ## 7.3 Draft interpretation pattern
 
@@ -245,6 +289,7 @@ A mature Visser report should likely say:
 - **Why:** brief explanation rooted in the architecture and theme state
 - **Theme posture:** constructive / mixed / stretched / deteriorating
 - **Most likely implication:** additional investment, selective adds, wait, or harvesting
+- **Composite view:** which internal sleeve clusters are most attractive, neutral, or ripe for profit-taking
 
 The real deliverable is not theme description for its own sake.
 
