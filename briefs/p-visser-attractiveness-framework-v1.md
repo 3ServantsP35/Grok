@@ -103,19 +103,136 @@ The future framework should probably combine:
 
 ---
 
-## 7. Missing engine to design
+## 7. First draft of the Visser attractiveness engine
 
 The major missing piece is a Visser equivalent of the MSTR Force Field.
 
-That future engine may need to assess some combination of:
-- thematic breadth
-- leadership durability
-- sponsorship quality
-- digestion pressure
-- crowding / stretch / ripeness
-- profit-taking risk versus add-on attractiveness
+The purpose of that engine would be different from the MSTR force engine.
 
-This should eventually become the backbone of the attractiveness judgment.
+It should not ask:
+- is MSTR tactically accelerating or deteriorating?
+
+It should ask:
+- is the **Visser Theme** becoming more attractive for additional investment?
+- or is it becoming stretched enough that profit-taking is favored?
+
+## 7.1 Core dimensions to measure
+
+The first draft should probably measure at least these dimensions:
+
+### A. Theme breadth
+Question:
+- is strength broadening across the theme, or narrowing into only a few leaders?
+
+Meaning:
+- broadening breadth supports additional investment
+- narrowing breadth raises caution and profit-taking risk
+
+### B. Leadership durability
+Question:
+- are the strongest theme leaders still behaving constructively, or are they rolling over while the theme looks superficially fine?
+
+Meaning:
+- durable leadership supports staying invested or adding selectively
+- leader deterioration increases harvest risk
+
+### C. Sponsorship quality
+Question:
+- is the theme being sponsored by healthy structural flows and durable narratives, or by crowded / late / fragile momentum?
+
+Meaning:
+- high-quality sponsorship supports adding or pressing
+- low-quality sponsorship favors caution or harvesting
+
+### D. Digestion pressure
+Question:
+- is the theme in healthy consolidation, or is it stretched enough that digestion is likely before higher prices are justified?
+
+Meaning:
+- low digestion pressure supports continued adds
+- elevated digestion pressure supports hold / selective / profit-take behavior
+
+### E. Stretch / ripeness
+Question:
+- is the theme still attractive, or has it become mature enough that expected forward reward is compressing?
+
+Meaning:
+- low stretch supports additional investment
+- high stretch supports harvesting or at least slowing deployment
+
+### F. Contradiction versus reinforcement from APE
+Question:
+- are APE theme inputs reinforcing the case for the theme, or surfacing challenge / timing / digestion warnings?
+
+Meaning:
+- reinforcement increases confidence in adds
+- challenge signals increase caution and make profit-taking more plausible
+
+## 7.2 Draft judgment outputs
+
+These dimensions should eventually collapse into a small set of user-facing judgments:
+- **Add**
+- **Selective Add**
+- **Hold**
+- **Selective Profit-Take**
+- **Profit-Take / Harvest**
+- **Avoid / Defer**
+
+The engine should not just score the theme abstractly. It should produce one of these actionable states.
+
+## 7.3 Draft interpretation pattern
+
+A simple early interpretation pattern might look like this:
+
+### Add
+Use when:
+- breadth is improving
+- leadership is durable
+- sponsorship is healthy
+- digestion pressure is manageable
+- stretch is not excessive
+- APE is reinforcing rather than challenging
+
+### Selective Add
+Use when:
+- the theme is still attractive, but not uniformly so
+- leadership is carrying the theme more than breadth
+- some digestion pressure exists, but not enough to block new adds entirely
+
+### Hold
+Use when:
+- the theme remains valid
+- but the reward/risk is no longer obviously compelling for new aggressive adds
+- mixed signals are present without full deterioration
+
+### Selective Profit-Take
+Use when:
+- the theme is still alive structurally
+- but stretch, digestion pressure, or narrowing breadth suggest reducing exposure selectively
+
+### Profit-Take / Harvest
+Use when:
+- the theme looks mature, crowded, or increasingly fragile
+- leadership is weakening
+- breadth is narrowing
+- APE inputs are shifting from reinforcement toward challenge or timing warning
+
+### Avoid / Defer
+Use when:
+- the theme is not attractive enough to justify new deployment
+- or when deterioration / contradiction is strong enough that standing aside is better than forcing a position
+
+## 7.4 What this engine should not do
+
+It should not:
+- become a hidden portfolio-control override
+- substitute for the preceding layers
+- reduce the theme to a single black-box conviction score with no explanation
+
+It should instead act as an interpretable attractiveness engine that says:
+- why the theme is attractive
+- why it is stretched
+- or why harvesting is more appropriate than pressing
 
 ---
 
@@ -139,10 +256,11 @@ The real deliverable is:
 
 ## 9. Immediate next steps
 
-1. define the first draft of a Visser-side attractiveness engine
-2. define the core dimensions it should measure
+1. refine the first draft of the Visser-side attractiveness engine
+2. define how each core dimension should be observed or measured
 3. define the reporting format for Visser attractiveness outputs
 4. decide how much of the logic should come from live theme-state data versus APE-derived interpretation
+5. define how the engine should explain add / hold / harvest judgments without becoming a black-box score
 
 ---
 
