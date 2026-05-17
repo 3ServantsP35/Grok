@@ -329,17 +329,71 @@ A production-grade Metals Operating Brief should likely include the following se
 
 ---
 
-## 12. Immediate next steps
+## 12. First draft of STRC comparator logic
 
-1. define the peer-theme comparison set
-2. define STRC comparator logic for the Metals Theme
-3. check AB3 LOI coverage sleeve by sleeve across the metals complex
-4. define what promotes or demotes precious versus industrial sleeves
-5. run a mock Metals Operating Brief before compressing into a shorter template
+The Metals Theme should not only ask whether metals are interesting.
+
+It should ask whether metals deserve capital **more than simply remaining in STRC**.
+
+### 12.1 Why STRC matters here
+
+STRC is the benchmark / reserve alternative.
+
+That means the Metals Theme must beat STRC not just in story quality, but in practical capital-treatment quality.
+
+The right question is:
+
+> Are metals attractive enough, clean enough, and well-timed enough that fresh dollars should leave reserve posture and move into the metals complex?
+
+### 12.2 What should favor Metals over STRC
+
+The Metals Theme should tend to beat STRC when:
+- theme attractiveness is clearly positive
+- internal composition is reasonably clear
+- at least one major sleeve has strong fresh-dollar friendliness
+- the complex is not overly stretched or confused
+- the likely upside / strategic payoff justifies leaving reserve posture
+
+### 12.3 What should favor STRC over Metals
+
+STRC should remain preferred when:
+- metals are only mildly attractive
+- internal sleeve evidence is mixed or incomplete
+- the best opportunity is too narrow to justify theme-level deployment
+- gold versus industrial leadership is unclear
+- LOI coverage or timing quality is weak
+- the likely advantage over reserve posture is too small or too uncertain
+
+### 12.4 Practical interpretation rule
+
+A good Metals Operating Brief should be allowed to say:
+- the theme is real, but not yet better than STRC
+- one sleeve is attractive, but the overall complex is not yet clean enough
+- reserve posture remains superior until either precious or industrial leadership becomes clearer
+
+This is important because it stops the brief from treating every interesting theme as a deployment mandate.
+
+### 12.5 Theme-level judgment standard
+
+The theme-level judgment should therefore ask:
+- is the Metals Theme strong enough to beat STRC now?
+- or should STRC remain the better home for capital until metals evidence improves?
+
+That comparison should remain explicit in every real Metals Operating Brief.
 
 ---
 
-## 13. Bottom line
+## 13. Immediate next steps
+
+1. define the peer-theme comparison set
+2. check AB3 LOI coverage sleeve by sleeve across the metals complex
+3. define what promotes or demotes precious versus industrial sleeves
+4. run a mock Metals Operating Brief before compressing into a shorter template
+5. refine STRC comparator logic after the first mock run if needed
+
+---
+
+## 14. Bottom line
 
 The Metals Operating Brief should answer two grounded questions:
 
