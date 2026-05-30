@@ -1,0 +1,168 @@
+//@version=6
+indicator("MR Hurdle Oscillator v1", shorttitle="MR Hurdle v1", overlay=false, max_labels_count=500)
+
+// Purpose
+// Estimate whether SPY deserves incremental capital over STRC on a regime-aware,
+// risk-adjusted basis. This is a prototype decision aid, not a direct LEAP trigger.
+// Independent of CiovaccoCapital by design.
+
+// -----------------------------------------------------------------------------
+// Inputs
+// -----------------------------------------------------------------------------
+spySymbol  = input.symbol("AMEX:SPY", "SPY Symbol")
+rspSymbol  = input.symbol("AMEX:RSP", "RSP Symbol")
+iwmSymbol  = input.symbol("AMEX:IWM", "IWM Symbol")
+hygSymbol  = input.symbol("AMEX:HYG", "HYG Symbol")
+iefSymbol  = input.symbol("NASDAQ:IEF", "IEF Symbol")
+vixSymbol  = input.symbol("CBOE:VIX", "VIX Symbol")
+
+strcAnnualHurdle = input.float(0.08, "STRC Annual Hurdle (decimal)", step=0.005, tooltip="Approximate annual hurdle for STRC. Example: 0.08 = 8%.")
+rocLookback      = input.int(63, "Opportunity ROC Lookback", minval=20)
+trendFastLen     = input.int(50, "Trend Fast EMA", minval=10)
+trendSlowLen     = input.int(200, "Trend Slow EMA", minval=50)
+volLookback      = input.int(20, "Volatility Lookback", minval=10)
+scoreSmooth      = input.int(5, "Score Smoothing", minval=1)
+
+// -----------------------------------------------------------------------------
+// Series
+// -----------------------------------------------------------------------------
+spy = request.security(spySymbol, timeframe.period, close)
+rsp = request.security(rspSymbol, timeframe.period, close)
+iwm = request.security(iwmSymbol, timeframe.period, close)
+hyg = request.security(hygSymbol, timeframe.period, close)
+ief = request.security(iefSymbol, timeframe.period, close)
+vix = request.security(vixSymbol, timeframe.period, close)
+
+spyFast = ta.ema(spy, trendFastLen)
+spySlow = ta.ema(spy, trendSlowLen)
+spyRet  = rocLookback > 0 and not na(spy[rocLookback]) ? (spy / spy[rocLookback] - 1.0) : na
+spyAnn  = not na(spyRet) ? spyRet * (252.0 / rocLookback) : na
+
+spyDailyRet = math.log(spy / spy[1])
+spyVol = ta.stdev(spyDailyRet, volLookback) * math.sqrt(252)
+
+rspRs = rsp / spy
+iwmRs = iwm / spy
+creditRs = hyg / ief
+
+// -----------------------------------------------------------------------------
+// Helper scoring
+// -----------------------------------------------------------------------------
+score_from_thresholds(x, strongPos, mildPos, mildNeg, strongNeg) =>
+    na(x) ? 0.0 :
+     x >= strongPos ? 2.0 :
+     x >= mildPos   ? 1.0 :
+     x <= strongNeg ? -2.0 :
+     x <= mildNeg   ? -1.0 : 0.0
+
+bool_to_score(pos, neg) =>
+    pos ? 1.0 : neg ? -1.0 : 0.0
+
+clamp_score(x) =>
+    math.max(-2.0, math.min(2.0, x))
+
+// -----------------------------------------------------------------------------
+// Block 1 — Macro compatibility proxy
+// Positive when credit confirms and volatility is not hostile.
+// -----------------------------------------------------------------------------
+creditTrend = ta.ema(creditRs, 20) - ta.ema(creditRs, 60)
+vixTrend    = ta.ema(vix, 10) - ta.ema(vix, 30)
+macroRaw    = 0.0
+macroRaw   += score_from_thresholds(creditTrend / creditRs, 0.010, 0.002, -0.002, -0.010)
+macroRaw   += score_from_thresholds(-vixTrend / math.max(vix, 0.01), 0.050, 0.010, -0.010, -0.050)
+macroScore  = clamp_score(macroRaw / 2.0)
+
+// -----------------------------------------------------------------------------
+// Block 2 — SPY trend quality
+// -----------------------------------------------------------------------------
+trendRaw = 0.0
+trendRaw += bool_to_score(spy > spyFast, spy < spyFast)
+trendRaw += bool_to_score(spyFast > spySlow, spyFast < spySlow)
+trendRaw += bool_to_score(ta.rising(spySlow, 10), ta.falling(spySlow, 10))
+trendScore = clamp_score(trendRaw * (2.0 / 3.0))
+
+// -----------------------------------------------------------------------------
+// Block 3 — Breadth / participation quality
+// -----------------------------------------------------------------------------
+rspTrend = ta.ema(rspRs, 20) - ta.ema(rspRs, 60)
+iwmTrend = ta.ema(iwmRs, 20) - ta.ema(iwmRs, 60)
+breadthRaw = 0.0
+breadthRaw += score_from_thresholds(rspTrend / rspRs, 0.004, 0.001, -0.001, -0.004)
+breadthRaw += score_from_thresholds(iwmTrend / iwmRs, 0.006, 0.001, -0.001, -0.006)
+breadthScore = clamp_score(breadthRaw / 2.0)
+
+// -----------------------------------------------------------------------------
+// Block 4 — Relative opportunity vs STRC hurdle
+// Simple first-pass proxy: annualized SPY move vs user-entered STRC hurdle.
+// -----------------------------------------------------------------------------
+opportunityEdge = not na(spyAnn) ? spyAnn - strcAnnualHurdle : na
+opportunityScore = score_from_thresholds(opportunityEdge, 0.08, 0.02, -0.02, -0.08)
+
+// -----------------------------------------------------------------------------
+// Block 5 — Volatility / downside asymmetry
+// -----------------------------------------------------------------------------
+volPenalty = na(spyVol) ? na : 0.18 - spyVol
+volScore = score_from_thresholds(volPenalty, 0.08, 0.02, -0.02, -0.08)
+
+// -----------------------------------------------------------------------------
+// Composite
+// -----------------------------------------------------------------------------
+rawTotal = macroScore + trendScore + breadthScore + opportunityScore + volScore
+smoothTotal = ta.ema(rawTotal, scoreSmooth)
+
+// Posture bands
+strcPreferred      = smoothTotal <= -3
+neutralPosture     = smoothTotal > -3 and smoothTotal < 3
+spySharesPreferred = smoothTotal >= 3 and smoothTotal < 7
+spyAggressive      = smoothTotal >= 7
+
+// -----------------------------------------------------------------------------
+// Plots
+// -----------------------------------------------------------------------------
+hline(7,  "SPY Aggressive Eligible", color=color.new(color.green, 40))
+hline(3,  "SPY Shares Preferred", color=color.new(color.teal, 45))
+hline(0,  "Neutral Line", color=color.new(color.gray, 60))
+hline(-3, "STRC Preferred", color=color.new(color.orange, 45))
+hline(-7, "Strong STRC Preference", color=color.new(color.red, 45))
+
+plot(smoothTotal, "MR Hurdle Score", color=smoothTotal >= 3 ? color.lime : smoothTotal <= -3 ? color.red : color.yellow, linewidth=3)
+plot(rawTotal, "Raw Score", color=color.new(color.white, 70), linewidth=1)
+
+plot(macroScore, "Macro Proxy", color=color.new(color.aqua, 0), display=display.data_window)
+plot(trendScore, "Trend Quality", color=color.new(color.green, 0), display=display.data_window)
+plot(breadthScore, "Breadth Quality", color=color.new(color.blue, 0), display=display.data_window)
+plot(opportunityScore, "Opportunity vs STRC", color=color.new(color.purple, 0), display=display.data_window)
+plot(volScore, "Volatility / Asymmetry", color=color.new(color.orange, 0), display=display.data_window)
+
+bgcolor(spyAggressive ? color.new(color.green, 85) : spySharesPreferred ? color.new(color.teal, 88) : strcPreferred ? color.new(color.red, 88) : color.new(color.yellow, 90))
+
+// -----------------------------------------------------------------------------
+// Labels / table
+// -----------------------------------------------------------------------------
+var table t = table.new(position.top_right, 2, 8, border_width=1)
+if barstate.islast
+    table.cell(t, 0, 0, "MR Hurdle v1", text_color=color.white, bgcolor=color.black)
+    table.cell(t, 1, 0, strcPreferred ? "STRC pref" : spyAggressive ? "SPY aggr eligible" : spySharesPreferred ? "SPY shares pref" : "Neutral", text_color=color.white, bgcolor=color.black)
+    table.cell(t, 0, 1, "Macro")
+    table.cell(t, 1, 1, str.tostring(macroScore, format.mintick))
+    table.cell(t, 0, 2, "Trend")
+    table.cell(t, 1, 2, str.tostring(trendScore, format.mintick))
+    table.cell(t, 0, 3, "Breadth")
+    table.cell(t, 1, 3, str.tostring(breadthScore, format.mintick))
+    table.cell(t, 0, 4, "Opportunity")
+    table.cell(t, 1, 4, str.tostring(opportunityScore, format.mintick))
+    table.cell(t, 0, 5, "Vol")
+    table.cell(t, 1, 5, str.tostring(volScore, format.mintick))
+    table.cell(t, 0, 6, "Total")
+    table.cell(t, 1, 6, str.tostring(smoothTotal, format.mintick))
+    table.cell(t, 0, 7, "STRC hurdle")
+    table.cell(t, 1, 7, str.tostring(strcAnnualHurdle * 100.0, "#.##") + "%")
+
+// -----------------------------------------------------------------------------
+// Notes
+// -----------------------------------------------------------------------------
+// This prototype intentionally separates:
+// 1. SPY vs STRC relative-attractiveness
+// 2. downstream AB3 expression choice
+// A high score means SPY clears the hurdle more cleanly, not that SPY LEAPs are
+// automatically approved.
