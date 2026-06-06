@@ -8,13 +8,13 @@
 
 ## 1. Theme Identity & Scope
 
-MSTR Sleeve Doctrine defines how the mandatory 40% MSTR allocation is expressed rotationally across market stages using aggregate delta management rather than passive long-only ownership. The sleeve is explicitly exempt from the 20% per-asset soft cap while the mandate remains active.
+MSTR Sleeve Doctrine defines how the default 40% MSTR allocation (adjustable by owner directive) is expressed rotationally across market stages using aggregate delta management rather than passive long-only ownership. The sleeve is explicitly exempt from the 20% per-asset soft cap while the default allocation remains active.
 
 This brief covers only the MSTR rotational sleeve. It does not replace AB4 benchmark setting, AB3 deviation rules, or the core SRI stage machine.
 
 ## 2. Problem Statement (Fixed)
 
-Is the MSTR sleeve currently positioned for optimal risk-adjusted appreciation versus STRC within the 40% always-maxed mandate, and how should aggregate delta be adjusted as SRI stage and liquidity regime change?
+Is the MSTR sleeve currently positioned for optimal risk-adjusted appreciation versus STRC within the default 40% allocation (adjustable by owner directive), and how should aggregate delta be adjusted as SRI stage and liquidity regime change?
 
 ## 3. Integration Contract (Fixed)
 
