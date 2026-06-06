@@ -12,9 +12,9 @@ MSTR Sleeve Doctrine defines how the default 40% MSTR allocation (adjustable by 
 
 This brief covers only the MSTR rotational sleeve. It does not replace AB4 benchmark setting, AB3 deviation rules, or the core SRI stage machine.
 
-## 2. Problem Statement (Fixed)
+## 2. Theme Objective (Fixed)
 
-Is the MSTR sleeve currently positioned for optimal risk-adjusted appreciation versus STRC within the default 40% allocation (adjustable by owner directive), and how should aggregate delta be adjusted as SRI stage and liquidity regime change?
+The MSTR sleeve exists to generate risk-adjusted alpha and income inside the default 40% allocation by rotationally expressing bullish, neutral, and defensive postures across SRI stages through aggregate delta management and options overlays — always clearing the STRC hurdle rate.
 
 ## 3. Integration Contract (Fixed)
 
