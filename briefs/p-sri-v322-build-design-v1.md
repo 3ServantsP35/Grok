@@ -1,8 +1,8 @@
 # P-SRI-V3.2.2: Build Design — Howell Phasing, AB4 Profiles, AB3 Ruleset
 
 **Project:** P-SRI-V3.2.2-BUILD
-**Version:** v1 — Draft for Greg + Gavin review
-**Date:** 2026-04-30
+**Version:** v1 — rev8 (2026-06-22). Originally drafted for Greg + Gavin review; trading-systems ownership transferred to Gavin 2026-05-01.
+**Date:** 2026-04-30 (last updated 2026-06-22)
 **Revision history:**
 - rev1 — initial draft, two AB4 profiles, Camel-served TV feed
 - rev2 — added RAW Hybrid profile (third AB4 profile, computed midpoint)
@@ -18,6 +18,14 @@
   3. **TV symbol exchange corrections.** Two ratio charts in `tv_themes.yaml` had the wrong exchange prefix on the bond-ETF leg: `NASDAQ:LQD` and `NASDAQ:HYG` did not load; `AMEX:LQD` and `AMEX:HYG` do. Updated. All 16 MSTR Suite tickers verified loading on 2026-05-02 against the live `MSTR Suite - Download` layout.
 
   Pipeline build is otherwise complete: schema migration applied, all 7 new scripts shipped, `com.mstr.tv-feed.plist` updated to twice-daily Mon–Fri, runbook rewritten, first live poll succeeded (16/16 tickers OK, 96 bars + 1742 indicator values written). LaunchAgent intentionally left **not loaded** so Gavin can review before activation.
+- **rev8 (2026-06-22) — consolidated "what shipped since rev7.2" pass (Archie, with work done alongside Greg).** Seven weeks of live operation collapsed into one revision. No direction change; this rev records reality and closes/annotates open items. Highlights:
+  1. **Multi-theme warehouse is in production (closes most of §7.7).** rev7 shipped `mstr_suite` only; the warehouse now polls **three themes — `mstr_suite` (16 tickers), `visser` (43), `mr_assets` (38) = 97 tickers**, all 4H, all in `tv_themes.yaml`. The Visser layout (which "did not yet exist" at rev7.2) now exists (`Visser - Download`, id 188861618, verified 2026-05-03). The per-theme polls run sequentially through a new wrapper, **`scripts/tv_poll_all_themes.sh`**, because the TV CDP socket is single-tenant; the `com.mstr.tv-feed` LaunchAgent now invokes that wrapper (not `tv_poll.py` directly) twice daily Mon–Fri at **11:30 + 15:00 CT**. Each wake-up is ~20 min wall-clock for the 97-ticker total. `mstr_suite` soak closed mid-May; the warehouse has been trusted as system-of-record since.
+  2. **§5.6 P-TVI is functionally retired** — superseded 2026-06-05 by the warehouse-backed daily engine (below). No P-TVI cron entries or scripts remain on disk. **Caveat:** the *formal* §5.6 archival step (`~/Archive/p-tvi-retired-YYYY-MM-DD/` + the `lessons_workspace_architecture.md` note) was **not** executed — there is no dated archive dir. Treat §5.6 as functionally-done / formally-open.
+  3. **Daily engine migrated to the warehouse + made fail-closed (2026-06-05).** `scripts/daily_engine_run.py` now drives **`SRIEngineV2`** (`sri_engine.py`), sourcing the TV warehouse (`mstr.db`) as system-of-record with a date-keyed CSV fallback — replacing the **dead P-TVI GitHub-CSV export path** (frozen since early April; the engine had been posting regime/allocation/LEAP calls on ~2-month-stale data). Three fail-closed gates abort before any Discord post: price-freshness, warehouse-vs-CSV divergence (recent bars), and signal-freshness (SRI Bias Histogram ladder). `DAILY_ENGINE_MAX_STALE_DAYS` default 5. Cron 09:00 + 21:00 Mon–Fri. This is the true completion of the rev7 goal — "migrate Cyler off manual GitHub-CSV onto an MSTR-fed warehouse."
+  4. **Warehouse value-parsing root-cause fix (2026-06-05).** `tv_warehouse._coerce_value` was calling `float()` on TV's display strings, but TV renders negatives with **U+2212 MINUS SIGN (not ASCII `-`)** and suffixes percent-quoted symbols with `%` — both threw, and the except-branch stored **NULL**, silently dropping *every negative or percent indicator reading warehouse-wide* (most visibly the SRI Bias Histogram ladder whenever bias turned negative). Fixed by normalizing the glyphs before `float()`. **Forward-only** — TV's `values` is a current snapshot, so historical negatives before the fix cannot be backfilled and stay gappy.
+  5. **AGENTS.md tiering replaced the rev7 "rewrite + lockstep mirror" plan (2026-06-08).** The workspace `AGENTS.md` was slimmed to **9.4k→~11k chars** (methodology → `mstr-knowledge/trading-rules.md`, table catalog → `mstr-knowledge/data-access.md`) under a `check_session_start_budget.py` size guard (FAIL >11k) + health-check watchdog, after OpenClaw's 5.28 upgrade cut the AGENTS.md inject cap from 20k → 12k. Cyler's session-start load list grew the rev7 additions (`tv_state.md`, `tv_history_index.md`) **plus** new Layer-0.75 advisory inputs that postdate this doc: **APE→MSTR daily digest** (`ape_intel.md`, rev7.3, 2026-05-02) and **Substack paid-inbox digest** (`substack_intel.md`, `com.mstr.substack-feed`, 2026-05-28). **D8 lockstep is still OPEN and now further diverged:** canonical `Grok/AGENTS.md` is ~23.5k chars (pre-slim) vs the ~11k workspace copy — the two have drifted, not converged. Reconciliation is the largest remaining build debt.
+  6. **Workspace path consolidated (2026-06-03).** `~/.openclaw-trading/workspace-mstr-cio` is now a **symlink → `~/.openclaw-mstr/workspace-mstr-cio/`**, so the cron `--local` brief and the interactive Discord Cyler resolve to one directory — a single edit + reindex covers both paths (was two diverged dirs through 2026-06-01).
+  7. **Context note (not a build change):** the OpenClaw gateway backbone moved to **all-xAI Grok 4.3** (OAuth primary + xAI api-key fallback) on 2026-06-01; Codex/OpenAI removed 2026-06-06. Cyler and the analyst fleet run on that backbone. Out of scope for this build doc, recorded for orientation since the canonical repo is now `3ServantsP35/Grok`.
 **Author:** Archie (on behalf of Gavin + Greg)
 **Source briefs:**
 - `briefs/howell-phase-allocation-tutorial-v1.md` (Cyler, 2026-04-27)
@@ -411,6 +419,8 @@ Use `StartCalendarInterval` with an array of two dicts. Restrict to weekdays via
 
 The seed (`tv_seed.py`) is **not** scheduled — it's a one-time manual run before the poller goes live. Subsequent re-seeds (e.g., after schema changes) are also manual.
 
+**Shipped form (rev8, 2026-06-22):** the plist `ProgramArguments` points to **`scripts/tv_poll_all_themes.sh`**, not `tv_poll.py` directly — the wrapper polls all three themes (`mstr_suite` → `visser` → `mr_assets`, 97 tickers) **sequentially**, because the TV CDP socket is single-tenant. Each wake-up is ~20 min wall-clock. Times are expressed and fired as **11:30 + 15:00 system-local (CT)** via two `StartCalendarInterval` blocks × weekdays 1–5 (the earlier "09:30/13:00 PT" framing was a draft-era timezone label).
+
 #### 5.5.8 Acceptance bars (rev7 §5.5 ship gate)
 
 - **Bar 1 — seed completeness:** every MSTR Suite ticker has either (a) bars from `history_seed_target` to within one 4H bar of "now," or (b) a logged short-history exception with a documented earliest bar.
@@ -425,6 +435,8 @@ Once §5.5 has soaked — i.e., **all four §5.5.8 acceptance bars pass and 7 co
 - Remove its cron entry.
 - Archive its scripts under `~/Archive/p-tvi-retired-YYYY-MM-DD/`.
 - Note in `lessons_workspace_architecture.md` that P-TVI was retired, replaced by the MSTR Engine TV warehouse.
+
+**Status (rev8, 2026-06-22): FUNCTIONALLY RETIRED, FORMALLY OPEN.** The dead P-TVI GitHub-CSV export path was superseded on 2026-06-05 when `daily_engine_run.py` was repointed to `SRIEngineV2` reading the TV warehouse with three fail-closed gates (see rev8 note 3). No P-TVI cron entries or scripts remain on disk, and the warehouse has been the trusted system-of-record since `mstr_suite` soak closed mid-May. **However**, the formal archival step above was **not** executed — there is no dated `~/Archive/p-tvi-retired-*` dir and no `lessons_workspace_architecture.md` retirement note. Remaining work is housekeeping only: write the archive dir (if any P-TVI artifacts are still worth preserving) and the lessons note.
 
 ### 5.7 AGENTS.md rewrite (lockstep)
 
@@ -548,15 +560,17 @@ AB3 ruleset v1 has §8.1 (AB3 logic if benchmark = Rotational) and §8.2 (AB3 lo
 
 **Owner:** Cyler. **Required by:** v2 of AB3 ruleset, not v1 of resolver. v1 resolver works without it; the doctrine fills in over time.
 
-### 7.7 (rev7) Non-MSTR-Suite themes — ticker lists + layouts
+### 7.7 (rev7) Non-MSTR-Suite themes — ticker lists + layouts — **MOSTLY CLOSED (rev8, 2026-06-22)**
 
-v1 ships only the **MSTR Suite** theme. The follow-on themes need confirmed inputs before we add them:
+v1 of rev7 shipped only the **MSTR Suite** theme. As of rev8 the follow-on themes are **built and live in the warehouse** (`tv_themes.yaml`), polled by `tv_poll_all_themes.sh` alongside MSTR Suite:
 
-- **MR Assets** — layout name confirmed as `MR Assets - Download`. Ticker scope **TBD by Gavin.** Best-guess starting point: the 10 Howell sectors (XLK XLY XLF XLE XLP TLT GLD IWM VT DBC) + macro names (SPX/NDX/VIX/DXY/TNX) — but do not encode without confirmation.
-- **Visser** — layout does not yet exist. Out of scope until Gavin authors the layout in TV and provides the ticker scope.
-- **Future themes** — same pattern (one TV layout per theme; ticker list per theme; everything else inherited from `defaults`).
+- **MR Assets** — `MR Assets - Download` layout, **38 tickers** encoded and polling. ✅ Built.
+- **Visser** — `Visser - Download` layout now exists (id 188861618, verified 2026-05-03), **43 tickers** encoded and polling. ✅ Built.
+- **Future themes** — same pattern (one TV layout per theme; ticker list per theme; everything else inherited from `defaults`). The low-coupling additive model held: each new theme was one YAML block, no schema changes.
 
-**Owner:** Gavin (ticker lists, layout creation). **Required by:** when each theme is requested for build. Each is a low-coupling addition — one YAML block, one seed run, no schema changes.
+Total warehouse scope is now **97 tickers across 3 themes**, all 4H. The architecture prediction (each theme = one YAML block + one already-existing TV layout) was confirmed in practice. Remaining open sub-item: none required for v1 — additional themes are on-demand only.
+
+**Owner:** Gavin (ticker lists, layout creation). **Status:** delivered for MR Assets + Visser.
 
 ### 7.6 Howell signal inputs not yet verified in `mstr.db`
 
@@ -595,7 +609,7 @@ The Howell brief references inputs whose presence I have not yet verified end-to
 - Personal-portfolio data appearing in Grok — strict GitHub privacy rule remains in force.
 - Extracting a shared TV-ingest library between MSTR Engine and AI Portfolio Engine — deferred. APE doesn't currently need TV data; if it does later, that's a future refactor decision, not a v1 question.
 - **Camel Engine decommission** — descoped 2026-05-02 (rev6). This build delivers the MSTR-side functionality that retires the manual CSV upload, but it does **not** decommission Camel. Camel keeps running unmodified. See §5.9 for what was removed from scope.
-- **MR Assets, Visser, and any other non-MSTR-Suite themes** — out of scope for v1 of rev7 (2026-05-02). The architecture (theme YAML + named TV layout + uniform schema) supports them as additive blocks, but no theme other than MSTR Suite ships in this build. See §7.7.
+- ~~**MR Assets, Visser, and any other non-MSTR-Suite themes** — out of scope for v1 of rev7 (2026-05-02).~~ **Brought into scope and shipped (rev8, 2026-06-22):** MR Assets (38 tickers) and Visser (43 tickers) are now built and polling alongside MSTR Suite (97 tickers total). The additive architecture held exactly as predicted. Further new themes remain on-demand. See §7.7.
 - **Multiple timeframes** — single 4H baseline only in rev7. Adding 1D / 1W is a future config change, not v1 work.
 - **Indicator-as-Pine-port-to-Python work** — already out of scope above; reaffirmed: the warehouse stores whatever TV emits in the data window. Computing indicators in MSTR Engine code is not in this build.
 
@@ -619,6 +633,14 @@ The Howell brief references inputs whose presence I have not yet verified end-to
 - **§5.5–§5.8** — TV ingest scaffolding staged for the **prior** CSV-snapshot model (scripts + plist + runbook present). Per **rev7 (2026-05-02)** the model changed to a timeseries warehouse — the existing `tv_feed_writer.py` and `tv_feed.yaml.example` are retired; `tv_ingest.py` is extended (not replaced). New scripts to build: `tv_seed.py`, `tv_poll.py`, `tv_state_writer.py`, `tv_query.py`. New config: `tv_themes.yaml`. New plist schedule: twice daily Mon–Fri (replaces the daily-08:00-PT plist). P-TVI retire pending §5.5 7-day soak post-cutover. Workspace AGENTS.md rewritten 2026-05-01; canonical `Grok/AGENTS.md` mirror still pre-rewrite (D8 lockstep open) and now also needs rev7 additions for `tv_state.md` / `tv_history_index.md`. Existing workspace knowledge files (`ab_profile.md`, `phase_state.md`, `ppr_template.md`) present; rev7 adds two new ones (`tv_state.md`, `tv_history_index.md`).
 - **§5.9 Camel decommission — DESCOPED rev6 (2026-05-02).** Removed from this build. Camel Engine continues running unmodified.
 
+**Status note (2026-06-22, rev8):** the TV-warehouse + warehouse-backed daily engine track (§5.5–§5.6) is now in production; the build is functionally complete except for AGENTS.md lockstep and P-TVI formal archival.
+
+- **§5.5 — DONE + EXPANDED.** All four new scripts shipped (`tv_seed.py`, `tv_poll.py`, `tv_state_writer.py`, `tv_query.py`) plus `tv_warehouse.py` (the upsert/parse layer) and `tv_poll_all_themes.sh` (sequential multi-theme wrapper). `tv_themes.yaml` carries **3 themes / 97 tickers** (mstr_suite 16, visser 43, mr_assets 38). `com.mstr.tv-feed` polls twice daily Mon–Fri 11:30 + 15:00 CT. Warehouse value-parsing root-cause bug fixed 2026-06-05 (U+2212 / `%` → NULL; forward-only). Acceptance bars effectively met — the daily engine now trusts the warehouse as system-of-record behind a signal-freshness fail-closed gate.
+- **§5.6 — FUNCTIONALLY DONE, FORMALLY OPEN.** Dead P-TVI CSV path superseded 2026-06-05; no P-TVI cron/scripts remain. Formal archive dir + lessons note not yet written (housekeeping).
+- **Daily engine (the rev7 end-goal) — DONE 2026-06-05.** `daily_engine_run.py` → `SRIEngineV2` reads the warehouse with date-keyed CSV fallback + three fail-closed gates (price-freshness, warehouse-vs-CSV divergence, signal-freshness). `DAILY_ENGINE_MAX_STALE_DAYS=5`. This closes "migrate Cyler off manual GitHub-CSV."
+- **§5.7 AGENTS.md — workspace DONE (tiered 2026-06-08, ~11k chars under an 11k size guard; methodology → `trading-rules.md`, table catalog → `data-access.md`). Canonical `Grok/AGENTS.md` mirror STILL OPEN (D8) and now further diverged (~23.5k pre-slim vs ~11k workspace).** This is the largest remaining build debt.
+- **§5.8 workspace knowledge files — DONE + EXTENDED.** rev7 additions (`tv_state.md`, `tv_history_index.md`) present, plus `tv_state_indicators.md`, and new Layer-0.75 advisory inputs that postdate this doc: `ape_intel.md` (APE→MSTR digest, 2026-05-02) and `substack_intel.md` (Substack ingest, 2026-05-28).
+
 ---
 
 ## Appendix A — File-level deltas planned by this build
@@ -638,15 +660,25 @@ NEW (rev1–rev6, already shipped):
   ~/.openclaw-mstr/workspace-mstr-cio/mstr-knowledge/phase_state.md      (rev5)
   ~/.openclaw-mstr/workspace-mstr-cio/mstr-knowledge/ppr_template.md     (rev5)
 
-NEW (rev7 — to be built):
-  ~/mstr-engine/scripts/tv_seed.py                             (one-time backfill)
-  ~/mstr-engine/scripts/tv_poll.py                             (twice-daily poller, replaces tv_feed_writer.py)
-  ~/mstr-engine/scripts/tv_state_writer.py                     (workspace summary generator)
-  ~/mstr-engine/scripts/tv_query.py                            (Cyler's history helper)
-  ~/mstr-engine/config/tv_themes.yaml                          (replaces tv_feed.yaml.example)
-  ~/mstr-engine/scripts/migrations/2026-05-02_tv_warehouse.sql (tv_price_bars, tv_indicator_values, tv_ingest_runs)
-  ~/.openclaw-mstr/workspace-mstr-cio/mstr-knowledge/tv_state.md         (auto-generated)
-  ~/.openclaw-mstr/workspace-mstr-cio/mstr-knowledge/tv_history_index.md (auto-generated)
+NEW (rev7 — SHIPPED, see rev8):
+  ~/mstr-engine/scripts/tv_seed.py                             (one-time backfill — shipped)
+  ~/mstr-engine/scripts/tv_poll.py                             (per-theme poller — shipped)
+  ~/mstr-engine/scripts/tv_state_writer.py                     (workspace summary generator — shipped)
+  ~/mstr-engine/scripts/tv_query.py                            (Cyler's history helper — shipped)
+  ~/mstr-engine/config/tv_themes.yaml                          (shipped — 3 themes / 97 tickers)
+  ~/mstr-engine/scripts/migrations/2026-05-02_tv_warehouse.sql (tv_price_bars, tv_indicator_values, tv_ingest_runs — applied)
+  ~/.openclaw-mstr/workspace-mstr-cio/mstr-knowledge/tv_state.md         (auto-generated — live)
+  ~/.openclaw-mstr/workspace-mstr-cio/mstr-knowledge/tv_history_index.md (auto-generated — live)
+
+NEW (rev8 — emerged during live build, not in the rev7 plan):
+  ~/mstr-engine/scripts/tv_warehouse.py                        (upsert + value-parse layer; U+2212/% NULL bug fixed 2026-06-05)
+  ~/mstr-engine/scripts/tv_poll_all_themes.sh                  (sequential multi-theme wrapper — CDP socket is single-tenant)
+  ~/mstr-engine/scripts/daily_engine_run.py                    (SRIEngineV2 driver: warehouse SoT + 3 fail-closed gates, 2026-06-05)
+  ~/.openclaw-mstr/workspace-mstr-cio/mstr-knowledge/tv_state_indicators.md (auto-generated indicator detail)
+  ~/.openclaw-mstr/workspace-mstr-cio/mstr-knowledge/trading-rules.md       (AGENTS.md tiering offload, 2026-06-08)
+  ~/.openclaw-mstr/workspace-mstr-cio/mstr-knowledge/data-access.md         (AGENTS.md tiering offload, 2026-06-08)
+  ~/.openclaw-mstr/workspace-mstr-cio/mstr-knowledge/ape_intel.md           (APE→MSTR Layer-0.75 digest, 2026-05-02)
+  ~/.openclaw-mstr/workspace-mstr-cio/mstr-knowledge/substack_intel.md      (Substack Layer-0.75 digest, 2026-05-28)
 
 MODIFIED:
   ~/mstr-engine/scripts/sri_engine.py                          (rev5 — reconcile drift, done)
@@ -654,9 +686,9 @@ MODIFIED:
   ~/mstr-engine/scripts/morning_brief.py                       (rev5 — latest-row reads, done)
   ~/mstr-engine/scripts/pmcc_alerts.py                         (rev5 — latest-row reads, done)
   ~/mstr-engine/scripts/tv_ingest.py                           (rev7 — add ohlcv/layout_switch/layout_list/chart_state/set_range/scroll_to; rev7.1 fix: positional symbol/timeframe args)
-  ~/Library/LaunchAgents/com.mstr.tv-feed.plist                (rev7 — schedule changes from daily 08:00 PT to twice-daily Mon–Fri 09:30 + 13:00 PT; ProgramArguments points to tv_poll.py)
-  ~/.openclaw-mstr/workspace-mstr-cio/AGENTS.md                (workspace doctrine rewrite, partial done — rev7 adds tv_state.md/tv_history_index.md to load list)
-  ~/.openclaw-mstr/workspace-mstr-cio/Grok/AGENTS.md           (canonical mirror — pending; D8 lockstep open)
+  ~/Library/LaunchAgents/com.mstr.tv-feed.plist                (rev8 — twice-daily Mon–Fri 11:30 + 15:00 CT; ProgramArguments points to tv_poll_all_themes.sh, the multi-theme wrapper, NOT tv_poll.py directly)
+  ~/.openclaw-mstr/workspace-mstr-cio/AGENTS.md                (rev8 — DONE: tiered + slimmed to ~11k chars 2026-06-08; load list carries tv_state.md/tv_history_index.md + ape_intel.md/substack_intel.md)
+  ~/.openclaw-mstr/workspace-mstr-cio/Grok/AGENTS.md           (canonical mirror — STILL PENDING; D8 lockstep open + further diverged at ~23.5k vs ~11k workspace)
   ~/.openclaw-mstr/workspace-mstr-cio/active-tasks.md          (drop 2026-03-15 sprint entries; add v3.2.2 status)
   mstr.db schema                                               (cumulative: 7 net-new tables, 4 added columns)
   crontab                                                      (no change in rev7 — TV poll runs via LaunchAgent, not cron)
@@ -684,7 +716,8 @@ These are not blockers for v1 ship but are worth tracking:
 - AGENTS.md "Strategy Library v4.0 (2026-03-08)" should likely become v5.0 with this rewrite — version it.
 - ByteRover removal (already done in OpenClaw runtime per memory) needs a corresponding cleanup pass on `mstr-knowledge/system-learnings.md` and any `brv` references in helper scripts.
 - The `kathryn-portfolio-state.md` and `ali-portfolio-state.md` files in `mstr-knowledge/` — should those portfolios get v3.2.2 profile selections too, or are they intentionally outside this framework?
-- **TV warehouse depth backfill (rev7.2)** — current coverage tops out at ~7 months on equities (~7 weeks on 24/7 BTC, ~9 weeks on DXY) due to `tv` CLI scroll bugs. Three approaches to investigate when worth the time: (a) `tv ui keyboard` to send Alt+G; (b) `tv ui eval` to call internal load functions; (c) replace the seed with an unofficial `tvdatafeed` path while keeping the recurring poll on `tv` CLI. None tried in v1.
+- **TV warehouse depth backfill (rev7.2)** — initial coverage topped out at ~7 months on equities due to `tv` CLI scroll bugs. **Update (rev8):** the `tv ui eval` workaround (option b) was later used to seed MSTR itself to full IPO depth (13,196 4H bars back to 2000-01-03); the other 15 MSTR Suite tickers stayed at ~300 bars on fresh symbol switches (`requestMoreHistoryPoints` reports success but bars don't grow — mechanism not understood). visser + mr_assets seeded with whatever depth TV returned; indicators accumulate forward via the recurring poll regardless. Remaining options if a use case demands deeper non-MSTR history: (a) `tv ui keyboard` Alt+G; (c) an unofficial `tvdatafeed` path. Lower priority now that the daily engine runs on the forward-accumulating warehouse.
+- **Pre-2026-06-05 negative/percent indicator values are unrecoverable (rev8).** The `_coerce_value` NULL bug (U+2212 minus + `%` suffix → `float()` throws → NULL stored) silently dropped every negative or percent indicator reading warehouse-wide for its whole history before the fix. TV's `values` is a current snapshot, so the fix is **forward-only** — historical negatives (most visibly the SRI Bias Histogram ladder for any ticker whose bias turned negative) cannot be backfilled and remain gappy. Any analysis on pre-fix negative-going indicators was reading positive-only/stale values.
 
 ---
 
