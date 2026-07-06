@@ -1,0 +1,126 @@
+//@version=5
+// ============================================================================
+// CF Cycle Replica (Archie) — v3  ·  P-Camel-Indicator-RE
+// Native re-implementation of the CF Cycle methodology (Bressert/Camel).
+// Mirrors camel-engine/pipeline/cycle_detector.py + cycle_mechanics.py.
+//
+// VALIDATED (v2, the low engine): 100% exact vs CF's real DCL/WCL marks —
+//   Daily  DCL: MSTR 15/15, TLT 3/3, QQQ 10/10, BTC 17/17
+//   Weekly WCL: MSTR 9/9, BTC 9/9, QQQ 23/23 (to 2000), TLT 19/19
+//   = 105/105 cycle lows, 0 miss, 0 false-positive, across 4 assets × 2 TFs.
+//   The SAME engine is the WCL detector when run on a Weekly chart.
+//
+// v3 ADDS the derived CycleState layer on top of the proven low engine:
+//   • translation  — where the cycle HIGH sits between two lows: left (early
+//                    peak, bearish) / mid / right (late peak, bullish).
+//   • timing_code  — 0 early · 1 timing_window · 2 late (cycle_day vs window ±10%).
+//   • cycle_fail   — 1 when price closes below the active cycle low (failure).
+// All exported as CSV columns to validate against CF the same way DCL was.
+//
+// CSV columns: cycle_day, dcl_event (1 on the low bar), dcl_price, translation
+//   (-1 left / 0 mid / +1 right, of the last COMPLETED cycle), timing_code,
+//   cycle_fail. DEFAULTS = BTC daily [49,73]. MSTR [40,90] · equities [32,48] ·
+//   metals [20,31] · weekly: that asset's weekly cycle in *weeks*.
+// ============================================================================
+indicator("CF Cycle Replica (Archie) v3", overlay=true, max_labels_count=500)
+
+// ── Inputs ──────────────────────────────────────────────────────────────────
+gT = "Cycle timing (bars ≈ days on a Daily chart)"
+winLo = input.int(49, "Cycle length MIN", minval=1, group=gT)
+winHi = input.int(73, "Cycle length MAX", minval=2, group=gT)
+
+gD = "Low detection"
+w        = input.int(5, "Swing pivot width (bars each side)", minval=1, group=gD)
+useRally = input.bool(true, "Require rally confirmation", group=gD)
+rallyPct = input.float(5.0, "Confirmation rally %", minval=0.0, step=0.5, group=gD) / 100.0
+
+gR = "Translation (fraction of cycle where the high sits)"
+transLeft  = input.float(0.40, "Left  if high-fraction <", minval=0.0, maxval=1.0, step=0.05, group=gR)
+transRight = input.float(0.60, "Right if high-fraction >", minval=0.0, maxval=1.0, step=0.05, group=gR)
+
+gV = "Display"
+showTable  = input.bool(true, "Show cycle table", group=gV)
+showLabels = input.bool(true, "Label detected DCLs", group=gV)
+
+// ── Swing low detection ─────────────────────────────────────────────────────
+pl      = ta.pivotlow(low, w, w)
+plBar   = bar_index - w
+hasPivot = not na(pl)
+maxHiSince = ta.highest(high, w)
+confirmed  = not useRally or (hasPivot and pl > 0 and (maxHiSince - pl) / pl >= rallyPct)
+
+// ── Cycle state (streaming low chaining + translation) ──────────────────────
+var int   lastDclBar   = na
+var float lastDclPrice = na
+var int   dclCount     = 0
+var float cycHigh      = na   // running high of the CURRENT cycle
+var int   cycHighBar   = na
+var int   translation  = na   // last COMPLETED cycle: -1 left / 0 mid / +1 right
+
+// extend the current cycle's high (every bar once a cycle is open)
+if not na(lastDclBar) and (na(cycHigh) or high > cycHigh)
+    cycHigh    := high
+    cycHighBar := bar_index
+
+newDcl = false
+if hasPivot and confirmed
+    ageOk = na(lastDclBar) or (plBar - lastDclBar) >= winLo
+    if ageOk
+        // close out the PREVIOUS cycle → its translation
+        if not na(lastDclBar) and not na(cycHighBar)
+            clen = plBar - lastDclBar
+            frac = clen > 0 ? (cycHighBar - lastDclBar) / clen : na
+            translation := na(frac) ? na : frac < transLeft ? -1 : frac > transRight ? 1 : 0
+        newDcl       := true
+        lastDclBar   := plBar
+        lastDclPrice := pl
+        dclCount     := dclCount + 1
+        cycHigh      := high      // start the new cycle's high tracking
+        cycHighBar   := bar_index
+
+// ── Derived current-cycle metrics ───────────────────────────────────────────
+cycleDay = na(lastDclBar) ? na : (bar_index - lastDclBar)
+wStart = int(winLo * 0.9)
+wEnd   = int(winHi * 1.1)
+timingCode = na(cycleDay) ? na : cycleDay < wStart ? 0 : cycleDay > wEnd ? 2 : 1
+timingTxt  = na(timingCode) ? "unknown" : timingCode == 0 ? "early" : timingCode == 2 ? "late" : "timing_window"
+cycleFail  = (not na(lastDclPrice) and close < lastDclPrice) ? 1 : 0
+// provisional translation of the IN-PROGRESS cycle (for the table only)
+expMid = (winLo + winHi) / 2.0
+liveFrac = (not na(lastDclBar) and not na(cycHighBar) and expMid > 0) ? (cycHighBar - lastDclBar) / expMid : na
+liveTransTxt = na(liveFrac) ? "—" : liveFrac < transLeft ? "left" : liveFrac > transRight ? "right" : "mid"
+
+// ── Plots (EXPORT to CSV) ───────────────────────────────────────────────────
+plot(cycleDay,          "cycle_day",   color=color.new(color.teal, 0),  display=display.data_window)
+plot(newDcl ? 1 : 0,    "dcl_event",   color=color.new(color.red, 0),   display=display.data_window, offset=-w)
+plot(newDcl ? pl : na,  "dcl_price",   color=color.new(color.red, 0),   display=display.data_window, offset=-w)
+plot(translation,       "translation", color=color.new(color.orange, 0),display=display.data_window)
+plot(timingCode,        "timing_code", color=color.new(color.blue, 0),  display=display.data_window)
+plot(cycleFail,         "cycle_fail",  color=color.new(color.maroon, 0), display=display.data_window)
+
+// ── Chart markers ───────────────────────────────────────────────────────────
+plotshape(showLabels and newDcl, title="DCL", style=shape.triangleup,
+          location=location.belowbar, color=color.new(color.red, 0), size=size.small, offset=-w)
+if showLabels and newDcl
+    label.new(plBar, pl, str.format("DCL #{0}", dclCount),
+              style=label.style_label_up, color=color.new(color.red, 20),
+              textcolor=color.white, size=size.small)
+
+// ── Cycle table ─────────────────────────────────────────────────────────────
+transTxt(int c) => na(c) ? "—" : c == -1 ? "left" : c == 1 ? "right" : "mid"
+var table t = table.new(position.top_right, 2, 7, border_width=1)
+if showTable and barstate.islast
+    table.cell(t, 0, 0, "cycle_day", text_color=color.gray, text_size=size.small)
+    table.cell(t, 1, 0, str.tostring(cycleDay), text_color=color.white, text_size=size.small)
+    table.cell(t, 0, 1, "timing", text_color=color.gray, text_size=size.small)
+    table.cell(t, 1, 1, timingTxt, text_color=color.white, text_size=size.small)
+    table.cell(t, 0, 2, "expected", text_color=color.gray, text_size=size.small)
+    table.cell(t, 1, 2, str.format("{0}-{1}", winLo, winHi), text_color=color.white, text_size=size.small)
+    table.cell(t, 0, 3, "translation (curr)", text_color=color.gray, text_size=size.small)
+    table.cell(t, 1, 3, liveTransTxt, text_color=color.white, text_size=size.small)
+    table.cell(t, 0, 4, "translation (last)", text_color=color.gray, text_size=size.small)
+    table.cell(t, 1, 4, transTxt(translation), text_color=color.white, text_size=size.small)
+    table.cell(t, 0, 5, "cycle failure", text_color=color.gray, text_size=size.small)
+    table.cell(t, 1, 5, cycleFail == 1 ? "YES" : "no", text_color=color.white, text_size=size.small)
+    table.cell(t, 0, 6, "last low / #", text_color=color.gray, text_size=size.small)
+    table.cell(t, 1, 6, (na(lastDclPrice) ? "—" : str.tostring(lastDclPrice, format.mintick)) + " / " + str.tostring(dclCount), text_color=color.white, text_size=size.small)
