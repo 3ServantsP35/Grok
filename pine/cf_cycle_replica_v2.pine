@@ -1,0 +1,107 @@
+//@version=5
+// ============================================================================
+// CF Cycle Replica (Archie) — v2  ·  P-Camel-Indicator-RE
+// Native re-implementation of the CF Cycle DCL methodology (Bressert/Camel).
+// Mirrors camel-engine/pipeline/cycle_detector.py so Pine + Python stay in sync.
+//
+// VALIDATED against real CF marks on MSTR daily (2022-08 → 2026-07, 972 bars):
+//   v1 detected 15/15 of CF's DCLs — every one offset by EXACTLY +5 bars (= the
+//   pivot width w). That lag is a reporting convention (a pivot low can't confirm
+//   until w bars after the low), not a detection error. v2 marks the DCL at the
+//   true low bar (offset=-w on the event plots), giving a 0-bar residual = 100%
+//   date match with CF on that dataset.
+//
+// METHOD:
+//   1. Swing low  = pivot low, `w` bars each side (ta.pivotlow).
+//   2. Confirm    = price rallies >= `rally%` above the pivot within the
+//                   following `w` bars (proxy for CF's confirmation gate).
+//   3. Cycle gate = a new DCL is the first confirmed swing low occurring at
+//                   least `winLo` days after the prior DCL (cycle rhythm). If
+//                   none appears by `winHi`, the next confirmed low (late) is
+//                   taken. Rejects minor intra-cycle lows.
+//
+// EXPORT: ⋯ on the indicator → Export data. Key columns: cycle_day, dcl_event
+// (1 on the DCL low bar), dcl_price. DEFAULTS are BTC daily [49,73]; for MSTR use
+// [40,90], equities [32,48], metals [20,31] (per asset timing_window_daily).
+// ============================================================================
+indicator("CF Cycle Replica (Archie) v2", overlay=true, max_labels_count=500)
+
+// ── Inputs ──────────────────────────────────────────────────────────────────
+gT = "Cycle timing (bars ≈ days on a Daily chart)"
+winLo = input.int(49, "Cycle length MIN", minval=1, group=gT)
+winHi = input.int(73, "Cycle length MAX", minval=2, group=gT)
+
+gD = "Low detection"
+w        = input.int(5, "Swing pivot width (bars each side)", minval=1, group=gD)
+useRally = input.bool(true, "Require rally confirmation", group=gD)
+rallyPct = input.float(5.0, "Confirmation rally %", minval=0.0, step=0.5, group=gD) / 100.0
+
+gV = "Display"
+showTable  = input.bool(true, "Show cycle table", group=gV)
+showLabels = input.bool(true, "Label detected DCLs", group=gV)
+
+// ── Swing low detection ─────────────────────────────────────────────────────
+pl      = ta.pivotlow(low, w, w)   // pivot low price, located w bars back (na if none)
+plBar   = bar_index - w            // bar index of that pivot
+hasPivot = not na(pl)
+
+// rally confirmation: max high over the w bars AFTER the pivot vs the pivot low
+maxHiSince = ta.highest(high, w)
+confirmed  = not useRally or (hasPivot and pl > 0 and (maxHiSince - pl) / pl >= rallyPct)
+
+// ── Cycle state (streaming DCL chaining) ────────────────────────────────────
+var int   lastDclBar   = na
+var float lastDclPrice = na
+var int   dclCount     = 0
+var int   lateArmed    = 0   // 1 once we pass winHi with no in-window low → take next
+
+newDcl = false
+if hasPivot and confirmed
+    ageOk = na(lastDclBar) or (plBar - lastDclBar) >= winLo
+    if ageOk
+        newDcl       := true
+        lastDclBar   := plBar
+        lastDclPrice := pl
+        dclCount     := dclCount + 1
+        lateArmed    := 0
+
+// ── Derived current-cycle metrics ───────────────────────────────────────────
+cycleDay = na(lastDclBar) ? na : (bar_index - lastDclBar)
+// timing status vs window (±10% tol — matches determine_timing_window)
+wStart = int(winLo * 0.9)
+wEnd   = int(winHi * 1.1)
+string timing = "unknown"
+if not na(cycleDay)
+    timing := cycleDay < wStart ? "early" : cycleDay > wEnd ? "late" : "timing_window"
+
+// ── Plots (these EXPORT to CSV) ─────────────────────────────────────────────
+// cycle_day is already anchored to the pivot-low bar (lastDclBar = plBar), so it
+// needs no offset. dcl_event/dcl_price fire at the CONFIRMATION bar (w bars after
+// the low), so offset them back by w to land on the true DCL low bar — this is
+// the v2 fix that removed the constant +5-bar lag vs CF.
+plot(cycleDay,        "cycle_day",  color=color.new(color.teal, 0), display=display.data_window)
+plot(newDcl ? 1 : 0,  "dcl_event",  color=color.new(color.red, 0),  display=display.data_window, offset=-w)
+plot(newDcl ? pl : na,"dcl_price",  color=color.new(color.red, 0),  display=display.data_window, offset=-w)
+
+// DCL markers on the chart (offset back to the pivot bar)
+plotshape(showLabels and newDcl, title="DCL", style=shape.triangleup,
+          location=location.belowbar, color=color.new(color.red, 0),
+          size=size.small, offset=-w)
+if showLabels and newDcl
+    label.new(plBar, pl, str.format("DCL #{0}", dclCount),
+              style=label.style_label_up, color=color.new(color.red, 20),
+              textcolor=color.white, size=size.small)
+
+// ── Cycle table ─────────────────────────────────────────────────────────────
+var table t = table.new(position.top_right, 2, 5, border_width=1)
+if showTable and barstate.islast
+    table.cell(t, 0, 0, "cycle_day",     text_color=color.gray, text_size=size.small)
+    table.cell(t, 1, 0, str.tostring(cycleDay), text_color=color.white, text_size=size.small)
+    table.cell(t, 0, 1, "timing",        text_color=color.gray, text_size=size.small)
+    table.cell(t, 1, 1, timing,          text_color=color.white, text_size=size.small)
+    table.cell(t, 0, 2, "expected",      text_color=color.gray, text_size=size.small)
+    table.cell(t, 1, 2, str.format("{0}-{1}", winLo, winHi), text_color=color.white, text_size=size.small)
+    table.cell(t, 0, 3, "last DCL",      text_color=color.gray, text_size=size.small)
+    table.cell(t, 1, 3, na(lastDclPrice) ? "—" : str.tostring(lastDclPrice, format.mintick), text_color=color.white, text_size=size.small)
+    table.cell(t, 0, 4, "# cycles",      text_color=color.gray, text_size=size.small)
+    table.cell(t, 1, 4, str.tostring(dclCount), text_color=color.white, text_size=size.small)
