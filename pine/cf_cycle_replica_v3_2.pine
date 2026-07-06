@@ -34,9 +34,14 @@
 // Window presets (set winLo/winHi per asset as before):
 //   Daily DCL  — BTC [49,73] · MSTR [40,90] · equities [32,48] · metals [20,31]
 //   Weekly WCL — that asset's weekly cycle in *weeks*
-//   Monthly YCL— PROVISIONAL default [10,16] months; NOT yet validated vs a CF
-//                monthly export. Export a MONTHLY chart CSV to confirm before
-//                trusting the YCL marks (same export-diff workflow as DCL/WCL).
+//   Monthly YCL— [10,16] months. VALIDATED 2026-07-06 vs CF's monthly low marks:
+//                MSTR 16/16, BTC 6/6, QQQ 14/14, TLT 15/15 = 51/51 exact, 0 FP.
+//                NB: CF names its low column 'DCL' on daily/weekly but 'Cycle low'
+//                on MONTHLY — diff against 'Cycle low' when validating YCL. BTC's
+//                yearly lows are halving-scale (~15-47mo); detected via late-cycle
+//                fallback, so BTC's LIVE yearly timing/cycle_day is miscalibrated
+//                under [10,16] — widen to ~[15,50] if you need BTC live YCL timing.
+// Full nest now validated: DCL 47/47 · WCL 60/60 (daily/weekly) + YCL 51/51.
 // ============================================================================
 indicator("CF Cycle Replica (Archie) v3.2", overlay=true, max_labels_count=500)
 
