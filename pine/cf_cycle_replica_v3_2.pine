@@ -38,9 +38,11 @@
 //                MSTR 16/16, BTC 6/6, QQQ 14/14, TLT 15/15 = 51/51 exact, 0 FP.
 //                NB: CF names its low column 'DCL' on daily/weekly but 'Cycle low'
 //                on MONTHLY — diff against 'Cycle low' when validating YCL. BTC's
-//                yearly lows are halving-scale (~15-47mo); detected via late-cycle
-//                fallback, so BTC's LIVE yearly timing/cycle_day is miscalibrated
-//                under [10,16] — widen to ~[15,50] if you need BTC live YCL timing.
+//                yearly lows are halving-scale (~15-47mo, median 32), not annual —
+//                for a BTC monthly chart set the yearly window to [10,50]. winLo
+//                stays 10 (it is the ONLY gate on cycle spacing → 6/6 detection
+//                unchanged); winHi=50 only lifts the timing_code ceiling so a
+//                halving-length cycle isn't flagged 'late'. Other assets: [10,16].
 // Full nest now validated: DCL 47/47 · WCL 60/60 (daily/weekly) + YCL 51/51.
 // ============================================================================
 indicator("CF Cycle Replica (Archie) v3.2", overlay=true, max_labels_count=500)
