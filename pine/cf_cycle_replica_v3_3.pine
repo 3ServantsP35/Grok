@@ -1,0 +1,186 @@
+//@version=5
+// ============================================================================
+// CF Cycle Replica (Archie) — v3.3  ·  P-Camel-Indicator-RE
+// Native re-implementation of the CF Cycle methodology (Bressert/Camel).
+// Mirrors camel-engine/pipeline/cycle_detector.py + cycle_mechanics.py.
+//
+// v3.3 = v3.2 + PER-ASSET AUTO-TUNING. This is the version that lets the replica
+// REPLACE the CF Cycle Trading Indicator as the sole cycle source across the full
+// 16-asset universe (CF subscription is being cancelled). The real CF auto-detects
+// each symbol ("Finetuned Asset Detected") and applies that asset's own cycle
+// window; v3.2 used ONE global window for every symbol → correct only for the
+// asset whose window was loaded. v3.3 resolves [winLo,winHi] per degree from
+// syminfo.ticker so a live multi-asset scrape (tv_reader switches symbols) is
+// correctly tuned for each asset with no manual input changes.
+//
+// VALIDATION STATUS (critical): the per-asset windows below come from
+// camel-engine/config/assets.yaml. Only MSTR/BTC/QQQ/TLT are diffed against CF's
+// real marks (DCL 47/47 + WCL 60/60 + YCL 51/51). The other 12 assets' windows
+// are methodology-derived but NOT yet replica-vs-CF validated — VALIDATE THEM
+// AGAINST CF BEFORE THE SUBSCRIPTION LAPSES (one-way door; CF is the only ground
+// truth). Yearly windows for the 12 non-core assets are provisional defaults.
+//
+// Low engine (detection + translation) is byte-for-byte v3.1/v3.2. v3.3 only
+// changes HOW winLo/winHi/winLoY/winHiY are chosen (per-asset vs global) — the
+// chaining, confirmation, and translation logic are untouched.
+//
+// CSV columns: cycle_day, dcl_event, dcl_price, translation, timing_code,
+//   cycle_fail, degree. Degree: 1=DCL(daily) 2=WCL(weekly) 3=YCL(monthly), auto
+//   by chart timeframe. CF names its low column 'DCL' on D/W, 'Cycle low' on 1M.
+// ============================================================================
+indicator("CF Cycle Replica (Archie) v3.3", overlay=true, max_labels_count=500)
+
+// ── Cycle degree ─────────────────────────────────────────────────────────────
+gC = "Cycle degree"
+degMode = input.string("Auto (by timeframe)", "Cycle degree",
+     options=["Auto (by timeframe)", "Daily · DCL", "Weekly · WCL", "Monthly · YCL", "Manual"],
+     group=gC, tooltip="Auto: Daily chart→DCL, Weekly→WCL, Monthly→YCL. Manual always uses the daily/weekly window regardless of timeframe.")
+
+// ── Per-asset auto-tune ──────────────────────────────────────────────────────
+gA = "Per-asset auto-tune (from config/assets.yaml, keyed on syminfo.ticker)"
+autoTune = input.bool(true, "Auto-tune cycle window by symbol", group=gA,
+     tooltip="ON: resolve the window per asset (needed when the replica is the sole source across the 16-asset universe). OFF or unknown symbol: fall back to the manual windows below.")
+
+tk = syminfo.ticker
+// daily [lo,hi], weekly [lo,hi], yearly [lo,hi] per asset — mirror assets.yaml.
+// yearly for the 12 non-core assets is PROVISIONAL (validate vs CF before cutover).
+adLo = tk=="BTCUSD"?49 : tk=="ETHUSD"?14 : tk=="SPX"?32 : tk=="XAUUSD"?20 : tk=="XAGUSD"?20 : tk=="DXY"?14 : tk=="MSTR"?36 : tk=="QQQ"?32 : tk=="DJI"?32 : tk=="COIN"?36 : tk=="MARA"?32 : tk=="RIOT"?32 : tk=="GDX"?20 : tk=="GDXJ"?20 : tk=="SILJ"?20 : tk=="USOIL"?32 : na
+adHi = tk=="BTCUSD"?73 : tk=="ETHUSD"?28 : tk=="SPX"?48 : tk=="XAUUSD"?31 : tk=="XAGUSD"?31 : tk=="DXY"?26 : tk=="MSTR"?99 : tk=="QQQ"?48 : tk=="DJI"?48 : tk=="COIN"?99 : tk=="MARA"?48 : tk=="RIOT"?48 : tk=="GDX"?31 : tk=="GDXJ"?31 : tk=="SILJ"?31 : tk=="USOIL"?48 : na
+awLo = tk=="BTCUSD"?20 : tk=="ETHUSD"?6  : tk=="SPX"?20 : tk=="XAUUSD"?20 : tk=="XAGUSD"?20 : tk=="DXY"?14 : tk=="MSTR"?22 : tk=="QQQ"?20 : tk=="DJI"?20 : tk=="COIN"?22 : tk=="MARA"?20 : tk=="RIOT"?20 : tk=="GDX"?20 : tk=="GDXJ"?20 : tk=="SILJ"?20 : tk=="USOIL"?14 : na
+awHi = tk=="BTCUSD"?46 : tk=="ETHUSD"?11 : tk=="SPX"?34 : tk=="XAUUSD"?31 : tk=="XAGUSD"?31 : tk=="DXY"?22 : tk=="MSTR"?46 : tk=="QQQ"?34 : tk=="DJI"?34 : tk=="COIN"?46 : tk=="MARA"?29 : tk=="RIOT"?29 : tk=="GDX"?29 : tk=="GDXJ"?29 : tk=="SILJ"?29 : tk=="USOIL"?22 : na
+ayLo = tk=="BTCUSD"?10 : tk=="ETHUSD"?10 : tk=="SPX"?10 : tk=="XAUUSD"?10 : tk=="XAGUSD"?10 : tk=="DXY"?10 : tk=="MSTR"?10 : tk=="QQQ"?10 : tk=="DJI"?10 : tk=="COIN"?10 : tk=="MARA"?10 : tk=="RIOT"?10 : tk=="GDX"?10 : tk=="GDXJ"?10 : tk=="SILJ"?10 : tk=="USOIL"?10 : na
+ayHi = tk=="BTCUSD"?50 : tk=="ETHUSD"?50 : tk=="SPX"?16 : tk=="XAUUSD"?16 : tk=="XAGUSD"?16 : tk=="DXY"?16 : tk=="MSTR"?16 : tk=="QQQ"?16 : tk=="DJI"?16 : tk=="COIN"?50 : tk=="MARA"?50 : tk=="RIOT"?50 : tk=="GDX"?16 : tk=="GDXJ"?16 : tk=="SILJ"?16 : tk=="USOIL"?16 : na
+known = not na(adLo)
+useAuto = autoTune and known
+
+// ── Inputs: manual window (fallback when auto-tune off / unknown symbol) ──────
+gT = "Manual cycle length — Daily/Weekly (used only when auto-tune is off/unknown)"
+winLo = input.int(49, "Cycle length MIN", minval=1, group=gT)
+winHi = input.int(73, "Cycle length MAX", minval=2, group=gT)
+gY = "Manual cycle length — Yearly / YCL (months; used only when auto-tune off/unknown)"
+winLoY = input.int(10, "Yearly length MIN", minval=1, group=gY)
+winHiY = input.int(16, "Yearly length MAX", minval=2, group=gY)
+rallyY = input.float(10.0, "Yearly confirmation rally %", minval=0.0, step=0.5, group=gY) / 100.0
+
+gD = "Low detection"
+w        = input.int(5, "Swing pivot width (bars each side) — use ~2-3 on Monthly", minval=1, group=gD)
+useRally = input.bool(true, "Require rally confirmation", group=gD)
+rallyPct = input.float(5.0, "Confirmation rally % (Daily/Weekly)", minval=0.0, step=0.5, group=gD) / 100.0
+
+gR = "Translation (fraction of cycle where the high sits)"
+transLeft  = input.float(0.40, "Left  if high-fraction <", minval=0.0, maxval=1.0, step=0.05, group=gR)
+transRight = input.float(0.60, "Right if high-fraction >", minval=0.0, maxval=1.0, step=0.05, group=gR)
+
+gV = "Display"
+showTable  = input.bool(true, "Show cycle table", group=gV)
+showLabels = input.bool(true, "Label detected lows", group=gV)
+
+// ── Resolve effective degree + window ────────────────────────────────────────
+autoDeg = timeframe.ismonthly ? 3 : timeframe.isweekly ? 2 : 1
+degCode = degMode == "Daily · DCL"   ? 1 :
+          degMode == "Weekly · WCL"  ? 2 :
+          degMode == "Monthly · YCL" ? 3 :
+          degMode == "Manual"        ? 0 :
+          autoDeg
+// per-degree window: auto-tuned per asset, else manual fallback.
+dLo = useAuto ? adLo : winLo
+dHi = useAuto ? adHi : winHi
+wLo = useAuto ? awLo : winLo
+wHi = useAuto ? awHi : winHi
+yLo = useAuto ? ayLo : winLoY
+yHi = useAuto ? ayHi : winHiY
+useYearly = degCode == 3
+winLoEff = useYearly ? yLo : degCode == 2 ? wLo : dLo
+winHiEff = useYearly ? yHi : degCode == 2 ? wHi : dHi
+rallyEff = useYearly ? rallyY : rallyPct
+labelDeg = degCode == 0 ? autoDeg : degCode
+degTxt   = labelDeg == 3 ? "YCL" : labelDeg == 2 ? "WCL" : "DCL"
+
+// ── Swing low detection (UNCHANGED core; window/rally degree+asset-effective) ─
+pl      = ta.pivotlow(low, w, w)
+plBar   = bar_index - w
+hasPivot = not na(pl)
+maxHiSince = ta.highest(high, w)
+confirmed  = not useRally or (hasPivot and pl > 0 and (maxHiSince - pl) / pl >= rallyEff)
+
+// ── Cycle state (streaming low chaining + translation) ──────────────────────
+var int   lastDclBar   = na
+var float lastDclPrice = na
+var int   dclCount     = 0
+var float cycHigh      = na
+var int   cycHighBar   = na
+var int   translation  = na
+
+if not na(lastDclBar) and (na(cycHigh) or high > cycHigh)
+    cycHigh    := high
+    cycHighBar := bar_index
+
+newDcl = false
+int evTrans = na
+if hasPivot and confirmed
+    ageOk = na(lastDclBar) or (plBar - lastDclBar) >= winLoEff
+    if ageOk
+        hbar = cycHighBar[w]
+        if not na(lastDclBar) and not na(hbar)
+            clen = plBar - lastDclBar
+            frac = clen > 0 ? (hbar - lastDclBar) / clen : na
+            translation := na(frac) ? na : frac < transLeft ? -1 : frac > transRight ? 1 : 0
+            evTrans     := translation
+        newDcl       := true
+        lastDclBar   := plBar
+        lastDclPrice := pl
+        dclCount     := dclCount + 1
+        cycHigh      := high
+        cycHighBar   := bar_index
+
+// ── Derived current-cycle metrics ───────────────────────────────────────────
+cycleDay = na(lastDclBar) ? na : (bar_index - lastDclBar)
+wStart = int(winLoEff * 0.9)
+wEnd   = int(winHiEff * 1.1)
+timingCode = na(cycleDay) ? na : cycleDay < wStart ? 0 : cycleDay > wEnd ? 2 : 1
+timingTxt  = na(timingCode) ? "unknown" : timingCode == 0 ? "early" : timingCode == 2 ? "late" : "timing_window"
+cycleFail  = (not na(lastDclPrice) and close < lastDclPrice) ? 1 : 0
+expMid = (winLoEff + winHiEff) / 2.0
+liveFrac = (not na(lastDclBar) and not na(cycHighBar) and expMid > 0) ? (cycHighBar - lastDclBar) / expMid : na
+liveTransTxt = na(liveFrac) ? "—" : liveFrac < transLeft ? "left" : liveFrac > transRight ? "right" : "mid"
+
+// ── Plots (EXPORT to CSV / data-window; read by tv_reader) ───────────────────
+plot(cycleDay,          "cycle_day",   color=color.new(color.teal, 0),  display=display.data_window)
+plot(newDcl ? 1 : 0,    "dcl_event",   color=color.new(color.red, 0),   display=display.data_window, offset=-w)
+plot(newDcl ? pl : na,  "dcl_price",   color=color.new(color.red, 0),   display=display.data_window, offset=-w)
+plot(evTrans,           "translation", color=color.new(color.orange, 0),display=display.data_window, offset=-w)
+plot(timingCode,        "timing_code", color=color.new(color.blue, 0),  display=display.data_window)
+plot(cycleFail,         "cycle_fail",  color=color.new(color.maroon, 0), display=display.data_window)
+plot(labelDeg,          "degree",      color=color.new(color.gray, 0),  display=display.data_window)
+
+// ── Chart markers ───────────────────────────────────────────────────────────
+plotshape(showLabels and newDcl, title="Cycle low", style=shape.triangleup,
+          location=location.belowbar, color=color.new(color.red, 0), size=size.small, offset=-w)
+if showLabels and newDcl
+    label.new(plBar, pl, str.format("{0} #{1}", degTxt, dclCount),
+              style=label.style_label_up, color=color.new(color.red, 20),
+              textcolor=color.white, size=size.small)
+
+// ── Cycle table (read by tv_reader — DO NOT rename rows without updating the parser) ──
+transTxt(int c) => na(c) ? "—" : c == -1 ? "left" : c == 1 ? "right" : "mid"
+tuneTxt = useAuto ? tk : (known ? "manual(override)" : "manual(unknown sym)")
+var table t = table.new(position.top_right, 2, 9, border_width=1)
+if showTable and barstate.islast
+    table.cell(t, 0, 0, "degree", text_color=color.gray, text_size=size.small)
+    table.cell(t, 1, 0, degTxt, text_color=color.aqua, text_size=size.small)
+    table.cell(t, 0, 1, "tuned_for", text_color=color.gray, text_size=size.small)
+    table.cell(t, 1, 1, tuneTxt, text_color=color.white, text_size=size.small)
+    table.cell(t, 0, 2, "cycle_day", text_color=color.gray, text_size=size.small)
+    table.cell(t, 1, 2, str.tostring(cycleDay), text_color=color.white, text_size=size.small)
+    table.cell(t, 0, 3, "timing", text_color=color.gray, text_size=size.small)
+    table.cell(t, 1, 3, timingTxt, text_color=color.white, text_size=size.small)
+    table.cell(t, 0, 4, "expected", text_color=color.gray, text_size=size.small)
+    table.cell(t, 1, 4, str.format("{0}-{1}", winLoEff, winHiEff), text_color=color.white, text_size=size.small)
+    table.cell(t, 0, 5, "translation (curr)", text_color=color.gray, text_size=size.small)
+    table.cell(t, 1, 5, liveTransTxt, text_color=color.white, text_size=size.small)
+    table.cell(t, 0, 6, "translation (last)", text_color=color.gray, text_size=size.small)
+    table.cell(t, 1, 6, transTxt(translation), text_color=color.white, text_size=size.small)
+    table.cell(t, 0, 7, "cycle failure", text_color=color.gray, text_size=size.small)
+    table.cell(t, 1, 7, cycleFail == 1 ? "YES" : "no", text_color=color.white, text_size=size.small)
+    table.cell(t, 0, 8, "last low / #", text_color=color.gray, text_size=size.small)
+    table.cell(t, 1, 8, (na(lastDclPrice) ? "—" : str.tostring(lastDclPrice, format.mintick)) + " / " + str.tostring(dclCount), text_color=color.white, text_size=size.small)
