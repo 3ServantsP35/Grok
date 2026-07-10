@@ -7,7 +7,6 @@ indicator("SRI Calibrated Groups v3.2.2", shorttitle="SRI-CG", overlay=true,
 // ─────────────────────────────────────────────────────────────────────────────
 ticker = syminfo.ticker
 
-// Group assignment (extend as needed)
 var string group = "DEFAULT"
 
 if ticker == "MSTR" or ticker == "TSLA"
@@ -37,7 +36,7 @@ if group == "HIGH_BETA"
     base_loi_threshold := -45.0
     momentum_mult      := 1.15
     vol_adj            := 1.08
-    stage3_discount    := 0.92     // Saylor Event Discount applied
+    stage3_discount    := 0.92
 else if group == "BTC_PROXY"
     base_loi_threshold := -42.0
     momentum_mult      := 1.10
@@ -59,41 +58,35 @@ else if group == "FIXED_INCOME"
     vol_adj            := 0.85
     stage3_discount    := 1.00
 else
-    base_loi_threshold := -40.0   // safe default
+    base_loi_threshold := -40.0
     momentum_mult      := 1.00
     vol_adj            := 1.00
     stage3_discount    := 1.00
 
 // ─────────────────────────────────────────────────────────────────────────────
-// INPUTS (with group-aware defaults)
+// INPUTS (only runtime-safe toggles — threshold is now fully group-driven)
 // ─────────────────────────────────────────────────────────────────────────────
-grp_loi     = "LOI Calibration"
-loi_thresh  = input.float(base_loi_threshold, "Base LOI Threshold", group=grp_loi)
-use_adaptive= input.bool(true, "Use Adaptive LOI (Vol-adjusted)", group=grp_loi)
-
-grp_stage   = "Stage Logic"
-apply_saylor= input.bool(true, "Apply Saylor Event Discount (Stage 3)", group=grp_stage)
+use_adaptive = input.bool(true, "Use Adaptive LOI (Vol-adjusted)")
+apply_saylor = input.bool(true, "Apply Saylor Event Discount (Stage 3)")
 
 // ─────────────────────────────────────────────────────────────────────────────
-// CORE CALCULATION (simplified example — replace with full DOI/LOI logic)
+// CORE CALCULATION
 // ─────────────────────────────────────────────────────────────────────────────
-float raw_loi = ta.rsi(close, 14) - 50   // placeholder — replace with real DOI/LOI calc
+float raw_loi = ta.rsi(close, 14) - 50
 
 float adaptive_loi = use_adaptive ? raw_loi * vol_adj : raw_loi
 float final_loi    = adaptive_loi * momentum_mult
 
-// Stage 3 discount if enabled and in HIGH_BETA group
 float effective_loi = (group == "HIGH_BETA" and apply_saylor) ? final_loi * stage3_discount : final_loi
 
-// Signal
-bool bullish_signal = effective_loi > loi_thresh
-bool bearish_signal = effective_loi < loi_thresh * 0.6
+bool bullish_signal = effective_loi > base_loi_threshold
+bool bearish_signal = effective_loi < base_loi_threshold * 0.6
 
 // ─────────────────────────────────────────────────────────────────────────────
-// VISUALS & INFO
+// VISUALS
 // ─────────────────────────────────────────────────────────────────────────────
 plot(effective_loi, "Effective LOI", color=color.new(color.orange, 0), linewidth=2)
-hline(loi_thresh, "LOI Threshold", color=color.gray, linestyle=hline.style_dashed)
+hline(base_loi_threshold, "LOI Threshold", color=color.gray, linestyle=hline.style_dashed)
 
 bgcolor(bullish_signal ? color.new(color.green, 85) : na)
 bgcolor(bearish_signal ? color.new(color.red, 85) : na)
@@ -104,10 +97,9 @@ table.cell(info, 1, 0, ticker, text_color=color.white)
 table.cell(info, 0, 1, "Group", text_color=color.gray)
 table.cell(info, 1, 1, group, text_color=color.aqua)
 table.cell(info, 0, 2, "LOI Thresh", text_color=color.gray)
-table.cell(info, 1, 2, str.tostring(loi_thresh, "#.00"), text_color=color.white)
+table.cell(info, 1, 2, str.tostring(base_loi_threshold, "#.00"), text_color=color.white)
 table.cell(info, 0, 3, "Effective LOI", text_color=color.gray)
 table.cell(info, 1, 3, str.tostring(effective_loi, "#.00"), text_color=color.orange)
 
-// Alert conditions (example)
 alertcondition(bullish_signal and not bullish_signal[1], "Bullish LOI Cross", "LOI crossed above calibrated threshold")
 alertcondition(bearish_signal and not bearish_signal[1], "Bearish LOI Cross", "LOI crossed below calibrated threshold")
