@@ -1,4 +1,11 @@
-//@version=5
+// SRI Calibrated Groups v3.2.2 — ETF-aware LOI Threshold Engine
+// Auto-detects ticker and applies group-specific calibrated parameters (HIGH_BETA, BTC_PROXY, BROAD_MARKET, SECTOR, FIXED_INCOME, MACRO).
+// Replaces manual input.float with runtime group-driven thresholds to satisfy Pine v6 const requirements.
+// Vol-adaptive multiplier, momentum scaling, and Saylor Event Discount (HIGH_BETA only) included.
+// Threshold line rendered via plot() (hline() rejected runtime values).
+// © RizenShine — Calibrated Groups layer for CIO SRI engine
+
+//@version=6
 indicator("SRI Calibrated Groups v3.2.2", shorttitle="SRI-CG", overlay=true, 
      timeframe="", timeframe_gaps=true, max_bars_back=2000)
 
@@ -83,11 +90,9 @@ bool bullish_signal = effective_loi > base_loi_threshold
 bool bearish_signal = effective_loi < base_loi_threshold * 0.6
 
 // ─────────────────────────────────────────────────────────────────────────────
-// VISUALS — plot() does not support style_dashed; use plain plot for threshold
+// VISUALS
 // ─────────────────────────────────────────────────────────────────────────────
 plot(effective_loi, "Effective LOI", color=color.new(color.orange, 0), linewidth=2)
-
-// Threshold as solid line (dashed style not available on plot() in v5)
 plot(base_loi_threshold, "LOI Threshold", color=color.gray, linewidth=1)
 
 bgcolor(bullish_signal ? color.new(color.green, 85) : na)
