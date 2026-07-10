@@ -6,8 +6,7 @@
 // © RizenShine — Calibrated Groups layer for CIO SRI engine
 
 //@version=6
-indicator("SRI Calibrated Groups v3.2.2", shorttitle="SRI-CG", overlay=true, 
-     timeframe="", timeframe_gaps=true, max_bars_back=2000)
+indicator("SRI Calibrated Groups v3.2.2", shorttitle="SRI-CG", overlay=true, max_bars_back=2000)
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CALIBRATED GROUPS — AUTO-DETECTION
