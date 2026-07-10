@@ -83,10 +83,12 @@ bool bullish_signal = effective_loi > base_loi_threshold
 bool bearish_signal = effective_loi < base_loi_threshold * 0.6
 
 // ─────────────────────────────────────────────────────────────────────────────
-// VISUALS
+// VISUALS — use plot() for threshold line (hline() requires compile-time const)
 // ─────────────────────────────────────────────────────────────────────────────
 plot(effective_loi, "Effective LOI", color=color.new(color.orange, 0), linewidth=2)
-hline(base_loi_threshold, "LOI Threshold", color=color.gray, linestyle=hline.style_dashed)
+
+// Draw threshold as a horizontal plot line (this works with runtime values)
+plot(base_loi_threshold, "LOI Threshold", color=color.gray, linewidth=1, style=plot.style_dashed)
 
 bgcolor(bullish_signal ? color.new(color.green, 85) : na)
 bgcolor(bearish_signal ? color.new(color.red, 85) : na)
