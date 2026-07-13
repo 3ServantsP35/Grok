@@ -1,0 +1,54 @@
+//@version=5
+indicator("AB4 Gate v2 — Window State", overlay=true, max_labels_count=500)
+
+// === INPUTS ===
+len_ma          = input.int(200, "200-Week MA Length", group="AB4 Conditions")
+len_rsi         = input.int(14,  "RSI Length", group="AB4 Conditions")
+rsi_thresh      = input.float(35.0, "RSI Threshold", group="AB4 Conditions")
+slope_len       = input.int(52, "200wMA Slope Lookback (weeks)", group="AB4 Conditions")
+
+show_bg         = input.bool(true, "Show Window Background", group="Visuals")
+show_status     = input.bool(true, "Show Status Label", group="Visuals")
+show_slope      = input.bool(true, "Show 200wMA Slope Pane", group="Visuals")
+
+// === CALCULATIONS ===
+ma200     = ta.sma(close, len_ma)
+rsi       = ta.rsi(close, len_rsi)
+ma200_slope = ta.sma(ma200 - ma200[1], slope_len)   // 52-week slope of the 200wMA
+
+// AB4 Window State
+price_below_ma = close < ma200
+rsi_oversold   = rsi < rsi_thresh
+slope_positive = ma200_slope > 0
+
+ab4_window_open = price_below_ma and rsi_oversold and slope_positive
+
+// === VISUALS ===
+
+// 1. Background highlight when window is open
+bgcolor(show_bg and ab4_window_open ? color.new(color.teal, 85) : na, title="AB4 Window Open")
+
+// 2. Status label
+var label status_lbl = na
+if show_status
+    label.delete(status_lbl)
+    status_text = ab4_window_open ? "AB4 WINDOW OPEN — Phase & Hold" : "AB4 WINDOW CLOSED"
+    status_color = ab4_window_open ? color.teal : color.gray
+    status_lbl := label.new(bar_index, high, status_text, 
+         color=status_color, textcolor=color.white, style=label.style_label_left, size=size.small)
+
+// 3. 200wMA Slope (separate pane for clarity)
+plot(show_slope ? ma200_slope : na, "200wMA 52w Slope", color=ma200_slope > 0 ? color.green : color.red, linewidth=2)
+hline(0, "Zero Line", color=color.gray, linestyle=hline.style_dotted)
+
+// 4. 200wMA (for reference)
+plot(ma200, "200-Week MA", color=color.new(color.orange, 30), linewidth=2)
+
+// === ALERTS (Doctrine-aligned language) ===
+alertcondition(ab4_window_open and not ab4_window_open[1], 
+     title="AB4 Window Opened", 
+     message="AB4 Window Opened — Begin phased deployment on {{ticker}}")
+
+alertcondition(ab4_window_open and ab4_window_open[1], 
+     title="AB4 Window Remains Open", 
+     message="AB4 Window Remains Open — Continue phasing if desired on {{ticker}}")
