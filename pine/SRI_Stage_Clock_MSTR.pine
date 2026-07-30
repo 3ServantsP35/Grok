@@ -1,12 +1,17 @@
-// SRI Stage Clock — MSTR
+// SRI Stage Clock — MSTR   (v2)
 // Two-timeframe stage engine:
 //   BACKDROP  (slow) : your super-long weekly ladder — weekly close vs weekly regression Fit
 //                      (S1) and vs the monthly Slow Trackline (S2 up / S4 down). Paints the epoch.
 //   EARLY-WARN (fast): LT price-vs-SRI decoupling. D = SRIBI_LT bias (3D band / 1D fast / 1W slow);
-//                      T = price position in the SRI_LT 1D reversal band. When price diverges from
-//                      the LT SRI lean, distribution/accumulation has begun (Early); when the LT
-//                      bias then flips to follow price, the turn is Confirmed — all while the weekly
-//                      epoch is still unbroken. Validated on MSTR 2021-11 -> 2026-07.
+//                      T = price position in the SRI_LT 1D reversal band.
+// v2 changes:
+//   * S1 Early guardrail: only fires if price is >= nlMargin above its rolling low (no fresh lows).
+//   * S1 Confirmed re-gated: fires when the WEEKLY reclaims its Fit (epoch S4->S1) after an S1 Early
+//     armed it — kills premature bottom calls during a still-falling market.
+//   * 4-stage shading, dark-mode safe: S4 red / S1 yellow / S2 green / S3 orange. S3 latches on
+//     S3-Confirmed inside markup and UN-latches if price makes a new high (top failed).
+// NOTE: bottom (S1) side is structurally weaker than tops — treat S1 flags as "watch", not "act".
+// Run on a 4H MSTR chart to match the validated warehouse values.
 // © RizenShine — stage-clock build by CIO
 //@version=6
 indicator(title="SRI Stage Clock — MSTR", shorttitle="SRI Stage Clock", overlay=true, max_bars_back=1000)
@@ -22,6 +27,7 @@ wk_mult   = input.float(1.0, "Weekly deviation mult", group=grpB)
 mo_period = input.int(14, "Monthly trackline ATR period", group=grpB)
 mo_coeff  = input.float(1.0, "Monthly trackline coeff", group=grpB)
 show_bg   = input.bool(true, "Shade epoch background", group=grpB)
+transp    = input.int(82, "Shading transparency", minval=50, maxval=95, group=grpB)
 
 grpLT = "LT decoupling (fast early-warning)"
 tf_D_rb   = input.timeframe("3D", "SRIBI band TF", group=grpLT)
@@ -39,7 +45,8 @@ ema_span = input.int(6,    "Smoothing EMA (D & T)", group=grpF)
 d0       = input.float(10.0,"D deadband (bias units)", group=grpF)
 t0       = input.float(0.25,"T deadband (band-widths)", group=grpF)
 kconf    = input.int(3,    "Confirmation bars (Early)", group=grpF)
-recent   = input.int(60,   "Early stays live for Confirm (bars)", group=grpF)
+nl_len   = input.int(30,   "S1 no-new-low lookback (bars)", group=grpF)
+nl_margin= input.float(0.05,"S1 min % above rolling low", group=grpF)
 show_s3  = input.bool(true, "Show S3 (top) flags", group=grpF)
 show_s1  = input.bool(true, "Show S1 (bottom) flags", group=grpF)
 
@@ -94,7 +101,6 @@ float bandp_score = (close > b_fit ? 10.0 : close < b_fit ? -10.0 : 0.0) + (curv
 float ling_score  = (belowC <= 2 ? 5.0 : 0.0) + (aboveC <= 3 ? -5.0 : 0.0)
 float D = color_score + slope_score + cross_score + bandp_score + ling_score
 
-// ─────────── smooth D & T ───────────
 float Ds = ta.ema(D, ema_span)
 float Ts = ta.ema(T, ema_span)
 
@@ -104,9 +110,9 @@ float w_close = request.security(sym, tf_week, close, lookahead=barmerge.lookahe
 float m_slow = request.security(sym, tf_month, f_track(mo_period, mo_coeff), lookahead=barmerge.lookahead_off)
 
 var int epoch = 0
-bool cross_fit_up   = w_close > w_fit  and w_close[1] <= w_fit[1]
-bool cross_slow_up  = w_close > m_slow and w_close[1] <= m_slow[1]
-bool cross_slow_dn  = w_close < m_slow and w_close[1] >= m_slow[1]
+bool cross_fit_up  = w_close > w_fit  and w_close[1] <= w_fit[1]
+bool cross_slow_up = w_close > m_slow and w_close[1] <= m_slow[1]
+bool cross_slow_dn = w_close < m_slow and w_close[1] >= m_slow[1]
 if cross_fit_up and epoch == 0
     epoch := 1
 if cross_slow_up
@@ -115,45 +121,58 @@ if cross_slow_dn and epoch != 0
     epoch := 0
 
 // ─────────── FLAGS ───────────
-// Early = price decoupled from LT SRI lean, gated by the weekly epoch, confirmed kconf bars.
 var int ct = 0
 var int cb = 0
 ct := (Ds > d0 and Ts < -t0) ? ct + 1 : 0
 cb := (Ds < -d0 and Ts > t0) ? cb + 1 : 0
-bool s3_early = show_s3 and epoch == 2 and ct >= kconf
-bool s1_early = show_s1 and epoch == 0 and cb >= kconf
 
+// S3 (tops) — unchanged
 var int last_s3e = -1000000
-var int last_s1e = -1000000
+bool s3_early = show_s3 and epoch == 2 and ct >= kconf
 if s3_early
     last_s3e := bar_index
+bool s3_conf = show_s3 and epoch == 2 and Ds[1] >= 0 and Ds < 0 and (bar_index - last_s3e) <= 60
+
+// S1 (bottoms) — guardrailed
+float roll_low = ta.lowest(low, nl_len)
+bool valid_bottom = close >= nz(roll_low[1]) * (1.0 + nl_margin)
+bool s1_early = show_s1 and epoch == 0 and cb >= kconf and valid_bottom
+var bool s1_armed = false
 if s1_early
-    last_s1e := bar_index
+    s1_armed := true
+bool s1_conf = show_s1 and epoch == 1 and epoch[1] == 0 and s1_armed   // weekly reclaimed Fit, armed
+if s1_conf or epoch == 2
+    s1_armed := false
 
-// Confirmed = LT bias flips through zero (regime turn) after a recent Early, epoch still unbroken.
-bool s3_conf = show_s3 and epoch == 2 and Ds[1] >= 0 and Ds < 0 and (bar_index - last_s3e) <= recent
-bool s1_conf = show_s1 and epoch == 0 and Ds[1] <= 0 and Ds > 0 and (bar_index - last_s1e) <= recent
+// ─────────── 4-STAGE SHADING ───────────
+var bool s3lat = false
+var float s3ref = 0.0
+if epoch == 0
+    s3lat := false
+if s3lat and close > s3ref
+    s3lat := false
+if s3_conf
+    s3lat := true
+    s3ref := ta.highest(high, 20)
+int disp = (epoch == 2 and s3lat) ? 3 : epoch
+color cc = disp == 0 ? color.new(color.red, transp) : disp == 1 ? color.new(color.yellow, transp) : disp == 2 ? color.new(color.green, transp) : color.new(color.orange, transp)
+bgcolor(show_bg ? cc : na, title="Stage")
 
-// ─────────── RENDER ───────────
-color cS4 = color.new(color.red,   88)
-color cS1 = color.new(color.green, 88)
-color cS2 = color.new(color.blue,  90)
-bgcolor(show_bg ? (epoch == 0 ? cS4 : epoch == 1 ? cS1 : cS2) : na, title="Epoch")
-
+// ─────────── FLAG MARKERS ───────────
 plotshape(s3_early, "S3 Early",     style=shape.triangledown, location=location.abovebar, color=color.new(color.fuchsia,0), size=size.tiny)
-plotshape(s3_conf,  "S3 Confirmed", style=shape.triangledown, location=location.abovebar, color=color.new(color.purple,0),  size=size.small)
+plotshape(s3_conf,  "S3 Confirmed", style=shape.triangledown, location=location.abovebar, color=color.new(color.maroon,0),  size=size.small)
 plotshape(s1_early, "S1 Early",     style=shape.triangleup,   location=location.belowbar, color=color.new(color.teal,0),    size=size.tiny)
-plotshape(s1_conf,  "S1 Confirmed", style=shape.triangleup,   location=location.belowbar, color=color.new(color.aqua,0),    size=size.small)
+plotshape(s1_conf,  "S1 Confirmed", style=shape.triangleup,   location=location.belowbar, color=color.new(color.blue,0),    size=size.small)
 
 // epoch label on last bar
 var label lab = na
 if barstate.islast
     label.delete(lab)
-    string es = epoch == 0 ? "S4 markdown" : epoch == 1 ? "S1 basing" : "S2 markup"
-    lab := label.new(bar_index, high, "Epoch: " + es, style=label.style_label_down, color=color.new(color.gray,20), textcolor=color.white, size=size.small)
+    string es = disp == 0 ? "S4 markdown" : disp == 1 ? "S1 basing" : disp == 2 ? "S2 markup" : "S3 topping"
+    lab := label.new(bar_index, high, "Stage: " + es, style=label.style_label_down, color=color.new(color.gray,20), textcolor=color.white, size=size.small)
 
 // ─────────── ALERTS ───────────
 alertcondition(s3_early, "S3 Early (distribution begun)", "MSTR S3 Early: price decoupling below LT SRI inside weekly markup.")
 alertcondition(s3_conf,  "S3 Confirmed (top in)",         "MSTR S3 Confirmed: LT SRI bias flipped bearish inside weekly markup.")
-alertcondition(s1_early, "S1 Early (accumulation begun)", "MSTR S1 Early: price holding above LT SRI inside weekly markdown.")
-alertcondition(s1_conf,  "S1 Confirmed (bottom in)",      "MSTR S1 Confirmed: LT SRI bias flipped bullish inside weekly markdown.")
+alertcondition(s1_early, "S1 Early (accumulation watch)", "MSTR S1 Early: price holding above LT SRI inside weekly markdown (watch).")
+alertcondition(s1_conf,  "S1 Confirmed (weekly reclaim)", "MSTR S1 Confirmed: weekly reclaimed its Fit after an S1 Early.")
