@@ -4,6 +4,9 @@
 **Date:** 2026-08-09
 **Status:** **REFERENCE DOCUMENT — no build authorized.** Captures the architecture as specified
 2026-08-09. Nothing in §9 is a work order.
+**Rev 2 (2026-08-09):** direction endorsed by Gavin. §7.2 replaced with measured ORATS data +
+IV-sensitivity analysis; §7.4/§5.1 capital-structure monitoring elevated to a hard requirement;
+§7.5 All-Weather given a specified behavioral check; §10.7 and §11.5 added.
 **Source:** Gavin's allocation table (private Google Sheet, single tab), read 2026-08-09 after three
 in-session revisions.
 **Supersedes in scope:** most of `briefs/`-adjacent work queued under the Grok Proposal
@@ -188,8 +191,10 @@ liquidity layer *is* the decoupling test failing. The confirmation mechanism of 
 decoupling monitor are **the same instrument read at two horizons** — short disagreement means low
 confidence; sustained disagreement means the baseline assumption is failing. One build serves both.
 
-**The monitor must watch capital structure, not only price correlation.** MSTR's stage is driven by
-BTC *and* by its own capital structure (mNAV, convert issuance, the preferred stack). See §7.4.
+**The monitor MUST watch capital structure, not only price correlation** — mNAV, convert issuance,
+the preferred stack. Elevated to a hard requirement by Gavin 2026-08-09 ("correct and
+non-negotiable"). MSTR can print a stage for reasons that have nothing to do with global liquidity,
+and price correlation alone will not separate those cases. See §7.4.
 
 ### 5.2 "The liquidity cycle is four years"
 
@@ -240,18 +245,53 @@ across the year that produces essentially all of the appreciation.
 S1→S2 transition, not spread evenly across all four boundaries. This is where the super-long-timeframe
 SRI should be pointed first.
 
-### 7.2 The 4% S1 yield implies near-ATM writing on essentially the whole MSTR sleeve
+### 7.2 The 4% S1 yield is achievable at current IV, with essentially no margin
 
-Approximate arithmetic at S1 weights. If Gold + BIGY & STRC + ALLW + Cash contribute roughly
-0.25–0.3%/mo combined, and Visser's XLK calls roughly 1–1.5%/mo, then MSTR must produce
-**~8–9%/mo** to clear 4% at the portfolio level.
+**Measured against live ORATS data** (snapshot 2026-08-07 21:00 UTC; MSTR spot $100.02;
+surface IV ≈ 0.71). Call premium as % of spot:
 
-MSTR's implied volatility can support that — but only at or very near the money, on the full
-position, with frequent assignment. That is internally consistent with S1 being flat, and the
-posture is defensible on its own terms. But it means that entering S2 late leaves the book **fully**
-capped, not partially. **This compounds §7.1 rather than sitting beside it.**
+| Strike | 28 DTE | 35 DTE | Delta (35d) |
+|---|---:|---:|---:|
+| 100 (ATM) | 7.93% | **8.86%** | 0.547 |
+| 105 (+5%) | 5.85% | 6.83% | 0.460 |
+| 110 (+10%) | 4.32% | 5.15% | 0.380 |
 
-Reconcile the 4/2/3/2 row against `briefs/pmcc-findings-v1.md` before the numbers harden.
+At S1 weights the other sleeves contribute roughly **0.51%/mo** to the portfolio (Visser ~1.25%,
+Gold ~1%, BIGY & STRC ~1%, ALLW ~0.25%, cash ~0.35%, at their respective weights). Clearing 4%
+therefore requires **~8.7%/mo from the MSTR sleeve**.
+
+**8.7% required vs. 8.86% available at 35-DTE ATM.** The target is not merely "aggressive" — it is
+calibrated to full at-the-money writing on essentially the entire sleeve, at ~35 days, with roughly
+2% headroom. Writing 5% OTM instead yields 6.83%, which drops the portfolio to ~3.2%/mo.
+
+**Delta consequence:** ATM delta is 0.547, so the sleeve retains only ~45% of MSTR's upside at all
+times while the program runs. In S1 that is the intended trade. But it means the book is already
+half-capped continuously, *before* any late-S2 error — so §7.1 compounds from a worse starting
+point than originally stated.
+
+**IV sensitivity — the structural tension.** Near-ATM IV (delta 0.45–0.60, 21–42 DTE) across the
+full ORATS history:
+
+| | Feb | Mar | Apr | May | Jun | Jul | Aug |
+|---|---|---|---|---|---|---|---|
+| avg IV | 0.79 | 0.73 | 0.73 | **0.67** | 0.82 | 0.87 | 0.73 |
+| range | .69–.91 | .65–.90 | .64–.88 | **.50**–.79 | .65–**1.18** | .60–1.09 | .62–.80 |
+
+Premium scales roughly with IV, so the achievable portfolio yield maps to:
+
+- **IV 0.50** (observed floor) → ~6.3% ATM → **~3.0%/mo** — misses by a quarter
+- **IV 0.71** (current) → 8.86% → **~4.05%/mo** — clears
+- **IV 0.87** (July avg) → ~10.9% → **~4.9%/mo** — comfortable
+
+**Hypothesis, NOT a finding:** S1 is defined as the flat, basing stage, and flat regimes typically
+compress IV. If that holds for MSTR, the income target is highest in exactly the stage where the
+premium funding it is thinnest. **This is currently untestable** — ORATS history begins 2026-02-20,
+six months, spanning at most one stage. Per E1/E2/E4 it is recorded as an open question (§10.7),
+not asserted. What the data *does* establish: a 2:1 IV range inside six months moves achievable
+yield from 3.0% to 4.9%, so the 4% carries real sensitivity regardless.
+
+Still worth reconciling the full 4/2/3/2 row against `briefs/pmcc-findings-v1.md` before the
+numbers harden; only the S1 leg has been measured here.
 
 ### 7.3 The known S1 ladder defect maps onto the most expensive available error
 
@@ -272,8 +312,11 @@ the diversifier is correlated to the thing it is diversifying against, specifica
 that matters (an MSTR credit event). That is also precisely the scenario the §5.1 decoupling
 assumption exists to monitor.
 
-**The decoupling monitor should therefore watch the STRC leg and MSTR capital structure, not only
-price correlation.** (BIGY's composition is unconfirmed — §10.4.)
+**REQUIREMENT (Gavin, 2026-08-09 — "correct and non-negotiable"): the decoupling monitor must
+watch MSTR capital structure — mNAV, the preferred stack, convert dynamics — and the STRC leg, not
+only price correlation.** MSTR can print a stage for reasons that have nothing to do with global
+liquidity, and price correlation alone will not distinguish those. (BIGY's composition is
+unconfirmed — §10.4.)
 
 ### 7.5 All Weather is the largest defensive allocation and the least analytically supported
 
@@ -282,8 +325,16 @@ no warehouse coverage — and the redefinition (§8.3) removes sector rotation t
 The largest allocation in the stages where capital preservation matters most would run on
 essentially no signal.
 
-That may be a deliberate choice — ballast should not be over-engineered — but it should be recorded
-as a decision rather than left as a gap.
+**Specified minimum (Gavin, 2026-08-09):** ballast should not be over-engineered, but the sleeve
+needs a *behavioral* check — "is the defensive sleeve still behaving like a defensive sleeve?" This
+is a test, not a forecasting model, and requires no new indicators:
+
+1. **Rolling correlation** of the All-Weather sleeve to the MSTR sleeve — expected low or negative.
+2. **Drawdown participation** — during MSTR drawdowns, does All Weather hold up, or come along?
+
+**This check and the §7.4 capital-structure monitor are largely the same instrument**, because STRC
+sits inside All Weather. Strategy preferred behaving like Strategy equity rather than like ballast
+*is* the credit-event signature. One test covers both, and it fails loudly rather than silently.
 
 ### 7.6 This descopes Visser
 
@@ -370,6 +421,11 @@ rather than an optional cleanup.
    enabler. The warehouse is 4H and indicators accumulate forward only, so a very long timeframe will
    have few closed observations — the same n-problem that rendered VST unusable at 87 bars. Its actual
    observation count must be established before it is leaned on.
+7. **Does MSTR's IV systematically compress in S1?** If it does, the 4%/mo target is highest in the
+   stage where the funding premium is thinnest (§7.2). Not answerable today — ORATS history begins
+   2026-02-20 and spans at most one stage. Becomes testable by joining IV history to stage labels
+   once enough stage transitions are on record. Until then the 4% should be treated as
+   IV-regime-dependent, not fixed.
 
 ---
 
@@ -383,7 +439,10 @@ rather than an optional cleanup.
    confidence model (§4.1) and the decoupling monitor (§5.1).
 3. **Fix the S1 ladder defect** (§7.3) — ship-blocker.
 4. **Establish the super-long-timeframe SRI's observation count** (§10.6) before designing around it.
-5. **Reconcile the 4/2/3/2 yield row against `pmcc-findings-v1.md`** (§7.2).
+5. **Build the All-Weather behavioral check** (§7.5) — cheapest item on this list, needs no new
+   indicators, and doubles as the STRC leg of the capital-structure monitor (§7.4).
+6. **Reconcile the remaining 2/3/2 legs against `pmcc-findings-v1.md`** — the S1 leg is measured
+   (§7.2); S2–S4 are not.
 
 ---
 
