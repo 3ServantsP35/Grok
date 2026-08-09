@@ -7,6 +7,8 @@
 **Rev 2 (2026-08-09):** direction endorsed by Gavin. §7.2 replaced with measured ORATS data +
 IV-sensitivity analysis; §7.4/§5.1 capital-structure monitoring elevated to a hard requirement;
 §7.5 All-Weather given a specified behavioral check; §10.7 and §11.5 added.
+**Rev 3 (2026-08-09):** the yield row is a **directional and relative** target across stages, not
+an absolute figure or a range (§2, §7.2, §10.7). Adds the target-delta-ladder consequence.
 **Source:** Gavin's allocation table (private Google Sheet, single tab), read 2026-08-09 after three
 in-session revisions.
 **Supersedes in scope:** most of `briefs/`-adjacent work queued under the Grok Proposal
@@ -71,6 +73,11 @@ prescription against a compounded base, not a different strategy.
 |---|---:|---:|---:|---:|
 | Stage Yr Appr (annual) | 0% | 100% | 10% | 0% |
 | Stage Mo Yield (monthly) | 4% | 2% | 3% | 2% |
+
+**Read the yield row as directional and relative, not absolute** (Gavin, 2026-08-09). What it
+encodes is call-writing intensity *across stages* — **S1 = 2× S2, S3 = 1.5× S2, S4 = 1× S2** — not
+a forecast of realized income. The ratios are the specification; the absolute yield floats with the
+volatility regime (§7.2).
 
 Income is computed on the **running balance**, so a full cycle compounds the base by
 1.0 × 2.0 × 1.1 = **2.2×**, which is exactly the ratio between the first and second block's
@@ -290,6 +297,18 @@ six months, spanning at most one stage. Per E1/E2/E4 it is recorded as an open q
 not asserted. What the data *does* establish: a 2:1 IV range inside six months moves achievable
 yield from 3.0% to 4.9%, so the 4% carries real sensitivity regardless.
 
+**How to hold these numbers (Gavin, 2026-08-09): the yield row is a directional and relative
+target, not a range to quote.** The specification is the ratio across stages — S1 writes twice as
+hard as S2, S3 one and a half times — and realized income floats with the volatility regime. This
+is the more robust reading: the *ratio* survives an IV regime change, the absolute 4% does not.
+
+**Operational consequence.** A relative target does not express naturally as a %/mo, because that
+number is not stable across regimes. It expresses naturally as a **target-delta ladder** — write
+the ~0.55-delta call in S1, back off to a far-OTM strike in S2, ~0.40 in S3, ~0.30 in S4. Target
+delta is a stable instruction across IV regimes; "the strike that yields 4%" is not. This is the
+most likely answer to §10.2 (whether the system prescribes the overlay), and it should be
+calibrated before any overlay guidance is generated.
+
 Still worth reconciling the full 4/2/3/2 row against `briefs/pmcc-findings-v1.md` before the
 numbers harden; only the S1 leg has been measured here.
 
@@ -424,8 +443,10 @@ rather than an optional cleanup.
 7. **Does MSTR's IV systematically compress in S1?** If it does, the 4%/mo target is highest in the
    stage where the funding premium is thinnest (§7.2). Not answerable today — ORATS history begins
    2026-02-20 and spans at most one stage. Becomes testable by joining IV history to stage labels
-   once enough stage transitions are on record. Until then the 4% should be treated as
-   IV-regime-dependent, not fixed.
+   once enough stage transitions are on record. Note this does not undermine the prescription:
+   because the yield row is directional and relative (§2, §7.2), IV compression in S1 lowers
+   realized income without changing the instruction to write hardest there. It matters for
+   expectation-setting, not for posture.
 
 ---
 
