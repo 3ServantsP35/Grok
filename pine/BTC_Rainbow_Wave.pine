@@ -1,0 +1,617 @@
+//@version=6
+indicator(title = 'Bitcoin Rainbow Wave', overlay = true, max_lines_count = 500, max_labels_count = 500)
+// @leoum x.com@leomathheart
+// This script displays the Bitcoin Rainbow chart based on a Power Law model,
+// an oscillating Wave model derived from it, Halving/Fibonacci time markers,
+// optional 'No Miss Zones', and an optional price line colored by the Rainbow zone.
+
+// ==========================================================
+// --- INPUT OPTIONS ---
+// ==========================================================
+
+// Group: Rainbow chart and PL
+s11 = input.bool(true ,'Show Power Law (PL)' , inline = 'Power_Law'    , group = 'Rainbow chart and PL', tooltip = "Show the main Power Law trend line (Logarithmic Regression).")
+s12 = input.bool(true ,'Show Rainbow bands'  , inline = 'Rainbow_bands', group = 'Rainbow chart and PL', tooltip = "Show the main upper and lower bands of the Rainbow chart.")
+s13 = input.bool(false,'Show Fair value zone', inline = 'Fair_rainbow' , group = 'Rainbow chart and PL', tooltip = "Show the bands indicating the 'Fair Value' zone around the Power Law line.")
+s14 = input.bool(true ,'Show Minor lines'    , inline = 'Minor_lines'  , group = 'Rainbow chart and PL', tooltip = "Show all intermediate lines creating the full Rainbow effect.")
+s15 = input.bool(false,'Show Rainbow chart'  , inline = 'Rainbow_chart', group = 'Rainbow chart and PL', tooltip = "Show the color fills between the Rainbow chart lines.")
+
+// Group: Rainbow Wave chart
+s21 = input.bool(true ,'Show Wave line'      , inline = 'Wave_line'     , group = 'Rainbow Wave chart', tooltip = "Show the main oscillating Wave line.")
+s22 = input.bool(true ,'Show Wave bands'     , inline = 'Wave_bands'    , group = 'Rainbow Wave chart', tooltip = "Show the upper and lower bands for the Wave.")
+s23 = input.bool(true ,'Show Fair value zone', inline = 'Fair_wave'     , group = 'Rainbow Wave chart', tooltip = "Show the 'Fair Value' zone around the Wave line.")
+s24 = input.bool(false,'Show Rainbow Wave'   , inline = 'Rainbow_wave'  , group = 'Rainbow Wave chart', tooltip = "Show the color fills between the Wave chart lines.")
+s25 = input.bool(true ,'Miners profitability floor' , inline = 'Miners_profitability', group = 'Rainbow Wave chart', tooltip = "Apply correction to the lower Wave bands to prevent them from going unrealistically low, simulating miner price support.")
+
+// Group: Extra Marks
+s31 = input.bool(true ,'Show Halvings and time fibs' , inline = 'Halvings_marks', group = 'Extra Marks', tooltip = "Show vertical lines at Halving dates and key Fibonacci time retracements between them.")
+s32 = input.bool(false,'Show 25%,50%,75% of Halvings', inline = '25%_marks'     , group = 'Extra Marks', tooltip = "Specifically show/hide the dashed vertical lines marking the 25%, 50%, 75% points between halvings.")
+s36 = input.bool(false,'Show No Miss Zones'          , inline = 'No_Miss_zones' , group = 'Extra Marks', tooltip = "Show the calculated 'No Miss Zones' based on combined Rainbow and Wave logic.")
+s_price_line_color = input.bool(true, title="Color Price Line by Rainbow Zone"  , group = 'Extra Marks', tooltip = "Colors the price line based on the rainbow zone. For best results, hide the main chart symbol.")
+Color_price_line_width = input.int(5, 'Width of the colorful price line', inline = 'Width of the line', group = 'Extra Marks', minval=1, tooltip="Width for the colored price line.")
+
+// Group: Future projection
+futureBars = input.int(690, '# of future bars', inline = 'Number of future bars', group = 'Future projection', tooltip = 'Number of bars to project into the future. Recommended values depend on timeframe: 1H-4H<4500, D<3300, W<690, 2W<350, M<180, 2M-3M<60')
+
+// ==========================================================
+// --- HALVING TIME CALCULATIONS ---
+// ==========================================================
+
+// --- Historical Halving Timestamps ---
+// Timestamps represent the exact time of the halving block or quarter-cycle block.
+H000 = timestamp(2009, 01, 03, 18, 15, 05) // Block           0.The Genesis block (h=0.00)
+H0116= timestamp(2009, 10, 05, 15, 41, 28) // Block      24 400 (h=0.116)
+H025 = timestamp(2010, 04, 22, 12, 15, 34) // Block      52 500 (h=0.25)
+H050 = timestamp(2011, 01, 28, 10, 41, 47) // Block     105 000 (h=0.50)
+H075 = timestamp(2011, 12, 14, 16, 24, 37) // Block     157 500 (h=0.75)
+H100 = timestamp(2012, 11, 28, 16, 24, 38) // Block     210 000.Halving 1 block (h=1.00)
+H125 = timestamp(2013, 10, 09, 05, 28, 22) // Block     262 500 (h=1.25)
+H150 = timestamp(2014, 08, 11, 05, 06, 05) // Block     315 000 (h=1.50)
+H175 = timestamp(2015, 07, 29, 15, 45, 38) // Block     367 500 (h=1.75)
+H200 = timestamp(2016, 07, 09, 18, 46, 13) // Block     420 000.Halving 2 block (h=2.00)
+H225 = timestamp(2017, 06, 23, 07, 43, 51) // Block     472 500 (h=2.25)
+H250 = timestamp(2018, 05, 29, 22, 24, 42) // Block     525 000 (h=2.50)
+H275 = timestamp(2019, 05, 24, 05, 37, 41) // Block     577 500 (h=2.75)
+H300 = timestamp(2020, 05, 11, 21, 23, 43) // Block     630 000.Halving 3 block (h=3.00)
+H325 = timestamp(2021, 05, 08, 05, 20, 11) // Block     682 500 (h=3.25)
+H350 = timestamp(2022, 05, 05, 12, 23, 33) // Block     735 000 (h=3.50)
+H375 = timestamp(2023, 04, 29, 17, 06, 18) // Block     787 500 (h=3.75)
+H400 = timestamp(2024, 04, 20, 02, 09, 27) // Block     840 000.Halving 4 block (h=4.00)
+H425 = timestamp(2025, 04, 15, 08, 16, 12) // Block     892 500 (h=4.25)
+
+// --- Estimated Halving Cycle Durations (ms per 210k blocks) ---
+// Estimated based on time observed over specific block intervals (historical data).
+halving_dur_after_h000 = (H0116 - H000) /  0.116         // Estimated from Block 0 -> 24.4k (0.116 cycles)
+halving_dur_after_h0116= (H025 - H0116) / (0.25 - 0.116) // Estimated from Block 24.4k -> 52.5k
+halving_dur_after_h025 = (H050 - H025 ) * 4              // Estimated from Block 52.5k -> 105k (0.25 cycles)
+halving_dur_after_h050 = (H075 - H050 ) * 4              // Estimated from Block 105k -> 157.5k (0.25 cycles)
+halving_dur_after_h075 = (H100 - H075 ) * 4              // Estimated from Block 157.5k -> 210k (0.25 cycles)
+halving_dur_after_h100 = (H125 - H100 ) * 4              // Estimated from Block 210k -> 262.5k (0.25 cycles)
+halving_dur_after_h125 = (H150 - H125 ) * 4              // Estimated from Block 262.5k -> 315k (0.25 cycles)
+halving_dur_after_h150 = (H175 - H150 ) * 4              // Estimated from Block 315k -> 367.5k (0.25 cycles)
+halving_dur_after_h175 = (H200 - H175 ) * 4              // Estimated from Block 367.5k -> 420k (0.25 cycles)
+halving_dur_after_h200 = (H225 - H200 ) * 4              // Estimated from Block 420k -> 472.5k (0.25 cycles)
+halving_dur_after_h225 = (H250 - H225 ) * 4              // Estimated from Block 472.5k -> 525k (0.25 cycles)
+halving_dur_after_h250 = (H275 - H250 ) * 4              // Estimated from Block 525k -> 577.5k (0.25 cycles)
+halving_dur_after_h275 = (H300 - H275 ) * 4              // Estimated from Block 577.5k -> 630k (0.25 cycles)
+halving_dur_after_h300 = (H325 - H300 ) * 4              // Estimated from Block 630k -> 682.5k (0.25 cycles)
+halving_dur_after_h325 = (H350 - H325 ) * 4              // Estimated from Block 682.5k -> 735k (0.25 cycles)
+halving_dur_after_h350 = (H375 - H350 ) * 4              // Estimated from Block 735k -> 787.5k (0.25 cycles)
+halving_dur_after_h375 = (H400 - H375 ) * 4              // Estimated from Block 787.5k -> 840k (0.25 cycles)
+halving_dur_after_h400 = (H425 - H400 ) * 4              // Estimated from Block 840k -> 892.5k (0.25 cycles)
+halving_dur_after_h425 = (H425 - H325 )                  // Keep H3.25->H4.25 duration for FUTURE H date estimation
+
+// --- Future Halving Event Estimations ---
+// Based on the estimated duration of the H3.25 -> H4.25 cycle (halving_dur_after_h425)
+future_interval_52k  = float(halving_dur_after_h425) / 4.0 // Est. duration for 52.5k blocks (1/4 cycle)
+future_interval_105k = float(halving_dur_after_h425) / 2.0 // Est. duration for 105k  blocks (1/2 cycle)
+
+H450 = H425 + int(future_interval_52k ) // h=4.50, Block 945k
+H475 = H450 + int(future_interval_52k ) // h=4.75, Block 997.5k
+H500 = H475 + int(future_interval_52k ) // h=5.00, Block 1050k (Halving 5 Approx)
+H525 = H500 + int(future_interval_52k ) // h=5.25, Block 1102.5k
+H550 = H525 + int(future_interval_52k ) // h=5.50, Block 1155k
+H575 = H550 + int(future_interval_52k ) // h=5.75, Block 1207.5k
+H600 = H575 + int(future_interval_52k ) // h=6.00, Block 1260k (Halving 6 Approx)
+H650 = H600 + int(future_interval_105k) // h=6.50, Block 1365k
+H700 = H650 + int(future_interval_105k) // h=7.00, Block 1470k (Halving 7 Approx)
+
+// Converts current bar's time ('time') into fractional halving cycles passed (h = block_height / 210 000).
+// Uses the estimated/measured cycle duration for the corresponding historical period.
+// --- Calculate 'h' (Halving Cycle Progress) --- [ FULLY EXPANDED LOGIC ]
+h = if time >= H425
+    4.25  + (time - H425 ) / halving_dur_after_h425  // Use H3.25->H4.25 as future estimate
+else if time >= H400
+    4.00  + (time - H400 ) / halving_dur_after_h400  // Use H4.00->H4.25 estimate
+else if time >= H375
+    3.75  + (time - H375 ) / halving_dur_after_h375  // Use H3.75->H4.00 estimate
+else if time >= H350
+    3.50  + (time - H350 ) / halving_dur_after_h350  // Use H3.50->H3.75 estimate
+else if time >= H325
+    3.25  + (time - H325 ) / halving_dur_after_h325  // Use H3.25->H3.50 estimate
+else if time >= H300
+    3.00  + (time - H300 ) / halving_dur_after_h300  // Use H3.00->H3.25 estimate
+else if time >= H275
+    2.75  + (time - H275 ) / halving_dur_after_h275  // Use H2.75->H3.00 estimate
+else if time >= H250
+    2.50  + (time - H250 ) / halving_dur_after_h250  // Use H2.50->H2.75 estimate
+else if time >= H225
+    2.25  + (time - H225 ) / halving_dur_after_h225  // Use H2.25->H2.50 estimate
+else if time >= H200
+    2.00  + (time - H200 ) / halving_dur_after_h200  // Use H2.00->H2.25 estimate
+else if time >= H175
+    1.75  + (time - H175 ) / halving_dur_after_h175  // Use H1.75->H2.00 estimate
+else if time >= H150
+    1.50  + (time - H150 ) / halving_dur_after_h150  // Use H1.50->H1.75 estimate
+else if time >= H125
+    1.25  + (time - H125 ) / halving_dur_after_h125  // Use H1.25->H1.50 estimate
+else if time >= H100
+    1.00  + (time - H100 ) / halving_dur_after_h100  // Use H1.00->H1.25 estimate
+else if time >= H075
+    0.75  + (time - H075 ) / halving_dur_after_h075  // Use H0.75->H1.00 estimate
+else if time >= H050
+    0.50  + (time - H050 ) / halving_dur_after_h050  // Use H0.50->H0.75 estimate
+else if time >= H025
+    0.25  + (time - H025 ) / halving_dur_after_h025  // Use H0.25->H0.50 estimate
+else // Before H0.25
+    0.116 + (time - H0116) / halving_dur_after_h0116 // Use H0.116->H0.25 estimate
+
+
+// ==========================================================
+// --- MODEL PARAMETERS & CORE CALCULATIONS ---
+// ==========================================================
+
+// Logarithmic regression (Power Law) model parameters
+a = 1.47 // Intercept (a)
+b = 5.38 // Slope (b)
+
+// Pre-calculate mathematical constants
+TWO_PI         = 2   * math.pi
+FIVE_SIXTHS    = 5.0 / 6.0
+FIVE_TWELFTHS  = 5.0 / 12.0
+ONE_TWELFTH    = 1.0 / 12.0
+
+// Calculate h-dependent model values
+float decay_base = 0.79                        // Base for decay calculation
+decay            = math.pow(decay_base, h + 1) // Exponential decay factor, determines band width reduction over time
+decay_div_3      = decay / 3.0                 // Pre-calculate for rainbow band spacing
+
+// Non-linear time shift ("Ignorance Lag") - models the delay in market reaction after halvings
+delay = if h < 3.28
+    0.025 + math.pow(0.3, h - 0.05) * (1.05 + math.cos(2.5 * (h + 0.15)))
+else
+    0.025
+
+// Calculate sine and cosine based on delayed 'h' - drives the wave oscillation
+h_delayed = h - delay
+sin       = math.sin(TWO_PI * h_delayed)
+cos       = math.cos(TWO_PI * h_delayed)
+
+// Calculate Power Law Trend value (central tendency of the Rainbow Chart)
+BTC_t = math.pow(10, a + b * math.log10(h)) // Power Law past
+
+// ==========================================================
+// --- FUTURE PROJECTION CALCULATIONS ---
+// ==========================================================
+
+// Current date cutoff for future fills ('fh') - fraction of the current/future cycle completed by 'now'
+fh = 4.25 + (timenow - H425) / halving_dur_after_h425
+
+// Future 'h' value ('he') - projected 'h' based on user input 'futureBars'
+he = 4.25 + (time - H425 + futureBars * timeframe.in_seconds() * 1000) / halving_dur_after_h425
+
+// Calculate future decay factor
+decaye       = math.pow(decay_base, he + 1)
+decaye_div_3 = decaye / 3.0 // Pre-calculate for future rainbow bands
+
+// Simplified future delay and corresponding sine/cosine for future projection
+delaye       = 0.025
+he_delayed   = he - delaye
+sine         = math.sin(TWO_PI * he_delayed)
+cose         = math.cos(TWO_PI * he_delayed)
+
+// Calculate future Power Law Trend value
+BTC_te       = math.pow(10, a + b * math.log10(he)) // Power Law projection
+
+// Condition for filling future areas (check if projected time 'he' is beyond current time 'fh')
+bool fillConditionFuture = he > fh
+
+// ==========================================================
+// --- CALCULATE INTERMEDIATE INDICATOR VALUES ---
+// ==========================================================
+
+// --- Combine common input conditions for plotting visibility ---
+// These help make the plot() calls cleaner by pre-calculating show conditions
+show_PL_Fair_Minor_Chart = s11 or s13 or s14 or s15 // For t0, t0e
+show_Bands_Minor_Chart   = s12 or s14 or s15        // For t_3, t5, t_3e, t5e
+show_Fair_Minor_Chart    = s13 or s14 or s15        // For t_2, t_1, t1, t2 and their _e versions
+show_Minor_Chart         = s14 or s15               // For t3, t4, t3e, t4e
+show_Wave_Bands_Full     = s22 or s24               // Potential use for wl_2, wl_2e conditions
+show_Wave_Fair_Full      = s23 or s24               // Potential use for wl_1, wl1 conditions
+
+// --- Define conditions for calculating tVal values ---
+// Past values needed if any past lines are shown OR if price line coloring is enabled
+needs_past_tVal_calc   = s11 or s12 or s13 or s14 or s15 or s36 or s_price_line_color
+// Future values needed only if any future lines are shown (any s11-s15 option)
+needs_future_tVal_calc = s11 or s12 or s13 or s14 or s15 or s36
+
+// --- Declare tVal variables using var ---
+// Stores the calculated numerical values of the rainbow bands
+var float tVal_3  = na, var float tVal_2  = na, var float tVal_1  = na, var float tVal0  = na
+var float tVal1   = na, var float tVal2   = na, var float tVal3   = na, var float tVal4  = na, var float tVal5  = na
+var float tVal_3e = na, var float tVal_2e = na, var float tVal_1e = na, var float tVal0e = na
+var float tVal1e  = na, var float tVal2e  = na, var float tVal3e  = na, var float tVal4e = na, var float tVal5e = na
+
+// --- Calculate PL/Rainbow band VALUES ---
+// Calculate past/present values conditionally
+if needs_past_tVal_calc
+    tVal_3 := not na(BTC_t) ? BTC_t * math.pow(10, -3 * decay_div_3) : na
+    tVal_2 := not na(BTC_t) ? BTC_t * math.pow(10, -2 * decay_div_3) : na
+    tVal_1 := not na(BTC_t) ? BTC_t * math.pow(10, -1 * decay_div_3) : na
+    tVal0  := not na(BTC_t) ? BTC_t                                  : na
+    tVal1  := not na(BTC_t) ? BTC_t * math.pow(10, +1 * decay_div_3) : na
+    tVal2  := not na(BTC_t) ? BTC_t * math.pow(10, +2 * decay_div_3) : na
+    tVal3  := not na(BTC_t) ? BTC_t * math.pow(10, +3 * decay_div_3) : na
+    tVal4  := not na(BTC_t) ? BTC_t * math.pow(10, +4 * decay_div_3) : na
+    tVal5  := not na(BTC_t) ? BTC_t * math.pow(10, +5 * decay_div_3) : na
+
+// Calculate Future PL/Rainbow band VALUES conditionally
+if needs_future_tVal_calc
+    tVal_3e := not na(BTC_te) ? BTC_te * math.pow(10, -3 * decaye_div_3) : na
+    tVal_2e := not na(BTC_te) ? BTC_te * math.pow(10, -2 * decaye_div_3) : na
+    tVal_1e := not na(BTC_te) ? BTC_te * math.pow(10, -1 * decaye_div_3) : na
+    tVal0e  := not na(BTC_te) ? BTC_te                                   : na
+    tVal1e  := not na(BTC_te) ? BTC_te * math.pow(10, +1 * decaye_div_3) : na
+    tVal2e  := not na(BTC_te) ? BTC_te * math.pow(10, +2 * decaye_div_3) : na
+    tVal3e  := not na(BTC_te) ? BTC_te * math.pow(10, +3 * decaye_div_3) : na
+    tVal4e  := not na(BTC_te) ? BTC_te * math.pow(10, +4 * decaye_div_3) : na
+    tVal5e  := not na(BTC_te) ? BTC_te * math.pow(10, +5 * decaye_div_3) : na
+
+// --- Indicator 2: Wave Calculations ---
+// Combine input conditions: Calculate wave values only if needed
+needs_wave_calc = s21 or s22 or s23 or s24 or s36
+
+// Declare wave variables using var
+var float w_2   = na, var float w_1   = na, var float w0   = na, var float w1   = na, var float w2   = na
+var float w_2c  = na, var float w_1c  = na, var float w0c  = na, var float w1c  = na, var float w2c  = na
+var float w_2e  = na, var float w_1e  = na, var float w0e  = na, var float w1e  = na, var float w2e  = na
+var float w_2ce = na, var float w_1ce = na, var float w0ce = na, var float w1ce = na, var float w2ce = na
+
+// Calculate wave values conditionally
+if needs_wave_calc
+    // Calculate the Rainbow Wave line values
+    w_2   := not na(BTC_t)  ? BTC_t  * math.pow(10, decay  *         (          sin  - FIVE_SIXTHS  )) : na
+    w_1   := not na(BTC_t)  ? BTC_t  * math.pow(10, decay  *         (          sin  - FIVE_TWELFTHS)) : na
+    w0    := not na(BTC_t)  ? BTC_t  * math.pow(10, decay  *                    sin                  ) : na
+    w1    := not na(BTC_t)  ? BTC_t  * math.pow(10, decay  *         (          sin  + FIVE_TWELFTHS)) : na
+    w2    := not na(BTC_t)  ? BTC_t  * math.pow(10, decay  *         (          sin  + FIVE_SIXTHS  )) : na
+    // Corrected/cut wave lines for "Miners avoid losses" option (s25)
+    w_2c  := not na(BTC_t)  ? BTC_t  * math.pow(10, decay  * math.max(-1.0,     sin  - FIVE_SIXTHS  )) : na
+    w_1c  := not na(BTC_t)  ? BTC_t  * math.pow(10, decay  * math.max(-1.0,     sin  - FIVE_TWELFTHS)) : na
+    w0c   := not na(BTC_t)  ? BTC_t  * math.pow(10, decay  * math.max(-2.0/3.0, sin                 )) : na
+    w1c   := not na(BTC_t)  ? BTC_t  * math.pow(10, decay  * math.max(-1.0/3.0, sin  + FIVE_TWELFTHS)) : na
+    w2c   := not na(BTC_t)  ? BTC_t  * math.pow(10, decay  * math.max(0.0,      sin  + FIVE_SIXTHS  )) : na
+    // Future wave lines
+    w_2e  := not na(BTC_te) ? BTC_te * math.pow(10, decaye *         (          sine - FIVE_SIXTHS  )) : na
+    w_1e  := not na(BTC_te) ? BTC_te * math.pow(10, decaye *         (          sine - FIVE_TWELFTHS)) : na
+    w0e   := not na(BTC_te) ? BTC_te * math.pow(10, decaye *                    sine                 ) : na
+    w1e   := not na(BTC_te) ? BTC_te * math.pow(10, decaye *         (          sine + FIVE_TWELFTHS)) : na
+    w2e   := not na(BTC_te) ? BTC_te * math.pow(10, decaye *         (          sine + FIVE_SIXTHS  )) : na
+    // Future corrected/cut wave lines
+    w_2ce := not na(BTC_te) ? BTC_te * math.pow(10, decaye * math.max(-1.0,     sine - FIVE_SIXTHS  )) : na
+    w_1ce := not na(BTC_te) ? BTC_te * math.pow(10, decaye * math.max(-1.0,     sine - FIVE_TWELFTHS)) : na
+    w0ce  := not na(BTC_te) ? BTC_te * math.pow(10, decaye * math.max(-2.0/3.0, sine                )) : na
+    w1ce  := not na(BTC_te) ? BTC_te * math.pow(10, decaye * math.max(-1.0/3.0, sine + FIVE_TWELFTHS)) : na
+    w2ce  := not na(BTC_te) ? BTC_te * math.pow(10, decaye * math.max(0.0,      sine + FIVE_SIXTHS  )) : na
+
+
+// ==========================================================
+// --- INDICATOR PLOTTING ---
+// ==========================================================
+
+// --- Plotting: Power Law Trend and Rainbow Bands ---
+// Plots conditionally display the pre-calculated tValX values based on show_... visibility inputs
+t_3 = plot(show_Bands_Minor_Chart ? tVal_3 : na, title="PL Band -3", color = color.rgb(100, 0, 251), linewidth = 2)
+t_2 = plot(show_Fair_Minor_Chart  ? tVal_2 : na, title="PL Band -2", color = color.blue , linewidth = 1)
+t_1 = plot(show_Fair_Minor_Chart  ? tVal_1 : na, title="PL Band -1", color = color.green, linewidth = 1)
+t0  = plot(show_PL_Fair_Minor_Chart ? tVal0 : na, title="Power Law Trend", color = color.green, linewidth = 3)
+t1  = plot(show_Fair_Minor_Chart  ? tVal1  : na, title="PL Band +1", color = color.green , linewidth = 1)
+t2  = plot(show_Fair_Minor_Chart  ? tVal2  : na, title="PL Band +2", color = color.yellow, linewidth = 1)
+t3  = plot(show_Minor_Chart       ? tVal3  : na, title="PL Band +3", color = color.orange, linewidth = 1)
+t4  = plot(show_Minor_Chart       ? tVal4  : na, title="PL Band +4", color = color.orange, linewidth = 1)
+t5  = plot(show_Bands_Minor_Chart ? tVal5  : na, title="PL Band +5", color = color.red   , linewidth = 2)
+// Future plots
+t_3e = plot(show_Bands_Minor_Chart ? tVal_3e : na , title="Future PL Band -3", color = color.rgb(100, 0, 251), linewidth = 2, offset = futureBars, show_last = futureBars + 1)
+t_2e = plot(show_Fair_Minor_Chart  ? tVal_2e : na , title="Future PL Band -2", color = color.blue  , linewidth = 1, offset = futureBars, show_last = futureBars + 1)
+t_1e = plot(show_Fair_Minor_Chart  ? tVal_1e : na , title="Future PL Band -1", color = color.green , linewidth = 1, offset = futureBars, show_last = futureBars + 1)
+t0e  = plot(show_PL_Fair_Minor_Chart ? tVal0e : na, title = "Future Power Law Trend", color = color.green, linewidth = 3, offset = futureBars, show_last = futureBars + 1)
+t1e  = plot(show_Fair_Minor_Chart  ? tVal1e : na  , title="Future PL Band +1", color = color.green , linewidth = 1, offset = futureBars, show_last = futureBars + 1)
+t2e  = plot(show_Fair_Minor_Chart  ? tVal2e : na  , title="Future PL Band +2", color = color.yellow, linewidth = 1, offset = futureBars, show_last = futureBars + 1)
+t3e  = plot(show_Minor_Chart       ? tVal3e : na  , title="Future PL Band +3", color = color.orange, linewidth = 1, offset = futureBars, show_last = futureBars + 1)
+t4e  = plot(show_Minor_Chart       ? tVal4e : na  , title="Future PL Band +4", color = color.orange, linewidth = 1, offset = futureBars, show_last = futureBars + 1)
+t5e  = plot(show_Bands_Minor_Chart ? tVal5e : na  , title="Future PL Band +5", color = color.red   , linewidth = 2, offset = futureBars, show_last = futureBars + 1)
+
+// --- Filling: Rainbow Chart Areas ---
+// Fills depend on the visibility of specific bands controlled by s15 or s13+s15
+fill(t_3 , t_2 , color = s15                                 ? color.new(color.rgb(80, 0, 200), 65)  : na, title = "Rainbow Fill 1")
+fill(t_3e, t_2e, color = s15 and fillConditionFuture         ? color.new(color.rgb(80, 0, 200), 65)  : na, title = "Future Rainbow Fill 1")
+fill(t_2 , t_1 , color = s13 or s15                          ? color.new(color.blue, 50)             : na, title = "Rainbow Fill 2")
+fill(t_2e, t_1e, color =(s13 or s15) and fillConditionFuture ? color.new(color.blue, 50)             : na, title = "Future Rainbow Fill 2")
+fill(t_1 , t0  , color = s13 or s15                          ? color.new(color.green, 50)            : na, title = "Rainbow Fill 3")
+fill(t_1e, t0e , color =(s13 or s15) and fillConditionFuture ? color.new(color.green, 50)            : na, title = "Future Rainbow Fill 3")
+fill(t0  , t1  , color = s13 or s15                          ? color.new(color.green, 50)            : na, title = "Rainbow Fill 4")
+fill(t0e , t1e , color =(s13 or s15) and fillConditionFuture ? color.new(color.green, 50)            : na, title = "Future Rainbow Fill 4")
+fill(t1  , t2  , color = s13 or s15                          ? color.new(color.rgb(150, 220, 0), 50) : na, title = "Rainbow Fill 5")
+fill(t1e , t2e , color =(s13 or s15) and fillConditionFuture ? color.new(color.rgb(150, 220, 0), 50) : na, title = "Future Rainbow Fill 5")
+fill(t2  , t3  , color = s15                                 ? color.new(color.orange, 70)           : na, title = "Rainbow Fill 6")
+fill(t2e , t3e , color = s15         and fillConditionFuture ? color.new(color.orange, 70)           : na, title = "Future Rainbow Fill 6")
+fill(t3  , t4  , color = s15                                 ? color.new(color.red, 70)              : na, title = "Rainbow Fill 7")
+fill(t3e , t4e , color = s15         and fillConditionFuture ? color.new(color.red, 70)              : na, title = "Future Rainbow Fill 7")
+fill(t4  , t5  , color = s15                                 ? color.new(color.rgb(200, 0, 80), 70)  : na, title = "Rainbow Fill 8")
+fill(t4e , t5e , color = s15         and fillConditionFuture ? color.new(color.rgb(200, 0, 80), 70)  : na, title = "Future Rainbow Fill 8")
+
+// --- Plotting: Rainbow Wave Lines ---
+// Plots conditionally display the calculated wX or wXc values based on s2X visibility inputs
+wl_2  = plot((show_Wave_Bands_Full) and not s25 ? w_2  : (show_Wave_Bands_Full) and s25 ? w_2c  : na, title = 'Wave Band -2'       , color = color.aqua, linewidth = 2                                                    )
+wl_2e = plot((show_Wave_Bands_Full) and not s25 ? w_2e : (show_Wave_Bands_Full) and s25 ? w_2ce : na, title = 'Future Wave Band -2', color = color.aqua, linewidth = 2, offset = futureBars, show_last = futureBars + 1   )
+wl_1  = plot((show_Wave_Fair_Full)  and not s25 ? w_1  : (show_Wave_Fair_Full)  and s25 ? w_1c  : na, title = 'Wave Band -1'       , color = color.blue, linewidth = 1                                                    )
+wl_1e = plot((show_Wave_Fair_Full)  and not s25 ? w_1e : (show_Wave_Fair_Full)  and s25 ? w_1ce : na, title = 'Future Wave Band -1', color = color.blue, linewidth = 1, offset = futureBars, show_last = futureBars + 1   )
+wl0   = plot(s21 and not s23 and not s24 or (s21 or s23 or s24) and not s25 ? w0  : s25 and (s21 and not s22 and not s23 and not s24 or s23 or s24) ? w0  : na, title = 'Wave'       , color = color.fuchsia, linewidth = 3)
+wl0e  = plot(s21 and not s23 and not s24 or (s21 or s23 or s24) and not s25 ? w0e : s25 and (s21 and not s22 and not s23 and not s24 or s23 or s24) ? w0e : na, title = 'Future Wave', color = color.fuchsia, linewidth = 3, offset = futureBars, show_last = futureBars + 1)
+wl1   = plot((show_Wave_Fair_Full)  and not s25 ? w1   : (show_Wave_Fair_Full)  and s25 ? w1    : na, title = 'Wave Band +1'       , color = color.orange, linewidth = 1                                                  )
+wl1e  = plot((show_Wave_Fair_Full)  and not s25 ? w1e  : (show_Wave_Fair_Full)  and s25 ? w1e   : na, title = 'Future Wave Band +1', color = color.orange, linewidth = 1, offset = futureBars, show_last = futureBars + 1 )
+wl2   = plot(not s24 and s22 or s24 and not s25 ? w2   : s24 and s25 ? w2                       : na, title = 'Wave Band +2'       , color = color.red   , linewidth = 2                                                  )
+wl2e  = plot(not s24 and s22 or s24 and not s25 ? w2e  : s24 and s25 ? w2e                      : na, title = 'Future Wave Band +2', color = color.red   , linewidth = 2, offset = futureBars, show_last = futureBars + 1 )
+
+// --- Filling: Rainbow Wave Areas ---
+// Fills depend on the visibility of specific wave bands controlled by s24 or s23+s24
+fill(wl1  , wl2  , color = s24                                         ? color.new(color.red, 80)    : na, title="Wave Fill 1")
+fill(wl1e , wl2e , color = s24                 and fillConditionFuture ? color.new(color.red, 80)    : na, title="Future Wave Fill 1")
+fill(wl0  , wl1  , color = show_Wave_Fair_Full                         ? color.new(color.orange, 80) : na, title="Wave Fill 2")
+fill(wl0e , wl1e , color = show_Wave_Fair_Full and fillConditionFuture ? color.new(color.orange, 80) : na, title="Future Wave Fill 2")
+fill(wl_1 , wl0  , color = show_Wave_Fair_Full                         ? color.new(color.green, 80)  : na, title="Wave Fill 3")
+fill(wl_1e, wl0e , color = show_Wave_Fair_Full and fillConditionFuture ? color.new(color.green, 80)  : na, title="Future Wave Fill 3")
+fill(wl_2 , wl_1 , color = s24                                         ? color.new(color.blue, 80)   : na, title="Wave Fill 4")
+fill(wl_2e, wl_1e, color = s24                 and fillConditionFuture ? color.new(color.blue, 80)   : na, title="Future Wave Fill 4")
+
+// ==========================================================
+// --- Indicator 3: Halving Marks ---
+// ==========================================================
+
+// --- Calculate Intermediate Timestamps ---
+// These are Fibonacci time retracements between quarter-halving points
+H0382 = int(0.472*H025 + 0.528*H050) // Fib 0.382 between H0.25 and H0.50
+H0618 = int(0.472*H075 + 0.528*H050) // Fib 0.618 between H0.50 and H0.75
+H1382 = int(0.472*H125 + 0.528*H150) // Fib 0.382 between H1.25 and H1.50
+H1618 = int(0.472*H175 + 0.528*H150) // Fib 0.618 between H1.50 and H1.75
+H2382 = int(0.472*H225 + 0.528*H250) // Fib 0.382 between H2.25 and H2.50
+H2618 = int(0.472*H275 + 0.528*H250) // Fib 0.618 between H2.50 and H2.75
+H3382 = int(0.472*H325 + 0.528*H350) // Fib 0.382 between H3.25 and H3.50
+H3618 = int(0.472*H375 + 0.528*H350) // Fib 0.618 between H3.50 and H3.75
+H4382 = int(0.472*H425 + 0.528*H450) // Fib 0.382 between H4.25 and H4.50
+H4618 = int(0.472*H475 + 0.528*H450) // Fib 0.618 between H4.50 and H4.75
+
+// --- Define static data arrays ---
+// X Coordinates (Timestamps) for vertical lines
+array<int>    lineXCoords= array.from(H0116, H025, H0382, H050, H0618, H075, H100, H125, H1382, H150, H1618, H175, H200, H225, H2382, H250, H2618, H275, H300, H325, H3382, H350, H3618, H375, H400, H425, H4382, H450, H4618, H475, H500, H525, H550, H575, H600, H650, H700)
+// Corresponding 'h' values for each timestamp (used for calculating Y positions)
+array<float>  lineHValues= array.from(0.116, 0.25, 0.382, 0.50, 0.618, 0.75, 1.00, 1.25, 1.382, 1.50, 1.618, 1.75, 2.00, 2.25, 2.382, 2.50, 2.618, 2.75, 3.00, 3.25, 3.382, 3.50, 3.618, 3.75, 4.00, 4.25, 4.382, 4.50, 4.618, 4.75, 5.00, 5.25, 5.50, 5.75, 6.00, 6.50, 7.00)
+// Static arrays for styles, colors, texts
+array<bool>   lineDashed = array.from(false, true, false, true , false, true, false, true, false, true, false, true, false, true, false, true, false, true, false, true, false, true, false, true, false, true, false, true, false, true, false, true, true, true, false, true, false)
+array<int>    lineWidths = array.from(3, 1, 1, 2, 1, 1, 3, 1, 1, 2, 1, 1, 3, 1, 1, 2, 1, 1, 3, 1, 1, 2, 1, 1, 3, 1, 1, 2, 1, 1, 3, 1, 2, 1, 3, 2, 3)
+array<color>  lineColors = array.from(color.aqua, color.yellow, color.red, color.orange, color.green, color.lime, color.aqua, color.yellow, color.red, color.orange, color.green, color.lime, color.aqua, color.yellow, color.red, color.orange, color.green, color.lime, color.aqua, color.yellow, color.red, color.orange, color.green, color.lime, color.aqua, color.yellow, color.red, color.orange, color.green, color.lime, color.aqua, color.yellow, color.orange, color.lime, color.aqua, color.orange, color.aqua)
+array<string> labelTexts = array.from('h=0.116 05/10/09 t=275', 'h=0.25 22/4/10 t=474', 'h=0.382', 'h=0.5 28/1/11 t=755', 'h=0.618', 'h=0.75 14/12/11 t=1075', 'h=1 28/11/12 t=1425', 'h=1.25 9/10/13 t=1739', 'h=1.382', 'h=1.5 11/8/14 t=2045', 'h=1.618', 'h=1.75 29/7/15 t=2398', 'h=2 9/7/16 t=2745', 'h=2.25 23/6/17 t=3092', 'h=2.382', 'h=2.5 29/5/18 t=3433', 'h=2.618', 'h=2.75 24/5/19 t=3792', 'h=3 11/5/20 t=4146', 'h=3.25 8/5/21 t=4507', 'h=3.382', 'h=3.5 5/5/22 t=4870', 'h=3.618', 'h=3.75 29/4/23 t=5229', 'h=4 20/4/24 t=5585', 'h=4.25 15/04/25 t=5946', 'h=4.382', 'h=4.5 10/4/26 t=6306', 'h=4.618', 'h=4.75 5/4/27 t=6666', 'h=5 30/3/28 t=7025', 'h=5.25 26/3/29 t=7386', 'h=5.5 21/3/30 t=7747', 'h=5.75 16/3/31 t=8107', 'h=6 10/3/32 t=8467', 'h=6.5 1/3/34 t=9188', 'h=7 19/2/36 t=9908')
+
+// --- Initialization Flag and Persistent Storage Arrays ---
+// These arrays hold the actual line/label drawing objects
+var bool    halvingMarksInitialized = false
+var line[]  halvingLines            = array.new_line(array.size(lineXCoords))  // Array to store line objects
+var label[] halvingLabels           = array.new_label(array.size(lineXCoords)) // Array to store label objects
+
+// --- Initialization Logic (Runs ONCE to create objects) ---
+// This loop creates the line and label objects based on the static data and model parameters.
+// Y coordinates are calculated dynamically based on the fixed 'h' value for each mark.
+if not halvingMarksInitialized
+    // Constants needed for calculation (a, b, decay_base are global)
+
+    for i = 0 to array.size(lineXCoords) - 1 by 1
+        // --- Get data for this specific mark ---
+        int    targetTime = array.get(lineXCoords, i)
+        float  h_value    = array.get(lineHValues, i) // Get FIXED H VALUE for this mark
+        bool   isDashed   = array.get(lineDashed , i)
+        color  lineColor  = array.get(lineColors , i)
+        int    lineWidth  = array.get(lineWidths , i)
+        string labelText  = array.get(labelTexts , i)
+
+        // --- Calculate dynamic Y coordinates using the fixed h_value ---
+        // (Assuming h_value is always > 0 based on the lineHValues array content)
+        float common_decay_part = math.pow(decay_base, h_value + 1)
+        float common_log_power  = a + b * math.log10(h_value)
+
+        // Calculate y1 (lower boundary - t_3 equivalent) and y2 (upper boundary - t5 equivalent)
+        float y1_calc = math.pow(10, common_log_power -               common_decay_part) // Formula for t_3: 10^(log(BTC_t) - decay)
+        float y2_calc = math.pow(10, common_log_power + (5.0 / 3.0) * common_decay_part) // Formula for t5: 10^(log(BTC_t) + 5/3 * decay)
+
+        // --- Visibility & Colors for Initialization ---
+        bool  isVisibleInitially    = s31 and (s32 or not isDashed)           // Check visibility based on inputs
+        color initialLineColor      = isVisibleInitially ? lineColor     : na // Set line color or hide
+        color initialLabelTextColor = isVisibleInitially ? color.white : na // Set text color (white) or hide
+
+        // --- Create Line object with calculated Y values ---
+        line newLine = line.new(
+             x1    = targetTime, y1 = y1_calc, // Use calculated Y
+             x2    = targetTime, y2 = y2_calc, // Use calculated Y
+             color = initialLineColor,
+             width = lineWidth,
+             xloc  = xloc.bar_time,
+             style = isDashed ? line.style_dashed : line.style_solid)
+        array.set(halvingLines, i, newLine) // Store the created line object
+
+        // --- Create Label object positioned at calculated Y1 ---
+        label newLabel = label.new(
+             x         = targetTime,
+             y         = y1_calc,                      // Anchor Y at calculated bottom value (y1_calc)
+             text      = labelText,
+             color     = initialLineColor,             // Label BACKGROUND color matches the line color (or na)
+             textcolor = initialLabelTextColor,        // Label TEXT color is white (or na)
+             style     = label.style_label_upper_left, // Use this style to anchor top-left corner of label box
+             size      = size.normal,
+             xloc      = xloc.bar_time)
+        array.set(halvingLabels, i, newLabel)          // Store the created label object
+
+    halvingMarksInitialized := true // Mark initialization as complete
+// --- End of Initialization Logic ---
+
+// --- Dynamic Update Logic (Runs EVERY BAR to check/apply input changes) ---
+// This block updates the visibility (colors) of existing lines/labels if inputs s31 or s32 change.
+var bool prev_s31 = s31 // Store previous input state
+var bool prev_s32 = s32 // Store previous input state
+
+bool settings_changed = s31 != prev_s31 or s32 != prev_s32 // Check if settings changed
+
+// Only perform updates if settings have actually changed AND initialization is done
+if settings_changed and halvingMarksInitialized
+    // Loop through all the marks to update visibility
+    for i = 0 to array.size(lineXCoords) - 1 by 1
+        line l = array.get(halvingLines, i)      // Retrieve the existing line object
+        label lb = array.get(halvingLabels, i)   // Retrieve the existing label object
+        bool isDashed = array.get(lineDashed, i)
+
+        // Determine if the mark *should* be visible based on CURRENT input values
+        bool shouldBeVisible = s31 and (s32 or not isDashed)
+
+        // Get the original line color (needed for visibility toggle)
+        color originalLineColor = array.get(lineColors, i)
+
+        // Determine target colors based on current visibility requirement
+        color targetLineColor      = shouldBeVisible ? originalLineColor : na // Target line & label background color
+        color targetLabelTextColor = shouldBeVisible ? color.white     : na // Target text color (White or na)
+
+        // Update objects' colors to toggle visibility
+        line.set_color(l, targetLineColor)            // Update line visibility
+        label.set_textcolor(lb, targetLabelTextColor) // Update text visibility
+        label.set_color(lb, targetLineColor)          // Update label background visibility (matches line)
+
+    // Update the stored previous input states AFTER processing the changes
+    prev_s31 := s31
+    prev_s32 := s32
+// --- End of Dynamic Update Logic ---
+
+// --- END of Indicator 3: Halving Marks ---
+
+
+// ==========================================================
+// --- Indicator 4: No Miss Zones ---
+// ==========================================================
+
+// Declare NMZ variables using var for indicator 4.
+var float NMU  = na
+var float NMD  = na
+var float NMUe = na
+var float NMDe = na
+
+// Calculate NMZ values only if the feature is enabled
+if s36
+    // No Miss Zone Upper Boundary (use := for assignment)
+    NMU := if sin > -0.33333 and sin < ONE_TWELFTH and cos < 0 //Green1 zone
+        tVal_1 // Uses value of PL Band-1 (tVal_1)
+    else if sin > 0.5 and cos < 0.55                                           //Red zone
+        w2
+    else if sin > 0.49 and cos < 0.57                                          // None zone around red one
+        w1
+    else                                                                       //Yellow, Green2 and none zone
+        w0
+
+    // No Miss Zone Lower Boundary (use := for assignment)
+    NMD := if sin > -0.25 and sin < ONE_TWELFTH and cos < 0                    //Green1 zone
+        w_1
+    else if sin >-0.66667 and sin < -0.25 and cos < 0                          //Green2 zone
+        tVal_2 // Uses value of PL Band -2 (tVal_2)
+    else if sin > 0 and sin < FIVE_TWELFTHS and cos > 0                        //Yellow1 zone
+        tVal0 // Uses value of Power Law Trend (tVal0)
+    else if sin > FIVE_TWELFTHS and sin < 0.75 and cos > 0                     //Green1 and Yellow2 zone
+        w_1
+    else if sin > 0.49 and cos < 0.57                                          //Red zone
+        w1
+    else                                                                       //None zone
+        w0
+
+    // Future No Miss Zones (use := for assignment)
+    NMUe := if he > fh and sine > -0.33333 and sine < ONE_TWELFTH and cose < 0 //Green1 zone
+        tVal_1e // Uses value of Future PL Band -1 (tVal_1e)
+    else if he > fh and sine > 0.5 and cose < 0.55                             //Red zone
+        w2e
+    else if he > fh - 0.01 and sine > 0.49 and cose < 0.57                     // None zone around red one
+        w1e
+    else                                                                       //Yellow, Green2 zones
+        w0e
+
+    NMDe := if he > fh and sine > -0.25 and sine < ONE_TWELFTH and cose < 0 //Green1 zone
+        w_1e
+    else if he > fh and sine > -0.66667 and sine < -0.25 and cose < 0       //Green2 zone
+        tVal_2e // Uses value of Future PL Band -2 (tVal_2e)
+    else if he > fh and sine > 0 and sine < FIVE_TWELFTHS and cose > 0      //Yellow1 zone
+        tVal0e // Uses value of Future Power Law Trend (tVal0e)
+    else if he > fh and sine > FIVE_TWELFTHS and sine < 0.75 and cose > 0   //Green1 and Yellow2 zone
+        w_1e
+    else if he > fh - 0.01 and sine > 0.49 and cose < 0.57                  //Red zone
+        w1e
+    else                                                                    //None zone
+        w0e
+else // If s36 is false, assign na
+    NMU  := na
+    NMD  := na
+    NMUe := na
+    NMDe := na
+
+// --- Plotting: Invisible lines for NMZ fills ---
+// Use display.none to completely hide these helper plots from chart and data window
+LNMU  = plot(NMU , title="NMU" , color = na, linewidth = 1, editable=false, display=display.none)
+LNMD  = plot(NMD , title="NMD" , color = na, linewidth = 1, editable=false, display=display.none)
+LNMUe = plot(NMUe, title="NMUe", color = na, linewidth = 1, offset = futureBars, show_last = futureBars + 1, editable=false, display=display.none)
+LNMDe = plot(NMDe, title="NMDe", color = na, linewidth = 1, offset = futureBars, show_last = futureBars + 1, editable=false, display=display.none)
+
+// --- Filling: No Miss Zone Areas ---
+// Pre-calculate fill colors for readability
+nmz_fill_color   = not s36 or h  < 0.37                            ? na : cos  < -0.75 and sin  < 1.0/3.0 ? color.new(color.green, 30) : cos  > 0.6 ? color.new(color.yellow, 30) : color.new(color.red, 30)
+nmz_fill_color_e = not s36 or he < 0.37 or not fillConditionFuture ? na : cose < -0.75 and sine < 1.0/3.0 ? color.new(color.green, 30) : cose > 0.6 ? color.new(color.yellow, 30) : color.new(color.red, 30)
+
+fill(LNMD , LNMU , color = nmz_fill_color  , title = 'No miss Zones')
+fill(LNMDe, LNMUe, color = nmz_fill_color_e, title = 'Future No miss Zones')
+
+// --- END of Indicator 4: No Miss Zones ---
+
+
+// ============================================================
+// --- Indicator 6: Price Line Coloring ---
+// ============================================================
+
+// --- Color definitions for each zone ---
+// Use var for efficiency
+var color c_line_below_t_3= color.new(#442485, 0)     // Deep Purple
+var color c_line_t_3_t_2  = color.new(color.blue, 0)
+var color c_line_t_2_t_1  = color.new(color.aqua, 0)
+var color c_line_t_1_t0   = color.new(color.lime, 0)
+var color c_line_t0_t1    = color.new(color.green, 0)
+var color c_line_t1_t2    = color.new(color.yellow, 0)
+var color c_line_t2_t3    = color.new(color.orange, 0)
+var color c_line_t3_t4    = color.new(color.red, 0)
+var color c_line_t4_t5    = color.new(color.maroon, 0) // Dark Red
+var color c_line_above_t5 = color.new(#7e0c0c, 0)      // Darker Red
+
+// --- Determine dynamic color for the price line ---
+color pricePlotColor = na // Default color
+
+// Check if feature is enabled AND necessary band VALUE data is available
+if s_price_line_color and not na(tVal5) and not na(tVal4) and not na(tVal3) and not na(tVal2) and not na(tVal1) and not na(tVal0) and not na(tVal_1) and not na(tVal_2) and not na(tVal_3) and not na(close)
+    pricePlotColor :=  close > tVal5  ? c_line_above_t5 :
+                       close > tVal4  ? c_line_t4_t5    :
+                       close > tVal3  ? c_line_t3_t4    :
+                       close > tVal2  ? c_line_t2_t3    :
+                       close > tVal1  ? c_line_t1_t2    :
+                       close > tVal0  ? c_line_t0_t1    :
+                       close > tVal_1 ? c_line_t_1_t0   :
+                       close > tVal_2 ? c_line_t_2_t_1  :
+                       close > tVal_3 ? c_line_t_3_t_2  :
+                       c_line_below_t_3 // If close <= tVal_3
+
+// --- Plotting: Colored Price Line ---
+// Note: This line draws ON TOP of the main chart series (candles/bars) by default.
+// Making it thicker helps visually distinguish it or cover the underlying series.
+plot(s_price_line_color ? close : na,
+     title      = "Colored Price Line",
+     color      = pricePlotColor,
+     linewidth  = Color_price_line_width, // Use input variable
+     style      = plot.style_line,
+     editable   = true)
+
+// --- END of Indicator 6 ---
+
+// ============================================================
+// Provenance note (added by Archie, not part of leoum's original script)
+// Pulled verbatim 2026-08-26 from the live "Source code" tab at
+// https://www.tradingview.com/script/v0nW85bF-Bitcoin-Rainbow-Wave/
+// Open-source per TradingView's listing; original author attribution
+// above (line 3) is unmodified. Added to this repo per Gavin's
+// Next Gen Indicators request.
+// ============================================================
