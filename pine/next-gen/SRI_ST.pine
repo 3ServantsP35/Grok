@@ -8,7 +8,7 @@ indicator(title="SRI ST (Short)", shorttitle="SRI ST", overlay=true, max_lines_c
 
 // ─── REVERSAL BAND (4 Hours) ───
 string tf_rb = "240"
-int length = input.int(50, title="Regression Length")
+int length = input.int(50, title="Regression Length", minval=2)
 float multiplier = input.float(1.0, title="Deviation Multiplier")
 int rsiLength = input.int(14, title="RSI Length for Bear Condition")
 
@@ -104,12 +104,14 @@ var line[]  projResLines = array.new_line(0)
 var label   projEndLabel = na
 
 if barstate.islast
-    for ii = 0 to array.size(projFitLines) - 1
-        line.delete(array.get(projFitLines, ii))
-    for ii = 0 to array.size(projSupLines) - 1
-        line.delete(array.get(projSupLines, ii))
-    for ii = 0 to array.size(projResLines) - 1
-        line.delete(array.get(projResLines, ii))
+    // for...in no-ops on an empty array; `for i = 0 to size-1` does NOT --
+    // Pine reverses the step when from > to, so `0 to -1` runs with i=0.
+    for ln in projFitLines
+        line.delete(ln)
+    for ln in projSupLines
+        line.delete(ln)
+    for ln in projResLines
+        line.delete(ln)
     array.clear(projFitLines)
     array.clear(projSupLines)
     array.clear(projResLines)
