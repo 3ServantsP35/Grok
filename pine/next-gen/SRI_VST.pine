@@ -85,7 +85,9 @@ f_project_reversal_band() =>
 
     [kList, fitArr, supArr, resArr]
 
-[projK, projFit, projSup, projRes] = show_projection ? request.security(syminfo.tickerid, tf_rb, f_project_reversal_band()) : [array.new_int(0), array.new_float(0), array.new_float(0), array.new_float(0)]
+// Computed unconditionally in global scope (request.*() inside a conditional would
+// require dynamic_requests=true). The show_projection toggle gates all drawing below.
+[projK, projFit, projSup, projRes] = request.security(syminfo.tickerid, tf_rb, f_project_reversal_band())
 
 var line[]  projFitLines = array.new_line(0)
 var line[]  projSupLines = array.new_line(0)
