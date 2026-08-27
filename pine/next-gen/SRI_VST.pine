@@ -64,7 +64,7 @@ f_project_reversal_band() =>
         float sumXY = 0.0
         float sumX2 = 0.0
         for x = 0 to length - 1
-            float y = x < length - k ? close[(length - k - 1) - x] : lastC
+            float y = x < length - k ? nz(close[(length - k - 1) - x], lastC) : lastC
             sumX  += x
             sumY  += y
             sumXY += x * y
@@ -76,18 +76,27 @@ f_project_reversal_band() =>
         float mean = sumY / length
         float sumSq = 0.0
         for x = 0 to length - 1
-            float y = x < length - k ? close[(length - k - 1) - x] : lastC
+            float y = x < length - k ? nz(close[(length - k - 1) - x], lastC) : lastC
             sumSq += math.pow(y - mean, 2)
         float dv = multiplier * math.sqrt(sumSq / length)
         array.push(fitArr, fit)
         array.push(supArr, fit - dv)
         array.push(resArr, fit + dv)
 
-    [kList, fitArr, supArr, resArr]
+    // Return the sample arrays only on the last bar. Handing back populated array
+    // IDs from every historical bar is the RE10139 memory-blowout pattern and can
+    // also come back empty/na (=> the draw block below silently skips, no error).
+    [barstate.islast ? fitArr : na, barstate.islast ? supArr : na, barstate.islast ? resArr : na]
 
 // Computed unconditionally in global scope (request.*() inside a conditional would
 // require dynamic_requests=true). The show_projection toggle gates all drawing below.
-[projK, projFit, projSup, projRes] = request.security(syminfo.tickerid, tf_rb, f_project_reversal_band())
+// projK (the sample offsets) is deterministic, so it is rebuilt here rather than
+// transported through the request.
+[projFit, projSup, projRes] = request.security(syminfo.tickerid, tf_rb, f_project_reversal_band())
+array<int> projK = array.new_int(0)
+for pk = 0 to 9
+    array.push(projK, int(pk * length / 10))
+array.push(projK, length)
 
 var line[]  projFitLines = array.new_line(0)
 var line[]  projSupLines = array.new_line(0)
@@ -106,7 +115,7 @@ if barstate.islast
     array.clear(projResLines)
     label.delete(projEndLabel)
 
-    if show_projection and array.size(projK) > 1
+    if show_projection and not na(projFit) and array.size(projFit) > 1
         int htfSec = timeframe.in_seconds(tf_rb)
         int nowT   = time
         for ii = 0 to array.size(projK) - 2
