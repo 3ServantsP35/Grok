@@ -125,15 +125,15 @@ if barstate.islast
             int k1 = array.get(projK, ii + 1)
             int t0 = nowT + k0 * htfSec * 1000
             int t1 = nowT + k1 * htfSec * 1000
-            array.push(projFitLines, line.new(t0, array.get(projFit, ii), t1, array.get(projFit, ii + 1), xloc=xloc.bar_time, color=color.new(color.blue, 20), style=line.style_dashed, width=2))
-            array.push(projSupLines, line.new(t0, array.get(projSup, ii), t1, array.get(projSup, ii + 1), xloc=xloc.bar_time, color=color.new(color.red, 55), style=line.style_dotted, width=1))
-            array.push(projResLines, line.new(t0, array.get(projRes, ii), t1, array.get(projRes, ii + 1), xloc=xloc.bar_time, color=color.new(color.green, 55), style=line.style_dotted, width=1))
+            array.push(projFitLines, line.new(t0, array.get(projFit, ii), t1, array.get(projFit, ii + 1), xloc=xloc.bar_time, color=color.new(color.blue, 20), style=line.style_dashed, width=2, force_overlay=true))
+            array.push(projSupLines, line.new(t0, array.get(projSup, ii), t1, array.get(projSup, ii + 1), xloc=xloc.bar_time, color=color.new(color.red, 55), style=line.style_dotted, width=1, force_overlay=true))
+            array.push(projResLines, line.new(t0, array.get(projRes, ii), t1, array.get(projRes, ii + 1), xloc=xloc.bar_time, color=color.new(color.green, 55), style=line.style_dotted, width=1, force_overlay=true))
         int lastIdx = array.size(projK) - 1
         int lastK   = array.get(projK, lastIdx)
         int lastT   = nowT + lastK * htfSec * 1000
         projEndLabel := label.new(lastT, array.get(projFit, lastIdx),
              str.format("LT projected fit -- flat-continuation, {0} bars out (window fully synthetic)", lastK),
-             style=label.style_label_left, color=color.new(color.blue, 70), textcolor=color.white, size=size.small, xloc=xloc.bar_time)
+             style=label.style_label_left, color=color.new(color.blue, 70), textcolor=color.white, size=size.small, xloc=xloc.bar_time, force_overlay=true)
 // --- END of Reversal Band Projection ---
 
 // ─── FAST TRACKLINE (4 Hours) ───
