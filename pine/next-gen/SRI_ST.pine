@@ -136,6 +136,21 @@ if barstate.islast
              style=label.style_label_left, color=color.new(color.blue, 70), textcolor=color.white, size=size.small, xloc=xloc.bar_time, force_overlay=true)
 // --- END of Reversal Band Projection ---
 
+// ─── PROJECTION EXPORT — advisory only (data-window scrape target) ───
+// Warehoused by tv_poll.py → mstr.db.tv_indicator_values purely as forward
+// context for Cyler. NOT a daily-engine input and NOT a fail-closed gate:
+// flat-continuation scenario math, unvalidated per project_indicator_methodology
+// E1–E7. Contract: briefs/p-nextgen-indicator-ingest-v1.md. The "(adv)" suffix
+// is load-bearing — tv_warehouse.is_advisory_key() keys off it.
+int   _pn      = na(projFit) ? 0 : array.size(projFit)
+float projFitH = _pn > 0 ? array.get(projFit, _pn - 1) : na
+float projSupH = (not na(projSup) and _pn > 0) ? array.get(projSup, _pn - 1) : na
+float projResH = (not na(projRes) and _pn > 0) ? array.get(projRes, _pn - 1) : na
+plot(projFitH,                      "ST Proj Fit Horizon (adv)",        display=display.data_window)
+plot(projSupH,                      "ST Proj Support Horizon (adv)",    display=display.data_window)
+plot(projResH,                      "ST Proj Resistance Horizon (adv)", display=display.data_window)
+plot(show_projection ? length : na, "ST Proj Horizon Bars (adv)",       display=display.data_window)
+
 // ─── FAST TRACKLINE (2 Hours) ───
 string tf_fast = "120"
 float at_coeff_1 = input.float(1.0, "Fast Trackline Coeff")

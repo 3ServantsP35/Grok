@@ -213,7 +213,19 @@ if showProjection and barstate.islast and not na(lastDclBar)
 
     projLabel := label.new(projLoBar, yHi,
          str.format("Projected {0} window: {1}-{2} bars from last low (dotted = early/late tolerance)", degTxt, winLoEff, winHiEff),
-         style=label.style_label_down, color=color.new(color.yellow, 70), textcolor=color.black, size=size.small)
+         style=label.style_label_down, color=color.new(color.yellow, 10), textcolor=color.black, size=size.small)
+
+// ── Projection export — advisory only (data-window scrape target; NEW in v3.4) ──
+// The v3.3 CSV contract rows above are UNCHANGED. These extra rows are the
+// projected-next-low window as machine-readable numbers so a consumer doesn't
+// parse the "expected" text row. Warehoused as forward context for Cyler only —
+// NOT a daily-engine input or fail-closed gate. Prefixes proj_win_/proj_next_low_
+// are load-bearing (tv_warehouse.is_advisory_key). Contract:
+// briefs/p-nextgen-indicator-ingest-v1.md.
+plot(na(lastDclBar) ? na : winLoEff,               "proj_win_lo",         display=display.data_window)
+plot(na(lastDclBar) ? na : winHiEff,               "proj_win_hi",         display=display.data_window)
+plot(na(cycleDay)   ? na : (winLoEff - cycleDay),  "proj_next_low_in_lo", display=display.data_window)
+plot(na(cycleDay)   ? na : (winHiEff - cycleDay),  "proj_next_low_in_hi", display=display.data_window)
 
 // ── Cycle table (read by tv_reader — DO NOT rename rows without updating the parser) ──
 transTxt(int c) => na(c) ? "—" : c == -1 ? "left" : c == 1 ? "right" : "mid"
