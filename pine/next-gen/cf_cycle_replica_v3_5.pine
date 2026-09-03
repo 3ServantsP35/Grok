@@ -1,0 +1,352 @@
+//@version=5
+// ============================================================================
+// CF Cycle Replica (Archie) — v3.5  ·  P-Camel-Indicator-RE
+// Native re-implementation of the CF Cycle methodology (Bressert/Camel).
+// Mirrors camel-engine/pipeline/cycle_detector.py + cycle_mechanics.py.
+//
+// v3.5 = v3.4 + SIMULTANEOUS MULTI-DEGREE EMISSION.
+//   Prior versions resolve ONE degree from the chart timeframe (Daily->DCL,
+//   Weekly->WCL, Monthly->YCL), so capturing the full cycle nest meant loading
+//   the indicator on three charts / switching resolution (what Camel's
+//   tv_reader does today via three timeframe passes). v3.5 additionally runs
+//   the SAME detection engine against the D, W and M series via
+//   request.security and exports all three degrees as their own data-window
+//   rows (dcl_* / wcl_* / ycl_*). A single poll at ANY chart timeframe now
+//   yields DCL + WCL + YCL — this is what lets the MSTR TV warehouse source
+//   the full cycle state directly and retire the Camel -> MSTR cycle-feed
+//   round trip (SQLCipher cross-DB read + CDP live-table parse + the
+//   weekly-skip race).
+//
+//   The chart-native path is UNCHANGED in behaviour: the legacy 7 rows
+//   (cycle_day, dcl_event, dcl_price, translation, timing_code, cycle_fail,
+//   degree), the cycle table Camel's version-agnostic parser reads, the low
+//   labels, and the v3.4 projection window all behave exactly as v3.4.
+//   v3.5 only ADDS rows and never renames one.
+//
+//   The detection / chaining / translation core is the byte-for-byte
+//   v3.1/v3.2/v3.3 engine. It is only EXTRACTED into f_cycleEngine() so ONE
+//   copy drives the native path and the three request.security calls (no
+//   second copy to drift). Diff v3.4 -> v3.5:
+//     (1) engine hoisted verbatim into f_cycleEngine();
+//     (2) a Monthly pivot-width input (wM) for the YCL pass;
+//     (3) three request.security(D/W/M, f_cycleEngine(...)) calls;
+//     (4) the dcl_*/wcl_*/ycl_* export rows + a 3-degree summary label.
+//   No window, rally %, pivot width (D/W), or translation threshold changed.
+//
+// VALIDATION STATUS (unchanged from v3.3/v3.4 for the windows; NEW for the
+// restructure): the per-asset windows (camel-engine/config/assets.yaml) are
+// CF-diffed only for MSTR/BTC/QQQ/TLT (DCL 47/47 + WCL 60/60 + YCL 51/51);
+// the other 12 assets' windows are methodology-derived, NOT replica-vs-CF
+// validated — validate before the CF subscription lapses (one-way door).
+// The multi-degree restructure itself is NEW and UNCOMPILED. Validate in TV:
+// export a CSV, and for each degree diff <degree>_event against CF's low
+// column on the matching timeframe (CF names it 'DCL' on D/W, 'Cycle low' on
+// 1M) — same method as the v3.1/v3.2 breadth validation. If
+// request.security rejects the tuple-returning function on compile, the
+// fallback is one request.security call per exported field (see note at the
+// MTF block).
+//
+// CSV columns (LEGACY, chart-native degree, UNCHANGED):
+//   cycle_day, dcl_event, dcl_price, translation, timing_code, cycle_fail,
+//   degree   (degree: 1=DCL 2=WCL 3=YCL, auto by chart timeframe)
+// CSV columns (v3.4 advisory projection, UNCHANGED):
+//   proj_win_lo, proj_win_hi, proj_next_low_in_lo, proj_next_low_in_hi
+// CSV columns (NEW in v3.5 — one set per degree, independent of chart TF):
+//   {dcl,wcl,ycl}_cycle_day, _event, _price, _translation, _timing_code,
+//   _fail, _win_lo, _win_hi
+// ============================================================================
+indicator("CF Cycle Replica (Archie) v3.5", overlay=true, max_labels_count=500)
+
+// ── Cycle degree ─────────────────────────────────────────────────────────────
+gC = "Cycle degree"
+degMode = input.string("Auto (by timeframe)", "Cycle degree",
+     options=["Auto (by timeframe)", "Daily · DCL", "Weekly · WCL", "Monthly · YCL", "Manual"],
+     group=gC, tooltip="Auto: Daily chart→DCL, Weekly→WCL, Monthly→YCL. Manual always uses the daily/weekly window regardless of timeframe. Affects the chart-native path only — the dcl_*/wcl_*/ycl_* export rows are always all three.")
+
+// ── Per-asset auto-tune ──────────────────────────────────────────────────────
+gA = "Per-asset auto-tune (from config/assets.yaml, keyed on syminfo.ticker)"
+autoTune = input.bool(true, "Auto-tune cycle window by symbol", group=gA,
+     tooltip="ON: resolve the window per asset (needed when the replica is the sole source across the 16-asset universe). OFF or unknown symbol: fall back to the manual windows below.")
+
+tk = syminfo.ticker
+// daily [lo,hi], weekly [lo,hi], yearly [lo,hi] per asset — mirror assets.yaml.
+// yearly for the 12 non-core assets is PROVISIONAL (validate vs CF before cutover).
+adLo = tk=="BTCUSD"?49 : tk=="ETHUSD"?14 : tk=="SPX"?32 : tk=="XAUUSD"?20 : tk=="XAGUSD"?20 : tk=="DXY"?14 : tk=="MSTR"?36 : tk=="QQQ"?32 : tk=="DJI"?32 : tk=="COIN"?36 : tk=="MARA"?32 : tk=="RIOT"?32 : tk=="GDX"?20 : tk=="GDXJ"?20 : tk=="SILJ"?20 : tk=="USOIL"?32 : na
+adHi = tk=="BTCUSD"?73 : tk=="ETHUSD"?28 : tk=="SPX"?48 : tk=="XAUUSD"?31 : tk=="XAGUSD"?31 : tk=="DXY"?26 : tk=="MSTR"?99 : tk=="QQQ"?48 : tk=="DJI"?48 : tk=="COIN"?99 : tk=="MARA"?48 : tk=="RIOT"?48 : tk=="GDX"?31 : tk=="GDXJ"?31 : tk=="SILJ"?31 : tk=="USOIL"?48 : na
+awLo = tk=="BTCUSD"?20 : tk=="ETHUSD"?6  : tk=="SPX"?20 : tk=="XAUUSD"?20 : tk=="XAGUSD"?20 : tk=="DXY"?14 : tk=="MSTR"?22 : tk=="QQQ"?20 : tk=="DJI"?20 : tk=="COIN"?22 : tk=="MARA"?20 : tk=="RIOT"?20 : tk=="GDX"?20 : tk=="GDXJ"?20 : tk=="SILJ"?20 : tk=="USOIL"?14 : na
+awHi = tk=="BTCUSD"?46 : tk=="ETHUSD"?11 : tk=="SPX"?34 : tk=="XAUUSD"?31 : tk=="XAGUSD"?31 : tk=="DXY"?22 : tk=="MSTR"?46 : tk=="QQQ"?34 : tk=="DJI"?34 : tk=="COIN"?46 : tk=="MARA"?29 : tk=="RIOT"?29 : tk=="GDX"?29 : tk=="GDXJ"?29 : tk=="SILJ"?29 : tk=="USOIL"?22 : na
+ayLo = tk=="BTCUSD"?10 : tk=="ETHUSD"?10 : tk=="SPX"?10 : tk=="XAUUSD"?10 : tk=="XAGUSD"?10 : tk=="DXY"?10 : tk=="MSTR"?10 : tk=="QQQ"?10 : tk=="DJI"?10 : tk=="COIN"?10 : tk=="MARA"?10 : tk=="RIOT"?10 : tk=="GDX"?10 : tk=="GDXJ"?10 : tk=="SILJ"?10 : tk=="USOIL"?10 : na
+ayHi = tk=="BTCUSD"?50 : tk=="ETHUSD"?50 : tk=="SPX"?16 : tk=="XAUUSD"?16 : tk=="XAGUSD"?16 : tk=="DXY"?16 : tk=="MSTR"?16 : tk=="QQQ"?16 : tk=="DJI"?16 : tk=="COIN"?50 : tk=="MARA"?50 : tk=="RIOT"?50 : tk=="GDX"?16 : tk=="GDXJ"?16 : tk=="SILJ"?16 : tk=="USOIL"?16 : na
+known = not na(adLo)
+useAuto = autoTune and known
+
+// ── Inputs: manual window (fallback when auto-tune off / unknown symbol) ──────
+gT = "Manual cycle length — Daily/Weekly (used only when auto-tune is off/unknown)"
+winLo = input.int(49, "Cycle length MIN", minval=1, group=gT)
+winHi = input.int(73, "Cycle length MAX", minval=2, group=gT)
+gY = "Manual cycle length — Yearly / YCL (months; used only when auto-tune off/unknown)"
+winLoY = input.int(10, "Yearly length MIN", minval=1, group=gY)
+winHiY = input.int(16, "Yearly length MAX", minval=2, group=gY)
+rallyY = input.float(10.0, "Yearly confirmation rally %", minval=0.0, step=0.5, group=gY) / 100.0
+
+gD = "Low detection"
+w        = input.int(5, "Swing pivot width — Daily/Weekly (bars each side)", minval=1, group=gD)
+wM       = input.int(3, "Swing pivot width — Monthly / YCL pass (bars each side)", minval=1, group=gD,
+     tooltip="Used for the Monthly request.security pass only. ~2-3 per the v3.2 monthly calibration; the chart-native path uses this too when the chart itself is Monthly.")
+useRally = input.bool(true, "Require rally confirmation", group=gD)
+rallyPct = input.float(5.0, "Confirmation rally % (Daily/Weekly)", minval=0.0, step=0.5, group=gD) / 100.0
+
+gR = "Translation (fraction of cycle where the high sits)"
+transLeft  = input.float(0.40, "Left  if high-fraction <", minval=0.0, maxval=1.0, step=0.05, group=gR)
+transRight = input.float(0.60, "Right if high-fraction >", minval=0.0, maxval=1.0, step=0.05, group=gR)
+
+gV = "Display"
+showTable  = input.bool(true, "Show cycle table", group=gV)
+showLabels = input.bool(true, "Label detected lows", group=gV)
+showDegreeSummary = input.bool(true, "Show 3-degree summary label", group=gV,
+     tooltip="A label on the last bar showing DCL/WCL/YCL cycle_day + timing from the request.security passes. Cosmetic — the machine-readable values are the dcl_*/wcl_*/ycl_* data-window rows.")
+
+gP = "Projected next low"
+showProjection = input.bool(true, "Show projected next-low window", group=gP,
+     tooltip="Draws the forward bar-index window in which the next low is expected, using this asset's [winLoEff, winHiEff] tolerance. Timing only — no price is projected. Chart-native degree only.")
+projLookback = input.int(200, "Price-range lookback for projection line height", minval=20, group=gP)
+
+// ── Cycle-detection engine (BYTE-FOR-BYTE v3.1/v3.2/v3.3/v3.4 core) ───────────
+// Extracted into a function so ONE implementation feeds the chart-native path
+// and the three request.security(D/W/M) passes. Inputs that were previously
+// read as globals inside the engine (winLoEff, winHiEff, rallyEff, pivot width,
+// useRally, translation thresholds) are now parameters — resolved by the CALLER
+// per degree. Nothing inside the detection/chaining/translation math changed.
+// Returns, in order:
+//   [cycleDay, newDcl, pl, evTrans, timingCode, cycleFail,
+//    plBar, lastDclBar, lastDclPrice, dclCount, translation, cycHighBar]
+f_cycleEngine(int winLoEff, int winHiEff, float rallyEff, int pw, bool reqRally, float tL, float tR) =>
+    pl      = ta.pivotlow(low, pw, pw)
+    plBar   = bar_index - pw
+    hasPivot = not na(pl)
+    maxHiSince = ta.highest(high, pw)
+    confirmed  = not reqRally or (hasPivot and pl > 0 and (maxHiSince - pl) / pl >= rallyEff)
+
+    var int   lastDclBar   = na
+    var float lastDclPrice = na
+    var int   dclCount     = 0
+    var float cycHigh      = na
+    var int   cycHighBar   = na
+    var int   translation  = na
+
+    if not na(lastDclBar) and (na(cycHigh) or high > cycHigh)
+        cycHigh    := high
+        cycHighBar := bar_index
+
+    newDcl = false
+    int evTrans = na
+    if hasPivot and confirmed
+        ageOk = na(lastDclBar) or (plBar - lastDclBar) >= winLoEff
+        if ageOk
+            hbar = cycHighBar[pw]
+            if not na(lastDclBar) and not na(hbar)
+                clen = plBar - lastDclBar
+                frac = clen > 0 ? (hbar - lastDclBar) / clen : na
+                translation := na(frac) ? na : frac < tL ? -1 : frac > tR ? 1 : 0
+                evTrans     := translation
+            newDcl       := true
+            lastDclBar   := plBar
+            lastDclPrice := pl
+            dclCount     := dclCount + 1
+            cycHigh      := high
+            cycHighBar   := bar_index
+
+    cycleDay = na(lastDclBar) ? na : (bar_index - lastDclBar)
+    wStart = int(winLoEff * 0.9)
+    wEnd   = int(winHiEff * 1.1)
+    timingCode = na(cycleDay) ? na : cycleDay < wStart ? 0 : cycleDay > wEnd ? 2 : 1
+    cycleFail  = (not na(lastDclPrice) and close < lastDclPrice) ? 1 : 0
+    [cycleDay, newDcl, pl, evTrans, timingCode, cycleFail, plBar, lastDclBar, lastDclPrice, dclCount, translation, cycHighBar]
+
+// ── Resolve effective degree + window for the CHART-NATIVE path ──────────────
+autoDeg = timeframe.ismonthly ? 3 : timeframe.isweekly ? 2 : 1
+degCode = degMode == "Daily · DCL"   ? 1 :
+          degMode == "Weekly · WCL"  ? 2 :
+          degMode == "Monthly · YCL" ? 3 :
+          degMode == "Manual"        ? 0 :
+          autoDeg
+// per-degree window: auto-tuned per asset, else manual fallback.
+dLo = useAuto ? adLo : winLo
+dHi = useAuto ? adHi : winHi
+wLo = useAuto ? awLo : winLo
+wHi = useAuto ? awHi : winHi
+yLo = useAuto ? ayLo : winLoY
+yHi = useAuto ? ayHi : winHiY
+useYearly = degCode == 3
+winLoEff = useYearly ? yLo : degCode == 2 ? wLo : dLo
+winHiEff = useYearly ? yHi : degCode == 2 ? wHi : dHi
+rallyEff = useYearly ? rallyY : rallyPct
+// Chart-native pivot width = the single `w` input, EXACTLY as v3.4 (its tooltip
+// still asks the user to set ~2-3 by hand on a Monthly chart). wM is used only
+// by the v3.5 Monthly request.security pass below, so the always-on YCL row is
+// correctly-tuned without touching the v3.4 native behaviour.
+pwEff    = w
+labelDeg = degCode == 0 ? autoDeg : degCode
+degTxt   = labelDeg == 3 ? "YCL" : labelDeg == 2 ? "WCL" : "DCL"
+
+[cycleDay, newDcl, pl, evTrans, timingCode, cycleFail, plBar, lastDclBar, lastDclPrice, dclCount, translation, cycHighBar] = f_cycleEngine(winLoEff, winHiEff, rallyEff, pwEff, useRally, transLeft, transRight)
+
+// ── Derived current-cycle text metrics (chart-native; UNCHANGED from v3.4) ────
+wStart = int(winLoEff * 0.9)
+wEnd   = int(winHiEff * 1.1)
+timingTxt  = na(timingCode) ? "unknown" : timingCode == 0 ? "early" : timingCode == 2 ? "late" : "timing_window"
+expMid = (winLoEff + winHiEff) / 2.0
+liveFrac = (not na(lastDclBar) and not na(cycHighBar) and expMid > 0) ? (cycHighBar - lastDclBar) / expMid : na
+liveTransTxt = na(liveFrac) ? "—" : liveFrac < transLeft ? "left" : liveFrac > transRight ? "right" : "mid"
+
+// ── Plots — LEGACY chart-native rows (EXPORT to CSV / data-window) ───────────
+// tv_reader + any warehouse read of these names are UNCHANGED.
+plot(cycleDay,          "cycle_day",   color=color.new(color.teal, 0),  display=display.data_window)
+plot(newDcl ? 1 : 0,    "dcl_event",   color=color.new(color.red, 0),   display=display.data_window, offset=-w)
+plot(newDcl ? pl : na,  "dcl_price",   color=color.new(color.red, 0),   display=display.data_window, offset=-w)
+plot(evTrans,           "translation", color=color.new(color.orange, 0),display=display.data_window, offset=-w)
+plot(timingCode,        "timing_code", color=color.new(color.blue, 0),  display=display.data_window)
+plot(cycleFail,         "cycle_fail",  color=color.new(color.maroon, 0), display=display.data_window)
+plot(labelDeg,          "degree",      color=color.new(color.gray, 0),  display=display.data_window)
+
+// ── Chart markers (UNCHANGED from v3.4) ──────────────────────────────────────
+plotshape(showLabels and newDcl, title="Cycle low", style=shape.triangleup,
+          location=location.belowbar, color=color.new(color.red, 0), size=size.small, offset=-w)
+if showLabels and newDcl
+    label.new(plBar, pl, str.format("{0} #{1}", degTxt, dclCount),
+              style=label.style_label_up, color=color.new(color.red, 20),
+              textcolor=color.white, size=size.small)
+
+// ── Projected next-low window (UNCHANGED from v3.4 — chart-native degree) ─────
+var line projEarlyLine = na
+var line projLoLine    = na
+var line projHiLine    = na
+var line projLateLine  = na
+var label projLabel    = na
+
+if showProjection and barstate.islast and not na(lastDclBar)
+    float yHi = ta.highest(high, projLookback)
+    float yLo = ta.lowest(low, projLookback)
+    int projEarlyBar = lastDclBar + wStart
+    int projLoBar    = lastDclBar + winLoEff
+    int projHiBar    = lastDclBar + winHiEff
+    int projLateBar  = lastDclBar + wEnd
+
+    line.delete(projEarlyLine)
+    line.delete(projLoLine)
+    line.delete(projHiLine)
+    line.delete(projLateLine)
+    label.delete(projLabel)
+
+    projEarlyLine := line.new(projEarlyBar, yLo, projEarlyBar, yHi, xloc=xloc.bar_index, color=color.new(color.gray, 60), style=line.style_dotted, width=1)
+    projLoLine    := line.new(projLoBar, yLo, projLoBar, yHi, xloc=xloc.bar_index, color=color.new(color.yellow, 20), style=line.style_dashed, width=2)
+    projHiLine    := line.new(projHiBar, yLo, projHiBar, yHi, xloc=xloc.bar_index, color=color.new(color.yellow, 20), style=line.style_dashed, width=2)
+    projLateLine  := line.new(projLateBar, yLo, projLateBar, yHi, xloc=xloc.bar_index, color=color.new(color.gray, 60), style=line.style_dotted, width=1)
+
+    projLabel := label.new(projLoBar, yHi,
+         str.format("Projected {0} window: {1}-{2} bars from last low (dotted = early/late tolerance)", degTxt, winLoEff, winHiEff),
+         style=label.style_label_down, color=color.new(color.yellow, 10), textcolor=color.black, size=size.small)
+
+// ── Projection export — advisory only (UNCHANGED from v3.4) ──────────────────
+plot(na(lastDclBar) ? na : winLoEff,               "proj_win_lo",         display=display.data_window)
+plot(na(lastDclBar) ? na : winHiEff,               "proj_win_hi",         display=display.data_window)
+plot(na(cycleDay)   ? na : (winLoEff - cycleDay),  "proj_next_low_in_lo", display=display.data_window)
+plot(na(cycleDay)   ? na : (winHiEff - cycleDay),  "proj_next_low_in_hi", display=display.data_window)
+
+// ── NEW in v3.5: simultaneous DCL + WCL + YCL via request.security ───────────
+// Runs f_cycleEngine() against the Daily, Weekly and Monthly series regardless
+// of the chart timeframe, so ONE scrape at any resolution captures the full
+// cycle nest. Windows/rally/pivot are resolved per degree exactly as the
+// chart-native path resolves its single degree (dLo/wLo/yLo etc. above).
+//
+// lookahead defaults to barmerge.lookahead_off (no future peeking). A low is
+// only reported once it has pw HTF bars of confirmation each side, so the
+// currently-forming HTF bar cannot emit a *_event — only <degree>_cycle_day of
+// the LIVE cycle advances intraday, which is intended.
+//
+// FALLBACK if TV rejects a tuple-returning function inside request.security
+// (has compiled in v5 in testing elsewhere, but this engine is heavier): make
+// f_cycleEngine return a single value and issue one request.security call per
+// exported field (6 per degree). Wasteful but equivalent.
+dLoEff = useAuto ? adLo : winLo
+dHiEff = useAuto ? adHi : winHi
+wLoEff = useAuto ? awLo : winLo
+wHiEff = useAuto ? awHi : winHi
+yLoEff = useAuto ? ayLo : winLoY
+yHiEff = useAuto ? ayHi : winHiY
+
+// Full 12-tuple destructured; only the first six are exported per degree. The
+// tail (plBar, lastDclBar, lastDclPrice, dclCount, translation, cycHighBar) is
+// used only by the chart-native table/labels/projection, so it is discarded
+// into distinct throwaway names here (bare repeated `_` is not valid in v5).
+[d_cd, d_ev, d_pl, d_tr, d_tc, d_cf, d_z1, d_z2, d_z3, d_z4, d_z5, d_z6] = request.security(syminfo.tickerid, "D", f_cycleEngine(dLoEff, dHiEff, rallyPct, w,  useRally, transLeft, transRight))
+[w_cd, w_ev, w_pl, w_tr, w_tc, w_cf, w_z1, w_z2, w_z3, w_z4, w_z5, w_z6] = request.security(syminfo.tickerid, "W", f_cycleEngine(wLoEff, wHiEff, rallyPct, w,  useRally, transLeft, transRight))
+[y_cd, y_ev, y_pl, y_tr, y_tc, y_cf, y_z1, y_z2, y_z3, y_z4, y_z5, y_z6] = request.security(syminfo.tickerid, "M", f_cycleEngine(yLoEff, yHiEff, rallyY,   wM, useRally, transLeft, transRight))
+
+// DCL
+plot(d_cd,                 "dcl_cycle_day",   display=display.data_window)
+plot(d_ev ? 1 : 0,         "dcl_event",       display=display.data_window)
+plot(d_ev ? d_pl : na,     "dcl_price",       display=display.data_window)
+plot(d_tr,                 "dcl_translation", display=display.data_window)
+plot(d_tc,                 "dcl_timing_code", display=display.data_window)
+plot(d_cf,                 "dcl_fail",        display=display.data_window)
+plot(dLoEff,               "dcl_win_lo",      display=display.data_window)
+plot(dHiEff,               "dcl_win_hi",      display=display.data_window)
+// WCL
+plot(w_cd,                 "wcl_cycle_day",   display=display.data_window)
+plot(w_ev ? 1 : 0,         "wcl_event",       display=display.data_window)
+plot(w_ev ? w_pl : na,     "wcl_price",       display=display.data_window)
+plot(w_tr,                 "wcl_translation", display=display.data_window)
+plot(w_tc,                 "wcl_timing_code", display=display.data_window)
+plot(w_cf,                 "wcl_fail",        display=display.data_window)
+plot(wLoEff,               "wcl_win_lo",      display=display.data_window)
+plot(wHiEff,               "wcl_win_hi",      display=display.data_window)
+// YCL
+plot(y_cd,                 "ycl_cycle_day",   display=display.data_window)
+plot(y_ev ? 1 : 0,         "ycl_event",       display=display.data_window)
+plot(y_ev ? y_pl : na,     "ycl_price",       display=display.data_window)
+plot(y_tr,                 "ycl_translation", display=display.data_window)
+plot(y_tc,                 "ycl_timing_code", display=display.data_window)
+plot(y_cf,                 "ycl_fail",        display=display.data_window)
+plot(yLoEff,               "ycl_win_lo",      display=display.data_window)
+plot(yHiEff,               "ycl_win_hi",      display=display.data_window)
+
+// ── Cycle table (read by tv_reader — DO NOT rename rows without updating the parser) ──
+// UNCHANGED from v3.4: still the chart-native degree only, still 2x9.
+transTxt(int c) => na(c) ? "—" : c == -1 ? "left" : c == 1 ? "right" : "mid"
+tuneTxt = useAuto ? tk : (known ? "manual(override)" : "manual(unknown sym)")
+var table t = table.new(position.top_right, 2, 9, border_width=1)
+if showTable and barstate.islast
+    table.cell(t, 0, 0, "degree", text_color=color.gray, text_size=size.small)
+    table.cell(t, 1, 0, degTxt, text_color=color.aqua, text_size=size.small)
+    table.cell(t, 0, 1, "tuned_for", text_color=color.gray, text_size=size.small)
+    table.cell(t, 1, 1, tuneTxt, text_color=color.white, text_size=size.small)
+    table.cell(t, 0, 2, "cycle_day", text_color=color.gray, text_size=size.small)
+    table.cell(t, 1, 2, str.tostring(cycleDay), text_color=color.white, text_size=size.small)
+    table.cell(t, 0, 3, "timing", text_color=color.gray, text_size=size.small)
+    table.cell(t, 1, 3, timingTxt, text_color=color.white, text_size=size.small)
+    table.cell(t, 0, 4, "expected", text_color=color.gray, text_size=size.small)
+    table.cell(t, 1, 4, str.format("{0}-{1}", winLoEff, winHiEff), text_color=color.white, text_size=size.small)
+    table.cell(t, 0, 5, "translation (curr)", text_color=color.gray, text_size=size.small)
+    table.cell(t, 1, 5, liveTransTxt, text_color=color.white, text_size=size.small)
+    table.cell(t, 0, 6, "translation (last)", text_color=color.gray, text_size=size.small)
+    table.cell(t, 1, 6, transTxt(translation), text_color=color.white, text_size=size.small)
+    table.cell(t, 0, 7, "cycle failure", text_color=color.gray, text_size=size.small)
+    table.cell(t, 1, 7, cycleFail == 1 ? "YES" : "no", text_color=color.white, text_size=size.small)
+    table.cell(t, 0, 8, "last low / #", text_color=color.gray, text_size=size.small)
+    table.cell(t, 1, 8, (na(lastDclPrice) ? "—" : str.tostring(lastDclPrice, format.mintick)) + " / " + str.tostring(dclCount), text_color=color.white, text_size=size.small)
+
+// ── 3-degree summary label (NEW in v3.5 — cosmetic; the rows above are the data) ──
+// var + delete so realtime ticks on the last bar don't spawn a stack of labels
+// (same pattern as the v3.4 projection handles above).
+_timTxt(float c) => na(c) ? "?" : c == 0 ? "early" : c == 2 ? "late" : "window"
+var label sumLabel = na
+if showDegreeSummary and barstate.islast
+    label.delete(sumLabel)
+    sumLabel := label.new(bar_index, high,
+         str.format("DCL d{0} ({1})  ·  WCL d{2} ({3})  ·  YCL m{4} ({5})",
+              str.tostring(d_cd), _timTxt(d_tc),
+              str.tostring(w_cd), _timTxt(w_tc),
+              str.tostring(y_cd), _timTxt(y_tc)),
+         style=label.style_label_left, color=color.new(color.blue, 20),
+         textcolor=color.white, size=size.small)
